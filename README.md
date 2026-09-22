@@ -2,7 +2,7 @@
 
 แอปมือถือช่วยระบายผลผลิตตกเกรดหรือใกล้เน่าเสียของเกษตรกรรายย่อยไปยังผู้รับซื้อในพื้นที่ แผนการทำอยู่ที่ [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md)
 
-ตอนนี้ Phase 1 พร้อมใช้ สคีมาอยู่ใน `server/src/db/migrations/001_init.sql` ค่าตัวอย่างจากต้นแบบอยู่ใน `server/src/db/seedData.ts` และสีอยู่ใน `mobile/src/theme.ts`
+ตอนนี้ Phase 3 พร้อมใช้ สคีมาอยู่ใน `server/src/db/migrations/001_init.sql` ค่าตัวอย่างจากต้นแบบอยู่ใน `server/src/db/seedData.ts` และสีอยู่ใน `mobile/src/theme.ts` API อยู่ใต้ `/api`
 
 ## โครงโปรเจกต์
 
@@ -46,7 +46,7 @@ npm install
 รันในโฟลเดอร์ `server/`
 
 ```bash
-npm test       # unit test
+npm test       # unit test และ API test กับฐาน agri_rescue_test
 npm run lint   # eslint
 npm run build  # คอมไพล์ไปที่ dist/
 npm run dev    # รัน API แบบ watch
@@ -54,6 +54,29 @@ npm run migrate
 npm run seed
 npm run seed:reset
 ```
+
+`npm test` อ่าน `server/.env.test` แล้วรีเซ็ตข้อมูลในฐานนั้นก่อนแต่ละไฟล์เทส ไม่เรียก Open-Meteo จริง ฐานพัฒนาใน `.env` ไม่ถูกแตะ
+
+## เรียก API
+
+หลัง `npm run dev` (พอร์ตจาก `PORT` โดยทั่วไปคือ 3000) และมีข้อมูลจาก `npm run seed`
+
+เข้าสู่ระบบด้วยผู้ซื้อตัวอย่าง:
+
+```bash
+curl -s -X POST http://127.0.0.1:3000/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"phone":"0800000011","password":"demo1234"}'
+```
+
+คำตอบมี `token` และ `user` โดยไม่มี `password_hash` นำ token ไปดูตลาดด่วนในรัศมี 15 กม. จากรถพุ่มพวงป้าแดง:
+
+```bash
+curl -s 'http://127.0.0.1:3000/api/market?lat=13.662&lng=100.611&radius_km=15' \
+  -H 'Authorization: Bearer TOKEN'
+```
+
+สมัครสมาชิกได้เฉพาะเกษตรกรและผู้ซื้อ คนขับกับผู้ประสานมีจาก seed เท่านั้น JWT อายุ 7 วัน
 
 `npm run migrate` สร้างตารางถ้ายังไม่มี และข้ามไฟล์ที่รันไปแล้ว `npm run seed` ใส่ค่าจาก `seedData.ts` โดยข้ามแถวที่มีอยู่แล้ว จึงรันซ้ำได้โดยจำนวนแถวไม่เพิ่ม
 
