@@ -1,0 +1,16 @@
+{
+  "name": "Agri-Rescue",
+  "install": "bash .cursor/install.sh",
+  "start": "bash .cursor/start.sh",
+  "terminals": [
+    {
+      "name": "server-api",
+      "command": "cd server && npm run dev"
+    },
+    {
+      "name": "mobile-web",
+      "command": "cd mobile && CI=1 npx expo start --web --port 8081"
+    }
+  ],
+  "ports": [3000, 8081]
+}
