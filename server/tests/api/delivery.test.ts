@@ -241,4 +241,104 @@ describe('batches and delivery', () => {
     expect(new Set(batchIds).size).toBe(1);
     expect(batchIds.every((id) => id > 0)).toBe(true);
   });
+
+  it('merges one buyer\'s orders into a single drop that needs every pickup first', async () => {
+    const farmer = await registerUser(app, { role: 'farmer', name: 'เกษตรกรรวมจุดส่ง' });
+    const cropId = await insertCrop('มะม่วงรวม', 5, 40);
+    const later = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
+    const plotA = await insertPlot(farmer.user.id, 13.7, 100.7, 'แปลงเอ');
+    const plotB = await insertPlot(farmer.user.id, 13.69, 100.66, 'แปลงบี');
+    const lotA = await insertLot({ plotId: plotA, cropId, expiresAt: later, weightKg: 30 });
+    const lotB = await insertLot({ plotId: plotB, cropId, expiresAt: later, weightKg: 20 });
+    const shop = await registerUser(app, {
+      role: 'buyer',
+      buyer_type: 'shop',
+      name: 'ร้านรวมส่ง',
+      lat: 13.652,
+      lng: 100.62,
+    });
+
+    const orderA = await request(app)
+      .post('/api/orders')
+      .set(bearer(shop.token))
+      .send({ lot_id: lotA, donation: false });
+    const orderB = await request(app)
+      .post('/api/orders')
+      .set(bearer(shop.token))
+      .send({ lot_id: lotB, donation: false });
+    expect(orderA.status).toBe(201);
+    expect(orderB.status).toBe(201);
+
+    const coordinator = await loginStaff(app, 'coordinator', 'ผู้ประสานรวมส่ง');
+    const driver = await loginStaff(app, 'driver', 'คนขับรวมส่ง');
+    const created = await request(app)
+      .post('/api/batches')
+      .set(bearer(coordinator.token))
+      .send({ driver_id: driver.user.id });
+    expect(created.status).toBe(201);
+    const stops = created.body.stops as StopBody[];
+
+    const pickups = stops.filter((stop) => stop.stop_type === 'pickup');
+    const drops = stops.filter((stop) => stop.stop_type === 'drop');
+    expect(pickups).toHaveLength(2);
+    expect(drops).toHaveLength(1);
+    const drop = drops[0];
+    const pickupA = stops.find((stop) => stop.lot_id === lotA);
+    const pickupB = stops.find((stop) => stop.lot_id === lotB);
+    if (drop === undefined || pickupA === undefined || pickupB === undefined) {
+      throw new Error('missing stops');
+    }
+    expect(drop.buyer_id).toBe(shop.user.id);
+
+    const beforeAnyPickup = await request(app)
+      .post(`/api/stops/${drop.id}/confirm`)
+      .set(bearer(driver.token))
+      .send({ otp: orderA.body.order.drop_otp });
+    expect(beforeAnyPickup.status).toBe(409);
+    expect(beforeAnyPickup.body.error.code).toBe('PICKUP_REQUIRED');
+
+    const firstPickup = await request(app)
+      .post(`/api/stops/${pickupA.id}/confirm`)
+      .set(bearer(driver.token))
+      .send({ weight_kg: 30 });
+    expect(firstPickup.status).toBe(200);
+    const afterOnePickup = await request(app)
+      .post(`/api/stops/${drop.id}/confirm`)
+      .set(bearer(driver.token))
+      .send({ otp: orderA.body.order.drop_otp });
+    expect(afterOnePickup.status).toBe(409);
+    expect(afterOnePickup.body.error.code).toBe('PICKUP_REQUIRED');
+
+    const secondPickup = await request(app)
+      .post(`/api/stops/${pickupB.id}/confirm`)
+      .set(bearer(driver.token))
+      .send({ weight_kg: 20 });
+    expect(secondPickup.status).toBe(200);
+
+    const otpA = orderA.body.order.drop_otp as string;
+    const otpB = orderB.body.order.drop_otp as string;
+    const firstDrop = await request(app)
+      .post(`/api/stops/${drop.id}/confirm`)
+      .set(bearer(driver.token))
+      .send({ otp: otpA });
+    expect(firstDrop.status).toBe(200);
+    expect(firstDrop.body.lot_status).toBe('delivered');
+    if (otpB === otpA) {
+      expect(firstDrop.body.batch_status).toBe('completed');
+    } else {
+      expect(firstDrop.body.batch_status).toBe('in_progress');
+      const secondDrop = await request(app)
+        .post(`/api/stops/${drop.id}/confirm`)
+        .set(bearer(driver.token))
+        .send({ otp: otpB });
+      expect(secondDrop.status).toBe(200);
+      expect(secondDrop.body.batch_status).toBe('completed');
+    }
+
+    const [lotRows] = await pool.query<RowDataPacket[]>(
+      'SELECT id, status FROM harvest_lots WHERE id IN (?, ?) ORDER BY id',
+      [lotA, lotB],
+    );
+    expect(lotRows.map((row) => String(row.status))).toEqual(['delivered', 'delivered']);
+  });
 });
