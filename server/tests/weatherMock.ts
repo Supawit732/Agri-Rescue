@@ -4,5 +4,5 @@ export function installWeatherSuccess(temperature = 32, humidity = 75): void {
     json: async () => ({
       current: { temperature_2m: temperature, relative_humidity_2m: humidity },
     }),
-  })) as typeof fetch;
+  })) as unknown as typeof fetch;
 }

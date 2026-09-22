@@ -6,9 +6,8 @@ import type { UserRole } from '../types/express';
 
 export const JWT_EXPIRES_IN = '7d';
 
-interface TokenPayload {
-  sub: number;
-  role: UserRole;
+function isUserRole(value: unknown): value is UserRole {
+  return value === 'farmer' || value === 'buyer' || value === 'driver' || value === 'coordinator';
 }
 
 function jwtSecret(): string {
@@ -31,9 +30,13 @@ export function requireAuth(req: Request, _res: Response, next: NextFunction): v
   }
   const token = header.slice('Bearer '.length).trim();
   try {
-    const payload = jwt.verify(token, jwtSecret()) as TokenPayload;
+    const payload = jwt.verify(token, jwtSecret());
+    if (typeof payload === 'string') {
+      next(new HttpError(401, 'UNAUTHORIZED', 'โทเคนไม่ถูกต้องหรือหมดอายุ'));
+      return;
+    }
     const id = Number(payload.sub);
-    if (!Number.isInteger(id) || payload.role === undefined) {
+    if (!Number.isInteger(id) || !isUserRole(payload.role)) {
       next(new HttpError(401, 'UNAUTHORIZED', 'โทเคนไม่ถูกต้องหรือหมดอายุ'));
       return;
     }
