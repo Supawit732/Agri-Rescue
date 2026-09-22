@@ -55,7 +55,7 @@ npm run seed
 npm run seed:reset
 ```
 
-`npm test` อ่าน `server/.env.test` แล้วรีเซ็ตข้อมูลในฐานนั้นก่อนแต่ละไฟล์เทส ไม่เรียก Open-Meteo จริง ฐานพัฒนาใน `.env` ไม่ถูกแตะ
+`npm test` อ่าน `server/.env.test` แล้วรีเซ็ตข้อมูลในฐานนั้นก่อนแต่ละไฟล์เทส ไม่เรียก Open-Meteo จริง ฐานพัฒนาใน `.env` ไม่ถูกแตะ คัดลอก `server/.env.test.example` เป็น `server/.env.test` แล้วใส่รหัสฐานเทส ไฟล์ `.env` และ `.env.test` ไม่ถูก commit
 
 ## เรียก API
 

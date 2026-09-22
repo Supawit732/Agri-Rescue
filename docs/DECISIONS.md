@@ -65,7 +65,7 @@ Nearest-neighbor เริ่มที่ depot แล้วเลือกจ�
 
 ไคลเอนต์ Open-Meteo ตัดการเชื่อมต่อที่ 3000 มิลลิวินาที แล้วใช้ 32°C / 75%
 
-Jest โหลด `server/.env.test` ก่อน แล้วรีเซ็ตตารางข้อมูลใน `agri_rescue_test` ก่อนแต่ละไฟล์ รันทีละไฟล์ และ mock `fetch` ทั้งกรณีสำเร็จและกรณี timeout ไฟล์ `.env.test` อยู่ใน repo เพราะเทสต้องอ่าน `DB_NAME` จากไฟล์นี้ ค่าในไฟล์ใช้กับฐานเทสเท่านั้น
+Jest โหลด `server/.env.test` ก่อน แล้วรีเซ็ตตารางข้อมูลใน `agri_rescue_test` ก่อนแต่ละไฟล์ รันทีละไฟล์ และ mock `fetch` ทั้งกรณีสำเร็จและกรณี timeout คัดลอก `server/.env.test.example` เป็น `server/.env.test` แล้วใส่รหัสฐานเทสในเครื่อง ไฟล์นี้ไม่ถูก commit
 
 ## D005 — เซิร์ฟเวอร์ใช้ CommonJS
 
