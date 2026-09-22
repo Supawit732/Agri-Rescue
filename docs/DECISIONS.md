@@ -55,6 +55,18 @@ Nearest-neighbor เริ่มที่ depot แล้วเลือกจ�
 
 `npm run seed:reset` ลบ `orders`, `batches`, `route_stops`, `impact_logs`, `quality_assessments`, `harvest_lots` แล้วสร้างล็อตตัวอย่างใหม่โดย `expires_at` นับจากเวลาที่รันคำสั่ง ไม่ลบ `users`, `crops`, `plots` ไม่ได้ถูกเรียกจาก `dev`, `migrate`, `seed` หรือตอนเปิดเซิร์ฟเวอร์
 
+## D012 — Phase 3: สิทธิ์ ราคา อากาศ และฐานเทส
+
+`POST /auth/register` รับเฉพาะ role `farmer` และ `buyer` ถ้าส่ง `driver` หรือ `coordinator` ตอบ 403 บัญชีสอง role นั้นสร้างจาก seed เท่านั้น JWT ใช้ `expiresIn: 7d` ทุก response ที่คืนผู้ใช้ไม่มีฟิลด์ `password_hash`
+
+เกษตรกรสร้างและดูได้เฉพาะแปลงกับล็อตของตนเอง ถ้าส่ง `plot_id` ของเกษตรกรคนอื่น ตอบ 403
+
+`GET /market` เลือกเฉพาะล็อต `open` ที่ `expires_at > UTC_TIMESTAMP()` ใน SQL แล้วตัดล็อตนอก `radius_km` (ค่าเริ่มต้น 15) ราคาใน `/market`, `/lots/estimate`, การสร้างล็อต และการจองเรียก `urgentPricePerKg` และ `predictShelfHours` จาก `src/domain`
+
+ไคลเอนต์ Open-Meteo ตัดการเชื่อมต่อที่ 3000 มิลลิวินาที แล้วใช้ 32°C / 75%
+
+Jest โหลด `server/.env.test` ก่อน แล้วรีเซ็ตตารางข้อมูลใน `agri_rescue_test` ก่อนแต่ละไฟล์ รันทีละไฟล์ และ mock `fetch` ทั้งกรณีสำเร็จและกรณี timeout ไฟล์ `.env.test` อยู่ใน repo เพราะเทสต้องอ่าน `DB_NAME` จากไฟล์นี้ ค่าในไฟล์ใช้กับฐานเทสเท่านั้น
+
 ## D005 — เซิร์ฟเวอร์ใช้ CommonJS
 
 `tsconfig` ตั้ง `module` เป็น `commonjs` เพื่อให้ Express, Jest และ ts-jest ทำงานร่วมกันโดยไม่ตั้งค่า ESM เพิ่ม

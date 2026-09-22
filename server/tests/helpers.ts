@@ -1,0 +1,106 @@
+import request from 'supertest';
+import type { Express } from 'express';
+import type { ResultSetHeader } from 'mysql2';
+import { pool } from '../src/db/pool';
+import { createApp } from '../src/app';
+import type { UserRole } from '../src/types/express';
+
+export interface PublicUser {
+  id: number;
+  name: string;
+  phone: string;
+  role: UserRole;
+  buyer_type: 'vendor' | 'shop' | 'charity' | null;
+  lat: number | null;
+  lng: number | null;
+}
+
+export interface AuthBody {
+  token: string;
+  user: PublicUser;
+}
+
+let phoneSeq = 800000000;
+
+export function nextPhone(): string {
+  phoneSeq += 1;
+  return String(phoneSeq);
+}
+
+export function testApp(): Express {
+  return createApp();
+}
+
+export function bearer(token: string): { Authorization: string } {
+  return { Authorization: `Bearer ${token}` };
+}
+
+export async function registerUser(
+  app: Express,
+  input: {
+    role: 'farmer' | 'buyer';
+    buyer_type?: 'vendor' | 'shop' | 'charity';
+    lat?: number;
+    lng?: number;
+    name?: string;
+  },
+): Promise<AuthBody> {
+  const response = await request(app)
+    .post('/api/auth/register')
+    .send({
+      name: input.name ?? 'ผู้ใช้ทดสอบ',
+      phone: nextPhone(),
+      password: 'demo1234',
+      role: input.role,
+      buyer_type: input.role === 'buyer' ? (input.buyer_type ?? 'vendor') : null,
+      lat: input.lat ?? 13.65,
+      lng: input.lng ?? 100.62,
+    });
+  if (response.status !== 201) {
+    throw new Error(`register failed ${response.status} ${JSON.stringify(response.body)}`);
+  }
+  return response.body as AuthBody;
+}
+
+export async function insertCrop(name = 'มะม่วง', days = 5, price = 40): Promise<number> {
+  const [result] = await pool.query<ResultSetHeader>(
+    'INSERT INTO crops (name_th, base_shelf_days, market_price_per_kg) VALUES (?, ?, ?)',
+    [name, days, price],
+  );
+  return result.insertId;
+}
+
+export async function insertPlot(farmerId: number, lat: number, lng: number, name = 'แปลงทดสอบ'): Promise<number> {
+  const [result] = await pool.query<ResultSetHeader>(
+    'INSERT INTO plots (farmer_id, name, lat, lng, area_rai) VALUES (?, ?, ?, ?, ?)',
+    [farmerId, name, lat, lng, 1],
+  );
+  return result.insertId;
+}
+
+export async function insertLot(input: {
+  plotId: number;
+  cropId: number;
+  expiresAt: Date;
+  allowDonation?: boolean;
+  grade?: 'normal' | 'substandard';
+  weightKg?: number;
+}): Promise<number> {
+  const [result] = await pool.query<ResultSetHeader>(
+    `INSERT INTO harvest_lots (
+       plot_id, crop_id, weight_kg, grade, ripeness, allow_donation,
+       predicted_shelf_hours, expires_at, status
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open')`,
+    [
+      input.plotId,
+      input.cropId,
+      input.weightKg ?? 10,
+      input.grade ?? 'normal',
+      2,
+      input.allowDonation === true ? 1 : 0,
+      61,
+      input.expiresAt,
+    ],
+  );
+  return result.insertId;
+}

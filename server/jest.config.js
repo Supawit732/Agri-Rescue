@@ -4,6 +4,10 @@ module.exports = {
   testEnvironment: 'node',
   roots: ['<rootDir>/tests'],
   testMatch: ['**/*.test.ts'],
+  setupFiles: ['<rootDir>/tests/loadEnv.ts'],
+  setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
+  maxWorkers: 1,
+  testTimeout: 30000,
   clearMocks: true,
   collectCoverageFrom: ['src/domain/**/*.ts'],
   coverageThreshold: {

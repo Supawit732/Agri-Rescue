@@ -1,0 +1,49 @@
+import { PLAN_WEATHER_FALLBACK } from '../../src/db/seedData';
+import { fetchWeather, WEATHER_TIMEOUT_MS } from '../../src/weather/openMeteo';
+import { installWeatherSuccess } from '../weatherMock';
+
+describe('Open-Meteo client', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+    installWeatherSuccess();
+  });
+
+  it('returns the mocked forecast without calling the network', async () => {
+    installWeatherSuccess(34, 78);
+    const reading = await fetchWeather(13.65, 100.62);
+    expect(reading).toEqual({ tempC: 34, humidity: 78, fallback: false });
+    expect(jest.isMockFunction(global.fetch)).toBe(true);
+    if (jest.isMockFunction(global.fetch)) {
+      const called = global.fetch.mock.calls[0]?.[0];
+      expect(String(called)).toContain('https://api.open-meteo.com/v1/forecast');
+    }
+  });
+
+  it('uses 32°C / 75% when the request exceeds 3 seconds', async () => {
+    expect(WEATHER_TIMEOUT_MS).toBe(3000);
+    jest.useFakeTimers();
+    global.fetch = jest.fn((_input: unknown, init?: { signal?: AbortSignal }) => {
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          const error = new Error('The operation was aborted');
+          error.name = 'AbortError';
+          reject(error);
+        });
+      });
+    }) as typeof fetch;
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const pending = fetchWeather(13.65, 100.62);
+      await jest.advanceTimersByTimeAsync(WEATHER_TIMEOUT_MS);
+      await expect(pending).resolves.toEqual({
+        tempC: PLAN_WEATHER_FALLBACK.tempC,
+        humidity: PLAN_WEATHER_FALLBACK.humidity,
+        fallback: true,
+      });
+      expect(PLAN_WEATHER_FALLBACK).toEqual({ tempC: 32, humidity: 75 });
+      expect(warn).toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});
