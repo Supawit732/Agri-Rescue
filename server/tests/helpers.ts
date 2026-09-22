@@ -1,4 +1,5 @@
 import request from 'supertest';
+import bcrypt from 'bcryptjs';
 import type { Express } from 'express';
 import type { ResultSetHeader } from 'mysql2';
 import { pool } from '../src/db/pool';
@@ -58,6 +59,26 @@ export async function registerUser(
     });
   if (response.status !== 201) {
     throw new Error(`register failed ${response.status} ${JSON.stringify(response.body)}`);
+  }
+  return response.body as AuthBody;
+}
+
+export async function loginStaff(
+  app: Express,
+  role: 'driver' | 'coordinator',
+  name: string,
+): Promise<AuthBody> {
+  const phone = nextPhone();
+  const passwordHash = await bcrypt.hash('demo1234', 10);
+  await pool.query('INSERT INTO users (name, phone, password_hash, role) VALUES (?, ?, ?, ?)', [
+    name,
+    phone,
+    passwordHash,
+    role,
+  ]);
+  const response = await request(app).post('/api/auth/login').send({ phone, password: 'demo1234' });
+  if (response.status !== 200) {
+    throw new Error(`staff login failed ${response.status} ${JSON.stringify(response.body)}`);
   }
   return response.body as AuthBody;
 }

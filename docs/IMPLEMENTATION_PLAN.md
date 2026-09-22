@@ -190,3 +190,12 @@ price = max(5, round(market_price * (0.3 + 0.7 * freshness) * gradeFactor))
 - query ใช้ placeholder (`?`) เสมอ ห้ามต่อ string
 - หนึ่ง commit ต่อหนึ่งหน่วยงานที่ทดสอบผ่าน, message แบบ `feat(server): ...`
 - อัปเดต README (วิธี setup, env, migrate, seed, run, บัญชี demo) เมื่อจบทุก Phase
+
+### การ push
+- เริ่มแต่ละ phase: สร้าง branch จาก main ที่ pull ล่าสุด แล้วเปิด draft PR ทันทีหลัง commit แรก
+- push ทุกครั้งที่ commit และ npm test, lint, build ผ่าน ไม่ต้องรอจบ phase
+- ห่างกันไม่เกินประมาณ 30 นาทีของการทำงาน ถ้างานยังไม่เสร็จแต่ test ผ่าน ให้ commit เป็น "wip(...)" แล้ว push
+- ห้าม push commit ที่ test ไม่ผ่าน, ห้าม force-push, ห้าม push หรือ merge เข้า main เอง
+- ห้าม commit .env, .env.test หรือไฟล์ที่มีรหัสผ่าน
+- ถ้า push ไม่สำเร็จ ให้หยุดแล้วรายงาน error ห้ามแก้ด้วยการลบ history
+- จบ phase: อัปเดตคำอธิบาย draft PR เป็นสรุปผล แล้วแจ้งให้ผู้ใช้ review และ merge

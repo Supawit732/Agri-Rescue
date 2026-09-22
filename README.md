@@ -2,7 +2,7 @@
 
 แอปมือถือช่วยระบายผลผลิตตกเกรดหรือใกล้เน่าเสียของเกษตรกรรายย่อยไปยังผู้รับซื้อในพื้นที่ แผนการทำอยู่ที่ [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md)
 
-ตอนนี้ Phase 3 พร้อมใช้ สคีมาอยู่ใน `server/src/db/migrations/001_init.sql` ค่าตัวอย่างจากต้นแบบอยู่ใน `server/src/db/seedData.ts` และสีอยู่ใน `mobile/src/theme.ts` API อยู่ใต้ `/api`
+ตอนนี้ Phase 4 พร้อมใช้ สคีมาอยู่ใน `server/src/db/migrations/001_init.sql` ค่าตัวอย่างจากต้นแบบอยู่ใน `server/src/db/seedData.ts` และสีอยู่ใน `mobile/src/theme.ts` API อยู่ใต้ `/api`
 
 ## โครงโปรเจกต์
 
@@ -55,7 +55,7 @@ npm run seed
 npm run seed:reset
 ```
 
-`npm test` อ่าน `server/.env.test` แล้วรีเซ็ตข้อมูลในฐานนั้นก่อนแต่ละไฟล์เทส ไม่เรียก Open-Meteo จริง ฐานพัฒนาใน `.env` ไม่ถูกแตะ
+`npm test` อ่าน `server/.env.test` แล้วรีเซ็ตข้อมูลในฐานนั้นก่อนแต่ละไฟล์เทส ไม่เรียก Open-Meteo จริง ฐานพัฒนาใน `.env` ไม่ถูกแตะ คัดลอก `server/.env.test.example` เป็น `server/.env.test` แล้วใส่รหัสฐานเทส ไฟล์ `.env` และ `.env.test` ไม่ถูก commit
 
 ## เรียก API
 
@@ -77,6 +77,8 @@ curl -s 'http://127.0.0.1:3000/api/market?lat=13.662&lng=100.611&radius_km=15' \
 ```
 
 สมัครสมาชิกได้เฉพาะเกษตรกรและผู้ซื้อ คนขับกับผู้ประสานมีจาก seed เท่านั้น JWT อายุ 7 วัน
+
+ผู้ประสานสร้างรอบด้วย `POST /api/batches` คนขับดูรอบที่ `GET /api/batches/:id` แล้วยืนยันจุดรับด้วย `{ "weight_kg" }` หรือจุดส่งด้วย `{ "otp" }` ที่ `POST /api/stops/:id/confirm` ทุก role ดูผลรวมที่ `GET /api/impact/summary` เซิร์ฟเวอร์เปลี่ยนล็อต `open` ที่เลย `expires_at` เป็น `expired` ทุก 10 นาที
 
 `npm run migrate` สร้างตารางถ้ายังไม่มี และข้ามไฟล์ที่รันไปแล้ว `npm run seed` ใส่ค่าจาก `seedData.ts` โดยข้ามแถวที่มีอยู่แล้ว จึงรันซ้ำได้โดยจำนวนแถวไม่เพิ่ม
 

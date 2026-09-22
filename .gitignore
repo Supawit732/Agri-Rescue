@@ -3,6 +3,7 @@ dist/
 coverage/
 .env
 .env.local
+.env.test
 .expo/
 *.log
 .DS_Store
