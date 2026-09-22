@@ -26,6 +26,35 @@ batchesRouter.post(
 );
 
 batchesRouter.get(
+  '/',
+  requireRole('driver', 'coordinator'),
+  asyncHandler(async (req, res) => {
+    const auth = req.auth;
+    if (auth === undefined) {
+      throw new HttpError(401, 'UNAUTHORIZED', 'กรุณาเข้าสู่ระบบ');
+    }
+    const [rows] =
+      auth.role === 'driver'
+        ? await pool.query<RowDataPacket[]>(
+            'SELECT id, driver_id, status, planned_km, created_at FROM batches WHERE driver_id = ? ORDER BY id DESC',
+            [auth.id],
+          )
+        : await pool.query<RowDataPacket[]>(
+            'SELECT id, driver_id, status, planned_km, created_at FROM batches ORDER BY id DESC',
+          );
+    res.json({
+      batches: rows.map((row) => ({
+        id: Number(row.id),
+        driver_id: row.driver_id === null ? null : Number(row.driver_id),
+        status: row.status as 'planned' | 'in_progress' | 'completed',
+        planned_km: Number(row.planned_km),
+        created_at: new Date(row.created_at as string).toISOString(),
+      })),
+    });
+  }),
+);
+
+batchesRouter.get(
   '/drivers',
   requireRole('coordinator'),
   asyncHandler(async (_req, res) => {

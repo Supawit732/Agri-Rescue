@@ -1,56 +1,83 @@
-import { useFonts } from 'expo-font';
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect } from 'react';
-import 'react-native-reanimated';
-
-import { useColorScheme } from '@/components/useColorScheme';
-
-export {
-  // Catch any errors thrown by the Layout component.
-  ErrorBoundary,
-} from 'expo-router';
+import { ActivityIndicator, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
+import { AuthProvider, useAuth } from '../src/context/AuthContext';
+import { C } from '../src/theme';
+import type { UserRole } from '../src/api/types';
 
 export const unstable_settings = {
-  // Ensure that reloading on `/modal` keeps a back button present.
-  initialRouteName: '(tabs)',
+  initialRouteName: 'index',
 };
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
-SplashScreen.preventAutoHideAsync();
+const roleHome: Record<UserRole, string> = {
+  farmer: '/farmer',
+  buyer: '/buyer',
+  driver: '/driver',
+  coordinator: '/coordinator',
+};
 
-export default function RootLayout() {
-  const [loaded, error] = useFonts({
-    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
-  });
+const publicRoutes = new Set(['login', 'register']);
 
-  // Expo Router uses Error Boundaries to catch errors in the navigation tree.
+function AuthGate(): React.ReactElement {
+  const { ready, user } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
+
   useEffect(() => {
-    if (error) throw error;
-  }, [error]);
-
-  useEffect(() => {
-    if (loaded) {
-      SplashScreen.hideAsync();
+    if (!ready) {
+      return;
     }
-  }, [loaded]);
+    const current = segments[0] ?? 'index';
+    const onPublic = publicRoutes.has(current);
+    if (user === null) {
+      if (!onPublic) {
+        router.replace('/login');
+      }
+      return;
+    }
+    const home = roleHome[user.role];
+    // Keep the user inside their role area (and off the auth/index screens).
+    if (onPublic || current === 'index' || `/${current}` === '/index') {
+      router.replace(home as never);
+      return;
+    }
+    const allowed = new Set([home.slice(1), 'impact']);
+    if (!allowed.has(current)) {
+      router.replace(home as never);
+    }
+  }, [ready, user, segments, router]);
 
-  if (!loaded) {
-    return null;
+  if (!ready) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: C.bg }}>
+        <ActivityIndicator size="large" color={C.leaf} />
+      </View>
+    );
   }
 
-  return <RootLayoutNav />;
+  return (
+    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.bg } }}>
+      <Stack.Screen name="index" />
+      <Stack.Screen name="login" />
+      <Stack.Screen name="register" />
+      <Stack.Screen name="farmer" />
+      <Stack.Screen name="buyer" />
+      <Stack.Screen name="driver" />
+      <Stack.Screen name="coordinator" />
+      <Stack.Screen name="impact" />
+    </Stack>
+  );
 }
 
-function RootLayoutNav() {
-  const colorScheme = useColorScheme();
-
+export default function RootLayout(): React.ReactElement {
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-      </Stack>
-    </ThemeProvider>
+    <SafeAreaProvider>
+      <AuthProvider>
+        <StatusBar style="light" />
+        <AuthGate />
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }
