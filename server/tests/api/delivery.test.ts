@@ -48,6 +48,19 @@ describe('batches and delivery', () => {
     expect(empty.body.error.message).toBe('ไม่มีคำสั่งซื้อที่รอจัดรอบ');
   });
 
+  it('lists drivers for a coordinator but not for a driver', async () => {
+    const coordinator = await loginStaff(app, 'coordinator', 'ผู้ประสานเลือกคนขับ');
+    const driver = await loginStaff(app, 'driver', 'คนขับให้เลือก');
+    const listed = await request(app).get('/api/batches/drivers').set(bearer(coordinator.token));
+    expect(listed.status).toBe(200);
+    const drivers = listed.body.drivers as { id: number; name: string; phone: string }[];
+    expect(drivers.some((entry) => entry.id === driver.user.id)).toBe(true);
+    expect(drivers.every((entry) => typeof entry.phone === 'string')).toBe(true);
+
+    const forbidden = await request(app).get('/api/batches/drivers').set(bearer(driver.token));
+    expect(forbidden.status).toBe(403);
+  });
+
   it('delivers a paid order and a donation after an OTP lock', async () => {
     const farmer = await registerUser(app, { role: 'farmer', name: 'เกษตรกรส่งของ' });
     const cropId = await insertCrop();
