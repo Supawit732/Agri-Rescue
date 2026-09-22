@@ -2,6 +2,7 @@ import type { RowDataPacket } from 'mysql2';
 
 export interface StopRow extends RowDataPacket {
   id: number;
+  batch_id: number;
   seq: number;
   stop_type: 'pickup' | 'drop';
   lot_id: number | null;
@@ -12,6 +13,7 @@ export interface StopRow extends RowDataPacket {
   status: 'pending' | 'done';
   confirmed_weight_kg: number | null;
   weight_flag: number;
+  otp_attempts: number;
 }
 
 export interface BatchRow extends RowDataPacket {
@@ -22,7 +24,7 @@ export interface BatchRow extends RowDataPacket {
   created_at: Date;
 }
 
-export interface StopJson {
+export function toStopJson(row: StopRow): {
   id: number;
   seq: number;
   stop_type: 'pickup' | 'drop';
@@ -34,9 +36,10 @@ export interface StopJson {
   status: 'pending' | 'done';
   confirmed_weight_kg: number | null;
   weight_flag: boolean;
-}
-
-export function toStopJson(row: StopRow): StopJson {
+  otp_attempts: number;
+  locked: boolean;
+} {
+  const otpAttempts = Number(row.otp_attempts);
   return {
     id: Number(row.id),
     seq: Number(row.seq),
@@ -49,6 +52,8 @@ export function toStopJson(row: StopRow): StopJson {
     status: row.status,
     confirmed_weight_kg: row.confirmed_weight_kg === null ? null : Number(row.confirmed_weight_kg),
     weight_flag: Number(row.weight_flag) === 1,
+    otp_attempts: otpAttempts,
+    locked: otpAttempts >= 5,
   };
 }
 

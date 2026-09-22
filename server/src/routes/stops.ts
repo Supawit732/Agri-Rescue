@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { confirmStop } from '../delivery/confirmStop';
+import { confirmStop, unlockStop } from '../delivery/confirmStop';
 import { asyncHandler } from '../http/asyncHandler';
 import { requireAuth, requireRole } from '../middleware/auth';
 
@@ -18,7 +18,17 @@ stopsRouter.post(
   asyncHandler(async (req, res) => {
     const stopId = z.coerce.number().int().positive().parse(req.params.id);
     const body = confirmSchema.parse(req.body);
-    const result = await confirmStop(stopId, body);
+    const result = await confirmStop(stopId, req.auth?.id ?? 0, body);
     res.json(result);
+  }),
+);
+
+stopsRouter.post(
+  '/:id/unlock',
+  requireAuth,
+  requireRole('coordinator'),
+  asyncHandler(async (req, res) => {
+    const stopId = z.coerce.number().int().positive().parse(req.params.id);
+    res.json(await unlockStop(stopId));
   }),
 );

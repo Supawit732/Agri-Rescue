@@ -25,10 +25,21 @@ interface DraftStop {
   lng: number;
 }
 
-export async function createBatch(): Promise<{ batch: ReturnType<typeof toBatchJson>; stops: ReturnType<typeof toStopJson>[] }> {
+export async function createBatch(driverId: number): Promise<{
+  batch: ReturnType<typeof toBatchJson>;
+  stops: ReturnType<typeof toStopJson>[];
+}> {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
+    const [drivers] = await connection.query<RowDataPacket[]>(
+      'SELECT id, role FROM users WHERE id = ? FOR UPDATE',
+      [driverId],
+    );
+    const driver = drivers[0];
+    if (driver === undefined || driver.role !== 'driver') {
+      throw new HttpError(422, 'UNPROCESSABLE', 'ต้องระบุคนขับที่เป็นผู้ใช้บทบาทคนขับ');
+    }
     const [orders] = await connection.query<ReservedOrder[]>(
       `SELECT o.id, o.lot_id, o.buyer_id, p.lat AS plot_lat, p.lng AS plot_lng,
               u.lat AS buyer_lat, u.lng AS buyer_lng
@@ -41,7 +52,7 @@ export async function createBatch(): Promise<{ batch: ReturnType<typeof toBatchJ
        FOR UPDATE`,
     );
     if (orders.length === 0) {
-      throw new HttpError(409, 'EMPTY_BATCH', 'ไม่มีคำสั่งซื้อที่รอจัดรอบ');
+      throw new HttpError(422, 'UNPROCESSABLE', 'ไม่มีคำสั่งซื้อที่รอจัดรอบ');
     }
     const drafts = draftStops(orders);
     const depot = depotPoint();
@@ -62,8 +73,8 @@ export async function createBatch(): Promise<{ batch: ReturnType<typeof toBatchJ
     });
     const plannedKm = round2(legs.reduce((sum, leg) => sum + leg, 0));
     const [batchResult] = await connection.query<ResultSetHeader>(
-      `INSERT INTO batches (driver_id, status, planned_km) VALUES (NULL, 'planned', ?)`,
-      [plannedKm],
+      `INSERT INTO batches (driver_id, status, planned_km) VALUES (?, 'planned', ?)`,
+      [driverId, plannedKm],
     );
     const batchId = batchResult.insertId;
     for (let index = 0; index < solved.length; index += 1) {
@@ -107,7 +118,8 @@ export async function loadBatch(
     throw new HttpError(404, 'NOT_FOUND', 'ไม่พบรอบวิ่ง');
   }
   const [stops] = await connection.query<StopRow[]>(
-    `SELECT id, seq, stop_type, lot_id, buyer_id, lat, lng, leg_km, status, confirmed_weight_kg, weight_flag
+    `SELECT id, batch_id, seq, stop_type, lot_id, buyer_id, lat, lng, leg_km, status,
+            confirmed_weight_kg, weight_flag, otp_attempts
      FROM route_stops
      WHERE batch_id = ?
      ORDER BY seq`,
@@ -133,7 +145,7 @@ function draftStops(orders: readonly ReservedOrder[]): DraftStop[] {
       continue;
     }
     if (order.buyer_lat === null || order.buyer_lng === null) {
-      throw new HttpError(400, 'VALIDATION', 'ผู้ซื้อยังไม่มีพิกัด');
+      throw new HttpError(422, 'UNPROCESSABLE', 'ผู้ซื้อยังไม่มีพิกัด');
     }
     dropsByBuyer.set(buyerId, {
       key: `drop:${buyerId}`,

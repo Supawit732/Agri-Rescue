@@ -2,7 +2,7 @@
 
 แอปมือถือช่วยระบายผลผลิตตกเกรดหรือใกล้เน่าเสียของเกษตรกรรายย่อยไปยังผู้รับซื้อในพื้นที่ แผนการทำอยู่ที่ [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md)
 
-ตอนนี้ Phase 4 พร้อมใช้ สคีมาอยู่ใน `server/src/db/migrations/001_init.sql` ค่าตัวอย่างจากต้นแบบอยู่ใน `server/src/db/seedData.ts` และสีอยู่ใน `mobile/src/theme.ts` API อยู่ใต้ `/api`
+ตอนนี้ Phase 4 พร้อมใช้ สคีมาอยู่ใน `server/src/db/migrations/` ค่าตัวอย่างจากต้นแบบอยู่ใน `server/src/db/seedData.ts` และสีอยู่ใน `mobile/src/theme.ts` API อยู่ใต้ `/api`
 
 ## โครงโปรเจกต์
 
@@ -78,7 +78,30 @@ curl -s 'http://127.0.0.1:3000/api/market?lat=13.662&lng=100.611&radius_km=15' \
 
 สมัครสมาชิกได้เฉพาะเกษตรกรและผู้ซื้อ คนขับกับผู้ประสานมีจาก seed เท่านั้น JWT อายุ 7 วัน
 
-ผู้ประสานสร้างรอบด้วย `POST /api/batches` คนขับดูรอบที่ `GET /api/batches/:id` แล้วยืนยันจุดรับด้วย `{ "weight_kg" }` หรือจุดส่งด้วย `{ "otp" }` ที่ `POST /api/stops/:id/confirm` ทุก role ดูผลรวมที่ `GET /api/impact/summary` เซิร์ฟเวอร์เปลี่ยนล็อต `open` ที่เลย `expires_at` เป็น `expired` ทุก 10 นาที
+ผู้ประสานสร้างรอบโดยส่ง `driver_id` ของคนขับ ดูตัวอย่างด้านล่าง คนขับที่ถูกมอบหมายยืนยันจุดรับด้วยน้ำหนัก หรือจุดส่งด้วย OTP รหัสผิดครบ 5 ครั้งจะล็อกจุดนั้น ผู้ประสานปลดล็อกที่ `POST /api/stops/:id/unlock`
+
+สร้างรอบ หลัง login ผู้ประสาน `0800000005` และคนขับ `0800000004` ใช้ `user.id` ของคนขับเป็น `driver_id`:
+
+```bash
+curl -s -X POST http://127.0.0.1:3000/api/batches \
+  -H 'Authorization: Bearer COORDINATOR_TOKEN' \
+  -H 'Content-Type: application/json' \
+  -d '{"driver_id": DRIVER_USER_ID}'
+```
+
+ยืนยันจุดรับ และจุดส่ง:
+
+```bash
+curl -s -X POST http://127.0.0.1:3000/api/stops/STOP_ID/confirm \
+  -H 'Authorization: Bearer DRIVER_TOKEN' \
+  -H 'Content-Type: application/json' \
+  -d '{"weight_kg": 80}'
+
+curl -s -X POST http://127.0.0.1:3000/api/stops/STOP_ID/confirm \
+  -H 'Authorization: Bearer DRIVER_TOKEN' \
+  -H 'Content-Type: application/json' \
+  -d '{"otp": "1234"}'
+```
 
 `npm run migrate` สร้างตารางถ้ายังไม่มี และข้ามไฟล์ที่รันไปแล้ว `npm run seed` ใส่ค่าจาก `seedData.ts` โดยข้ามแถวที่มีอยู่แล้ว จึงรันซ้ำได้โดยจำนวนแถวไม่เพิ่ม
 

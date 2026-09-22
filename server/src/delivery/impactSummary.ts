@@ -31,9 +31,10 @@ export async function impactSummary(): Promise<ImpactSummary> {
     const kg = Number(row.kg_saved);
     kgSaved += kg;
     co2e += Number(row.co2e_kg);
-    income += Number(row.agreed_price_per_kg) * kg;
     if (Number(row.is_donation) === 1) {
       donated += kg;
+    } else {
+      income += Number(row.agreed_price_per_kg) * kg;
     }
   }
   return {
