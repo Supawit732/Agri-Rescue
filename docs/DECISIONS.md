@@ -67,6 +67,16 @@ Nearest-neighbor เริ่มที่ depot แล้วเลือกจ�
 
 Jest โหลด `server/.env.test` ก่อน แล้วรีเซ็ตตารางข้อมูลใน `agri_rescue_test` ก่อนแต่ละไฟล์ รันทีละไฟล์ และ mock `fetch` ทั้งกรณีสำเร็จและกรณี timeout คัดลอก `server/.env.test.example` เป็น `server/.env.test` แล้วใส่รหัสฐานเทสในเครื่อง ไฟล์นี้ไม่ถูก commit
 
+## D013 — Phase 4: รอบที่มอบหมายคนขับ และการล็อก OTP
+
+`POST /batches` ต้องส่ง `driver_id` ที่เป็น user role `driver` ไม่มีออเดอร์ `reserved` ที่ยังไม่มีรอบตอบ 422 ข้อความภาษาไทย การสร้างรอบล็อกออเดอร์ด้วย `SELECT ... FOR UPDATE` คนขับดูและยืนยันได้เฉพาะรอบที่ `driver_id` ตรงกับตนเอง
+
+จุดที่ `done` แล้วยืนยันซ้ำตอบ 409 น้ำหนักที่ต่างจาก `weight_kg` เกิน 10% ตั้ง `weight_flag` drop ทำได้เมื่อ pickup ของทุกออเดอร์ของผู้ซื้อคนนั้นในรอบเสร็จแล้ว ไม่งั้น 409 OTP ผิดสะสมใน `route_stops.otp_attempts` จาก migration `002_otp_attempts.sql` ครบ 5 ครั้งจุดนั้นถูกล็อก ผู้ประสานปลดล็อกที่ `POST /stops/:id/unlock`
+
+`impact_logs.kg_saved` ใช้น้ำหนักที่ชั่งได้ ไม่ใช่น้ำหนักที่เกษตรกรแจ้ง ออเดอร์บริจาคไม่นำราคาไปคิดรายได้เกษตรกร `co2e_kg = kg_saved × 2.5`
+
+`expireOpenLots(now)` เปลี่ยนเฉพาะล็อต `open` ที่เลยเวลาเป็น `expired` `startExpireSchedule` ถูกเรียกจาก `server.ts` เท่านั้น
+
 ## D005 — เซิร์ฟเวอร์ใช้ CommonJS
 
 `tsconfig` ตั้ง `module` เป็น `commonjs` เพื่อให้ Express, Jest และ ts-jest ทำงานร่วมกันโดยไม่ตั้งค่า ESM เพิ่ม
