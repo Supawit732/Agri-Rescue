@@ -1,1 +1,83 @@
 # Agri-Rescue
+
+แอปมือถือช่วยระบายผลผลิตตกเกรดหรือใกล้เน่าเสียของเกษตรกรรายย่อยไปยังผู้รับซื้อในพื้นที่ แผนการทำอยู่ที่ [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md)
+
+ตอนนี้ Phase 1 พร้อมใช้ สคีมาอยู่ใน `server/src/db/migrations/001_init.sql` ค่าตัวอย่างจากต้นแบบอยู่ใน `server/src/db/seedData.ts` และสีอยู่ใน `mobile/src/theme.ts`
+
+## โครงโปรเจกต์
+
+- `server/` — API ด้วย Node.js, Express, TypeScript
+- `mobile/` — แอป Expo (TypeScript, Expo Router)
+- `docs/` — แผน, การตัดสินใจ, และต้นแบบ UI
+
+## สิ่งที่ต้องมี
+
+- Node.js 22
+- npm
+- MySQL 8 ที่ฟัง TCP `127.0.0.1:3306` (ใช้ตั้งแต่ Phase 1)
+- แอป Expo Go บนมือถือ สำหรับเปิด `mobile/`
+
+## ตั้งค่าเซิร์ฟเวอร์
+
+```bash
+cd server
+cp .env.example .env
+npm install
+```
+
+ตัวแปรใน `.env` (ดูค่าตัวอย่างใน `server/.env.example`)
+
+| ตัวแปร | ความหมาย |
+|---|---|
+| `PORT` | พอร์ตของ API |
+| `DB_HOST` | โฮสต์ MySQL ใช้ `127.0.0.1` |
+| `DB_PORT` | พอร์ต MySQL |
+| `DB_USER` | ผู้ใช้ฐานข้อมูล |
+| `DB_PASSWORD` | รหัสผ่านฐานข้อมูล |
+| `DB_NAME` | ชื่อฐานข้อมูล |
+| `JWT_SECRET` | ความลับสำหรับเซ็น JWT |
+| `DEPOT_LAT` | ละติจูดจุดเริ่มรอบวิ่ง |
+| `DEPOT_LNG` | ลองจิจูดจุดเริ่มรอบวิ่ง |
+
+ไฟล์ `.env` ไม่ถูก commit
+
+## คำสั่งเซิร์ฟเวอร์
+
+รันในโฟลเดอร์ `server/`
+
+```bash
+npm test       # unit test
+npm run lint   # eslint
+npm run build  # คอมไพล์ไปที่ dist/
+npm run dev    # รัน API แบบ watch
+npm run migrate
+npm run seed
+npm run seed:reset
+```
+
+`npm run migrate` สร้างตารางถ้ายังไม่มี และข้ามไฟล์ที่รันไปแล้ว `npm run seed` ใส่ค่าจาก `seedData.ts` โดยข้ามแถวที่มีอยู่แล้ว จึงรันซ้ำได้โดยจำนวนแถวไม่เพิ่ม
+
+`npm run seed:reset` ใช้ก่อนเดโมเท่านั้น ลบออเดอร์ รอบวิ่ง จุดแวะ ผลลัพธ์ และการประเมินคุณภาพ แล้วสร้างล็อตตัวอย่างใหม่ให้ `expires_at` นับจากเวลาปัจจุบัน ไม่ลบผู้ใช้ พืช และแปลง และไม่ได้รันเองตอนเปิดเซิร์ฟเวอร์
+
+รหัสผ่านทุกบัญชีคือ `demo1234`
+
+| role | name | phone |
+|---|---|---|
+| farmer | ลุงสมชาย | 0800000001 |
+| farmer | ป้าบุญมี | 0800000002 |
+| farmer | พี่ต้อม | 0800000003 |
+| driver | คนขับตัวอย่าง | 0800000004 |
+| coordinator | ผู้ประสานตัวอย่าง | 0800000005 |
+| buyer | รถพุ่มพวงป้าแดง | 0800000011 |
+| buyer | บ้านพักเด็กชุมชน | 0800000012 |
+| buyer | ร้านข้าวแกงลุงชม | 0800000013 |
+
+## รันแอปมือถือ
+
+```bash
+cd mobile
+npm install
+npx expo start
+```
+
+สแกน QR ด้วย Expo Go บนเครื่องที่อยู่เครือข่ายเดียวกับเครื่องที่รันคำสั่งนี้
