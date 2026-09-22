@@ -5,9 +5,10 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
-    "test": "jest",
+    "test": "jest --coverage",
     "migrate": "tsx src/db/migrate.ts",
     "seed": "tsx src/db/seed.ts",
+    "seed:reset": "tsx src/db/resetLots.ts",
     "lint": "eslint ."
   },
   "dependencies": {

@@ -90,8 +90,8 @@ export const farmers = [
   },
 ] as const;
 
-/** Expected prototype results at 34°C for the Phase 2 shelf-life and price tests. */
+/** Expected results at 34°C. Price is the normal-grade urgent price when hoursLeft equals shelfHours. */
 export const phase2Samples = [
-  { cropKey: 'mango' as const, ripeness: 2, tempC: 34, shelfHours: 55, priceNormal: 36 },
-  { cropKey: 'mango' as const, ripeness: 3, tempC: 34, shelfHours: 37 },
+  { cropKey: 'mango' as const, ripeness: 2, tempC: 34, shelfHours: 61, priceNormal: 26 },
+  { cropKey: 'mango' as const, ripeness: 3, tempC: 34, shelfHours: 44 },
 ] as const;
