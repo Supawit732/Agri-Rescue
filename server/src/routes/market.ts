@@ -3,7 +3,8 @@ import type { RowDataPacket } from 'mysql2';
 import { z } from 'zod';
 import { pool } from '../db/pool';
 import { haversineKm } from '../domain/geo';
-import { urgentPricePerKg, type ProduceGrade } from '../domain/pricing';
+import type { ProduceGrade } from '../domain/pricing';
+import { lotAcceptsDonation, lotPricePerKg } from '../domain/sellerPricing';
 import { asyncHandler } from '../http/asyncHandler';
 import { requireAuth, requireCapability } from '../middleware/auth';
 
@@ -22,10 +23,13 @@ interface MarketRow extends RowDataPacket {
   ripeness: number;
   allow_donation: number;
   donation_audience: 'verified_org_only' | 'all_donors';
+  start_price_per_kg: number | null;
+  floor_price_per_kg: number | null;
+  sale_mode: string;
+  donation_opened: number;
   expires_at: Date;
   crop_name_th: string;
   base_shelf_days: number;
-  market_price_per_kg: number;
   lat: number;
   lng: number;
   farmer_name: string;
@@ -39,8 +43,9 @@ marketRouter.get(
     const query = querySchema.parse(req.query);
     const radiusKm = query.radius_km ?? 15;
     const [rows] = await pool.query<MarketRow[]>(
-      `SELECT h.id, h.weight_kg, h.grade, h.ripeness, h.allow_donation, h.donation_audience, h.expires_at,
-              c.name_th AS crop_name_th, c.base_shelf_days, c.market_price_per_kg,
+      `SELECT h.id, h.weight_kg, h.grade, h.ripeness, h.allow_donation, h.donation_audience,
+              h.start_price_per_kg, h.floor_price_per_kg, h.sale_mode, h.donation_opened, h.expires_at,
+              c.name_th AS crop_name_th, c.base_shelf_days,
               p.lat, p.lng, u.name AS farmer_name
        FROM harvest_lots h
        JOIN crops c ON c.id = h.crop_id
@@ -52,8 +57,27 @@ marketRouter.get(
     const now = Date.now();
     const lots = rows
       .map((row) => {
-        const distanceKm = haversineKm({ lat: query.lat, lng: query.lng }, { lat: Number(row.lat), lng: Number(row.lng) });
+        const distanceKm = haversineKm(
+          { lat: query.lat, lng: query.lng },
+          { lat: Number(row.lat), lng: Number(row.lng) },
+        );
         const hoursLeft = (new Date(row.expires_at).getTime() - now) / (60 * 60 * 1000);
+        const saleMode = String(row.sale_mode);
+        const acceptsDonation = lotAcceptsDonation(saleMode, row.donation_opened);
+        const isDonateOnly = saleMode === 'donate';
+        let pricePerKg: number | null = null;
+        if (!isDonateOnly && row.start_price_per_kg !== null && row.floor_price_per_kg !== null) {
+          pricePerKg = lotPricePerKg({
+            startPricePerKg: Number(row.start_price_per_kg),
+            floorPricePerKg: Number(row.floor_price_per_kg),
+            baseShelfHours: Number(row.base_shelf_days) * 24,
+            hoursLeft,
+          });
+        } else if (isDonateOnly) {
+          pricePerKg = null;
+        } else {
+          pricePerKg = 0;
+        }
         return {
           id: Number(row.id),
           crop_name_th: row.crop_name_th,
@@ -61,17 +85,14 @@ marketRouter.get(
           weight_kg: Number(row.weight_kg),
           grade: row.grade,
           ripeness: Number(row.ripeness),
-          allow_donation: Number(row.allow_donation) === 1,
+          sale_mode: saleMode,
+          donation_opened: Number(row.donation_opened) === 1,
+          allow_donation: acceptsDonation,
           donation_audience: row.donation_audience,
           expires_at: new Date(row.expires_at).toISOString(),
           hours_left: hoursLeft,
           distance_km: distanceKm,
-          price_per_kg: urgentPricePerKg({
-            marketPricePerKg: Number(row.market_price_per_kg),
-            baseShelfHours: Number(row.base_shelf_days) * 24,
-            hoursLeft,
-            grade: row.grade,
-          }),
+          price_per_kg: pricePerKg,
           lat: Number(row.lat),
           lng: Number(row.lng),
         };

@@ -9,7 +9,7 @@ describe('price formulas stay in src/domain', () => {
     const lots = fs.readFileSync(path.join(routeDir, 'lots.ts'), 'utf8');
     const orders = fs.readFileSync(path.join(routeDir, 'orders.ts'), 'utf8');
     for (const source of [market, lots, orders]) {
-      expect(source).toContain('urgentPricePerKg');
+      expect(source).toContain('lotPricePerKg');
       expect(source).not.toContain('0.18');
       expect(source).not.toContain('0.3 + 0.7');
     }

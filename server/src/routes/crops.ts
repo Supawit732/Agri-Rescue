@@ -9,8 +9,24 @@ cropsRouter.get(
   '/',
   asyncHandler(async (_req, res) => {
     const [rows] = await pool.query<RowDataPacket[]>(
-      'SELECT id, name_th, base_shelf_days, market_price_per_kg FROM crops ORDER BY id',
+      `SELECT id, name_th, base_shelf_days, market_price_per_kg,
+              dit_product_code, dit_unit, dit_unit_to_kg,
+              normal_features_th, defect_examples_th
+       FROM crops
+       ORDER BY id`,
     );
-    res.json({ crops: rows });
+    res.json({
+      crops: rows.map((row) => ({
+        id: Number(row.id),
+        name_th: String(row.name_th),
+        base_shelf_days: Number(row.base_shelf_days),
+        market_price_per_kg: Number(row.market_price_per_kg),
+        dit_product_code: row.dit_product_code === null ? null : String(row.dit_product_code),
+        dit_unit: row.dit_unit === null ? null : String(row.dit_unit),
+        dit_unit_to_kg: row.dit_unit_to_kg === null ? null : Number(row.dit_unit_to_kg),
+        normal_features_th: row.normal_features_th === null ? null : String(row.normal_features_th),
+        defect_examples_th: row.defect_examples_th === null ? null : String(row.defect_examples_th),
+      })),
+    });
   }),
 );

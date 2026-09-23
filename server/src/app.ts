@@ -1,5 +1,6 @@
 import express, { type Express } from 'express';
 import { errorHandler } from './middleware/errorHandler';
+import { adminDitRouter } from './routes/adminDit';
 import { authRouter } from './routes/auth';
 import { batchesRouter } from './routes/batches';
 import { donorsRouter } from './routes/donors';
@@ -25,6 +26,15 @@ export function createApp(): Express {
     next();
   });
   app.use(express.json({ limit: '8mb' }));
+  if (process.env.NODE_ENV !== 'test') {
+    app.use((req, res, next) => {
+      const started = Date.now();
+      res.on('finish', () => {
+        console.log(`HTTP ${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - started}ms`);
+      });
+      next();
+    });
+  }
   app.use('/api/auth', authRouter);
   app.use('/api/donors', donorsRouter);
   app.use('/api/geo', geoRouter);
@@ -36,6 +46,7 @@ export function createApp(): Express {
   app.use('/api/batches', batchesRouter);
   app.use('/api/stops', stopsRouter);
   app.use('/api/impact', impactRouter);
+  app.use('/api/admin/dit', adminDitRouter);
   app.use(errorHandler);
   return app;
 }

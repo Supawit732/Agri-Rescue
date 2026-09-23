@@ -42,16 +42,20 @@
 - บัญชี charity ที่อนุมัติแล้ว ย้ายเป็น `verified_org`
 - **Done when:** test เพดาน, เลื่อนระดับ, audience, ระงับ/ปลด, pending org/volunteer/suspended → 403, needs_more_info→resubmit, reject ไม่มีเหตุผล → 400, ดาวน์โหลดเอกสาร 403 สำหรับ non-admin, mock vision ทุกกรณี
 
-## 6.1c ราคาอ้างอิง DIT / MOC และการจับคู่สินค้า
-- ดึงราคาจาก API กรมการค้าภายใน (MOC) เก็บใน `crop_reference_prices`; จับคู่พืชกับรหัสสินค้าอัตโนมัติ (หมวด, กรองแปรรูป, หน่วยจาก price response) ลองใหม่รายชั่วโมงเมื่อยังไม่มีราคาวันนี้; อ้างอิงได้ไม่เกิน 30 วัน
-- หน้า admin DIT: สถานะอัตโนมัติ, ชื่อสินค้าที่จับคู่, เหตุผลเมื่อไม่มีราคา, ตัวแปลงหน่วย (เช่น 1 หวี = X กก.) ในขั้นสูง
-- เมื่อ API ล่ม ใช้ราคาประมาณของพืชต่อไปได้ตามปกติ
-- **Done when:** test จับคู่/retry/หน่วย/ราคาประมาณเมื่อ API error
+## 6.1c ราคาอ้างอิง · ราคาผู้ขาย · โหมดขาย · AI ตำหนิ · แก้ไขล็อต
+- ดึงราคาจาก MOC Open Data (`gis-product-prices` / `gis-products`); ราคาตลาด = ค่ากลาง `(price_min+price_max)/2` ของวันล่าสุด; ใช้ขายส่งเป็นหลัก; จับคู่อัตโนมัติ (หมวด, กรองแปรรูป, หน่วยจาก price response); ลองใหม่รายชั่วโมง; อ้างอิงได้ไม่เกิน 30 วัน
+- `crops.dit_product_code`, `dit_unit`, `dit_unit_to_kg`; ถ้าหน่วยไม่ใช่บาท/กก. ใช้ได้เมื่อ admin ใส่ตัวแปลงเท่านั้น; `crop_reference_prices` เก็บ wholesale/retail, product_code, unit, source_url, date
+- ไม่มีข้อมูลวันนี้ → ใช้ล่าสุด ≤ 30 วัน; ไม่มีเลย → `market_price_per_kg` + ป้าย "ราคาประมาณ"; admin DIT แสดงสถานะอัตโนมัติ + ตัวแปลงหน่วยในขั้นสูง
+- ผู้ขายกำหนด `start_price_per_kg` / `floor_price_per_kg`; สูตร `max(floor, round(start×(0.3+0.7×freshness)))`; กรอบและ % ใน DECISIONS
+- `sale_mode` (`sell` | `donate` | `sell_then_donate`) แทน `allow_donation` (migrate ค่าเดิม); job เปิดบริจาคเมื่อ `sell_then_donate` เหลือ &lt; 12 ชม.
+- `crops.normal_features_th` / `defect_examples_th` ใส่ใน vision prompt; ห้ามนับลักษณะปกติเป็นตำหนิ
+- `PATCH /lots/:id` เจ้าของ+open เท่านั้น; `lot_edit_logs`; แอปมีปุ่มแก้ไข
+- **Done when:** mock MOC ใน test, หน่วยนอก กก. ต้องมีตัวแปลง, ราคานอกกรอบ 400, แก้หลังจอง 409, คนอื่นแก้ 403, ยืดอายุ/เพิ่มน้ำหนักไม่ได้, prompt มี features ของพืช
 
 ## 6.1d ข้อผิดพลาดรายช่อง + ฟอร์มผู้รับบริจาคแบบเป็นทางการ
 - component กลาง `FormField` / `TextField` / `ChipGroup` / `FileField`: กรอบแดง + ข้อความไทยใต้ช่อง + ไอคอน; ตรวจตอน blur และตอนส่ง; ส่งแล้วผิดเลื่อนไปช่องแรกที่ผิด
 - server คืน `{ error: { code, message, fields } }` จาก zod ทุก endpoint ที่รับฟอร์ม; แอปแสดงที่ช่องนั้น
-- ใช้กับสมัคร, login, ลงล็อต, LocationPicker, โปรไฟล์, ฟอร์มผู้รับบริจาค, admin
+- ใช้กับสมัคร, login, ลงล็อต/แก้ไขล็อต (น้ำหนัก, ราคาเริ่มต้น/ต่ำสุด, sale_mode, ความสุก), LocationPicker, โปรไฟล์, ฟอร์มผู้รับบริจาค, admin (รวมตัวแปลงหน่วย DIT)
 - สมัครรับบริจาค: popup สรุปก่อนเลือกประเภท, สถานะ `draft` กรอกทีหลังได้ (ซื้อได้ แต่รับบริจาคไม่ได้จนกว่าบุคคลส่งครบ / องค์กรอนุมัติ)
 - หน้า `/terms/donor` (ร่างยังไม่ผ่านตรวจทางกฎหมาย); ต้องยอมรับ `terms_version` ก่อนส่ง; เปลี่ยนเวอร์ชันต้องยอมรับใหม่
 - ฟอร์มหลายขั้น + แถบความคืบหน้า + บันทึกร่าง: บุคคล (จิตอาสา) และองค์กร (เอกสารแยกประเภท, รูปสถานที่)

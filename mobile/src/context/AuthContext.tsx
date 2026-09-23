@@ -9,6 +9,10 @@ import type {
   BatchDetail,
   BuyerType,
   Crop,
+  DitCropsResponse,
+  DitProductSearchHit,
+  DitSuggestion,
+  DitSyncJob,
   DonationAudience,
   DonorTermsMeta,
   Driver,
@@ -21,6 +25,7 @@ import type {
   OrgApplication,
   OrgChecklist,
   Plot,
+  SaleMode,
   Stop,
   User,
   UserRole,
@@ -49,7 +54,15 @@ interface Api {
   getCrops: () => Promise<Crop[]>;
   getPlots: () => Promise<Plot[]>;
   createPlot: (input: { name: string; lat: number; lng: number; area_rai: number }) => Promise<Plot>;
-  estimate: (input: { crop_id: number; ripeness: number; grade: Grade; lat: number; lng: number }) => Promise<EstimateResponse>;
+  estimate: (input: {
+    crop_id: number;
+    ripeness: number;
+    grade: Grade;
+    lat: number;
+    lng: number;
+    start_price_per_kg?: number;
+    floor_price_per_kg?: number;
+  }) => Promise<EstimateResponse>;
   assessPhoto: (input: {
     crop_id: number;
     image_base64: string;
@@ -61,12 +74,29 @@ interface Api {
     weight_kg: number;
     grade: Grade;
     ripeness: number;
-    allow_donation: boolean;
+    sale_mode: SaleMode;
     donation_audience?: DonationAudience;
+    start_price_per_kg?: number | null;
+    floor_price_per_kg?: number | null;
     ai_ripeness?: number | null;
     ai_confidence?: number | null;
     ai_model?: string | null;
   }) => Promise<unknown>;
+  patchLot: (
+    id: number,
+    body: {
+      weight_kg?: number;
+      grade?: Grade;
+      photo_url?: string | null;
+      start_price_per_kg?: number | null;
+      floor_price_per_kg?: number | null;
+      sale_mode?: SaleMode;
+      donation_audience?: DonationAudience;
+      ripeness?: number;
+      ai_ripeness?: number | null;
+      confirm_ripeness_photo?: boolean;
+    },
+  ) => Promise<unknown>;
   getMyLots: () => Promise<MyLot[]>;
   getMarket: (lat: number, lng: number, radiusKm: number) => Promise<MarketLot[]>;
   createOrder: (
@@ -86,6 +116,16 @@ interface Api {
   addOrgDocuments: (documents: { filename: string; mime: string; base64: string; doc_category?: string }[]) => Promise<AuthResponse>;
   resubmitOrg: () => Promise<AuthResponse>;
   unlockDonor: (userId: number) => Promise<User>;
+  listDitCrops: () => Promise<DitCropsResponse>;
+  mapDitCrop: (cropId: number, body: { product_code: string; unit_to_kg?: number | null }) => Promise<unknown>;
+  setDitUnitFactor: (cropId: number, body: { unit_to_kg: number | null }) => Promise<unknown>;
+  searchDitProducts: (q: string) => Promise<DitProductSearchHit[]>;
+  refreshDitProducts: () => Promise<{ count: number; fetched_at: string }>;
+  syncDitPrices: () => Promise<{ started: boolean; job: DitSyncJob }>;
+  getDitSyncStatus: () => Promise<DitSyncJob>;
+  suggestDit: (cropId: number) => Promise<DitSuggestion[]>;
+  acceptDitSuggestion: (suggestionId: number) => Promise<unknown>;
+  rejectDitSuggestion: (suggestionId: number) => Promise<unknown>;
   getDrivers: () => Promise<Driver[]>;
   getBatches: () => Promise<Batch[]>;
   createBatch: (driverId: number) => Promise<BatchDetail>;
@@ -261,6 +301,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
       estimate: (input) => authed<EstimateResponse>('POST', '/api/lots/estimate', input),
       assessPhoto: (input) => authed<AssessPhotoResponse>('POST', '/api/lots/assess-photo', input),
       createLot: (input) => authed('POST', '/api/lots', input),
+      patchLot: (id, body) => authed('PATCH', `/api/lots/${id}`, body),
       getMyLots: () => authed<{ lots: MyLot[] }>('GET', '/api/lots/mine').then((r) => r.lots),
       getMarket: (lat, lng, radiusKm) =>
         authed<{ lots: MarketLot[] }>('GET', `/api/market?lat=${lat}&lng=${lng}&radius_km=${radiusKm}`).then((r) => r.lots),
@@ -309,6 +350,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
       },
       unlockDonor: (userId) =>
         authed<{ user: User }>('POST', `/api/donors/admin/donors/${userId}/unlock`).then((r) => r.user),
+      listDitCrops: () => authed<DitCropsResponse>('GET', '/api/admin/dit/crops'),
+      mapDitCrop: (cropId, body) => authed('POST', `/api/admin/dit/crops/${cropId}/mapping`, body),
+      setDitUnitFactor: (cropId, body) =>
+        authed('POST', `/api/admin/dit/crops/${cropId}/unit-factor`, body),
+      searchDitProducts: (q) =>
+        authed<{ products: DitProductSearchHit[] }>('GET', `/api/admin/dit/products?q=${encodeURIComponent(q)}`).then(
+          (r) => r.products,
+        ),
+      refreshDitProducts: () =>
+        authed<{ count: number; fetched_at: string }>('POST', '/api/admin/dit/products/refresh', {}),
+      syncDitPrices: () => authed<{ started: boolean; job: DitSyncJob }>('POST', '/api/admin/dit/sync', {}),
+      getDitSyncStatus: () => authed<{ job: DitSyncJob }>('GET', '/api/admin/dit/sync/status').then((r) => r.job),
+      suggestDit: (cropId) =>
+        authed<{ suggestions: DitSuggestion[] }>('POST', `/api/admin/dit/crops/${cropId}/suggest`, {}).then(
+          (r) => r.suggestions,
+        ),
+      acceptDitSuggestion: (suggestionId) =>
+        authed('POST', `/api/admin/dit/suggestions/${suggestionId}/accept`, {}),
+      rejectDitSuggestion: (suggestionId) =>
+        authed('POST', `/api/admin/dit/suggestions/${suggestionId}/reject`, {}),
       getMyOrders: () => authed<{ orders: Order[] }>('GET', '/api/orders/mine').then((r) => r.orders),
       cancelOrder: (id) => authed('DELETE', `/api/orders/${id}`),
       getDrivers: () => authed<{ drivers: Driver[] }>('GET', '/api/batches/drivers').then((r) => r.drivers),

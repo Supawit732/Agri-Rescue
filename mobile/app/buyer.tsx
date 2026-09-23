@@ -18,7 +18,13 @@ import { useAuth } from '../src/context/AuthContext';
 import { useApiData } from '../src/hooks/useApiData';
 import { formatCountdown, hoursLeftFrom, useNow } from '../src/hooks/useNow';
 import { C, urgency } from '../src/theme';
-import type { MarketLot, Order, User } from '../src/api/types';
+import type { MarketLot, Order, SaleMode, User } from '../src/api/types';
+
+const SALE_MODE_BADGE: Record<SaleMode, string> = {
+  sell: 'ขาย',
+  donate: 'บริจาค',
+  sell_then_donate: 'ขายแล้วเปิดบริจาค',
+};
 
 export default function BuyerScreen(): React.ReactElement {
   const { api, logout, user, mode, setMode } = useAuth();
@@ -67,7 +73,9 @@ function donationEligibility(
   user: User | null,
   lot: MarketLot,
 ): { canDonate: boolean; badge: string | null; reason: string | null } {
-  if (!lot.allow_donation) {
+  const acceptsDonation =
+    lot.sale_mode === 'donate' || (lot.sale_mode === 'sell_then_donate' && lot.donation_opened);
+  if (!acceptsDonation) {
     return { canDonate: false, badge: null, reason: null };
   }
   if (user === null) {
@@ -163,7 +171,7 @@ function Market({ refreshKey, onBooked }: { refreshKey: number; onBooked: () => 
               <Text style={styles.confirmKind}>
                 {confirm.donation
                   ? 'ประเภท: ขอรับบริจาค (ไม่คิดเงิน)'
-                  : `ประเภท: ซื้อ ${confirm.lot.price_per_kg} บาท/กก.`}
+                  : `ประเภท: ซื้อ ${confirm.lot.price_per_kg ?? '—'} บาท/กก.`}
               </Text>
               <View style={styles.actions}>
                 <View style={styles.slot}>
@@ -184,6 +192,11 @@ function Market({ refreshKey, onBooked }: { refreshKey: number; onBooked: () => 
             const hours = hoursLeftFrom(lot.expires_at, now);
             const tone = urgency(hours);
             const elig = donationEligibility(user, lot);
+            const canBuy = lot.sale_mode !== 'donate' && lot.price_per_kg !== null;
+            const saleBadge =
+              lot.sale_mode === 'sell_then_donate' && lot.donation_opened
+                ? 'ขายแล้วเปิดบริจาค'
+                : SALE_MODE_BADGE[lot.sale_mode] ?? lot.sale_mode;
             return (
               <Card key={lot.id}>
                 <View style={styles.cardHeader}>
@@ -192,28 +205,37 @@ function Market({ refreshKey, onBooked }: { refreshKey: number; onBooked: () => 
                   </Text>
                   <Badge text={formatCountdown(hours)} fg={tone.fg} bg={tone.bg} />
                 </View>
+                <View style={styles.badgeRow}>
+                  <Badge
+                    text={saleBadge}
+                    fg={lot.sale_mode === 'donate' ? C.turmeric : C.leaf}
+                    bg={lot.sale_mode === 'donate' ? C.turmericSoft : C.leafSoft}
+                  />
+                  {elig.badge !== null ? (
+                    <Badge
+                      text={elig.badge}
+                      fg={elig.canDonate ? C.turmeric : C.mute}
+                      bg={elig.canDonate ? C.turmericSoft : C.leafSoft}
+                    />
+                  ) : null}
+                </View>
                 <Text style={styles.cardLine}>โดย {lot.farmer_name}</Text>
                 <Text style={styles.cardLine}>
                   ระยะ {lot.distance_km.toFixed(1)} กม. · {lot.grade === 'substandard' ? 'ตกเกรด' : 'ปกติ'}
                 </Text>
-                {elig.badge !== null ? (
-                  <Badge
-                    text={elig.badge}
-                    fg={elig.canDonate ? C.turmeric : C.mute}
-                    bg={elig.canDonate ? C.turmericSoft : C.leafSoft}
-                  />
-                ) : null}
                 {!elig.canDonate && elig.reason !== null ? (
                   <Text style={styles.reason}>{elig.reason}</Text>
                 ) : null}
                 <View style={styles.actions}>
-                  <View style={styles.slot}>
-                    <PrimaryButton
-                      label={`ซื้อ ${lot.price_per_kg} บาท/กก.`}
-                      loading={busyId === lot.id}
-                      onPress={() => setConfirm({ lot, donation: false })}
-                    />
-                  </View>
+                  {canBuy ? (
+                    <View style={styles.slot}>
+                      <PrimaryButton
+                        label={`ซื้อ ${lot.price_per_kg} บาท/กก.`}
+                        loading={busyId === lot.id}
+                        onPress={() => setConfirm({ lot, donation: false })}
+                      />
+                    </View>
+                  ) : null}
                   {elig.canDonate ? (
                     <View style={styles.slot}>
                       <PrimaryButton
@@ -303,6 +325,7 @@ const styles = StyleSheet.create({
   banner: { color: C.chili, marginBottom: 10, fontWeight: '600' },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   cardTitle: { fontSize: 16, fontWeight: '700', color: C.ink, flex: 1, marginRight: 8 },
+  badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 6 },
   cardLine: { color: C.ink, marginBottom: 4 },
   reason: { color: C.chili, marginTop: 6, marginBottom: 4 },
   confirmTitle: { fontSize: 18, fontWeight: '800', color: C.ink, marginBottom: 6 },
