@@ -33,7 +33,7 @@ describe('lots and plots', () => {
       lng: 100.63,
     });
     expect(estimate.status).toBe(200);
-    const shelfHours = predictShelfHours(5, 2, 34);
+    const shelfHours = predictShelfHours(5, 2, 34, 78);
     expect(estimate.body.shelf_hours).toBe(shelfHours);
     expect(estimate.body.price_per_kg).toBe(
       urgentPricePerKg({
@@ -46,6 +46,7 @@ describe('lots and plots', () => {
     expect(estimate.body.temp_c).toBe(34);
     expect(estimate.body.humidity).toBe(78);
     expect(estimate.body.weather_source).toBe('live');
+    expect(estimate.body.weather_basis).toBe('forecast_72h_daytime_avg');
     expect(estimate.body.shelf_hours).toBe(61);
     expect(estimate.body.price_per_kg).toBe(26);
 
@@ -102,8 +103,9 @@ describe('lots and plots', () => {
       expect(estimate.body.temp_c).toBe(PLAN_WEATHER_FALLBACK.tempC);
       expect(estimate.body.humidity).toBe(PLAN_WEATHER_FALLBACK.humidity);
       expect(estimate.body.weather_source).toBe('fallback');
+      expect(estimate.body.weather_basis).toBe('forecast_72h_daytime_avg');
       expect(estimate.body.shelf_hours).toBe(
-        predictShelfHours(4, 1, PLAN_WEATHER_FALLBACK.tempC),
+        predictShelfHours(4, 1, PLAN_WEATHER_FALLBACK.tempC, PLAN_WEATHER_FALLBACK.humidity),
       );
       expect(estimate.body.price_per_kg).toBe(
         urgentPricePerKg({

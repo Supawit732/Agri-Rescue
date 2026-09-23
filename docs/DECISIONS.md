@@ -63,7 +63,7 @@ Nearest-neighbor เริ่มที่ depot แล้วเลือกจ�
 
 `GET /market` เลือกเฉพาะล็อต `open` ที่ `expires_at > UTC_TIMESTAMP()` ใน SQL แล้วตัดล็อตนอก `radius_km` (ค่าเริ่มต้น 15) ราคาใน `/market`, `/lots/estimate`, การสร้างล็อต และการจองเรียก `urgentPricePerKg` และ `predictShelfHours` จาก `src/domain`
 
-ไคลเอนต์ Open-Meteo ตัดการเชื่อมต่อที่ 3000 มิลลิวินาที แล้วใช้ 32°C / 75%
+ไคลเอนต์ Open-Meteo ตัดการเชื่อมต่อที่ 3000 มิลลิวินาที แล้วใช้ 32°C / 75% (รายละเอียดพยากรณ์ 72 ชม. ดู D014)
 
 Jest โหลด `server/.env.test` ก่อน แล้วรีเซ็ตตารางข้อมูลใน `agri_rescue_test` ก่อนแต่ละไฟล์ รันทีละไฟล์ และ mock `fetch` ทั้งกรณีสำเร็จและกรณี timeout คัดลอก `server/.env.test.example` เป็น `server/.env.test` แล้วใส่รหัสฐานเทสในเครื่อง ไฟล์นี้ไม่ถูก commit
 
@@ -76,6 +76,12 @@ Jest โหลด `server/.env.test` ก่อน แล้วรีเซ็ต
 `impact_logs.kg_saved` ใช้น้ำหนักที่ชั่งได้ ไม่ใช่น้ำหนักที่เกษตรกรแจ้ง ออเดอร์บริจาคไม่นำราคาไปคิดรายได้เกษตรกร `co2e_kg = kg_saved × 2.5`
 
 `expireOpenLots(now)` เปลี่ยนเฉพาะล็อต `open` ที่เลยเวลาเป็น `expired` `startExpireSchedule` ถูกเรียกจาก `server.ts` เท่านั้น
+
+## D014 — พยากรณ์อากาศ 72 ชม. และผลของความชื้นต่อ shelf-life
+
+ไคลเอนต์ Open-Meteo ดึง `hourly=temperature_2m,relative_humidity_2m` ล่วงหน้า 72 ชั่วโมง ตามพิกัดแปลง ตั้ง `timezone=Asia/Bangkok` แล้วใช้**ค่าเฉลี่ยช่วงกลางวัน 10:00–17:00** ของช่วงนั้นเป็น `temp_c` / `humidity` ใน `predictShelfHours` แทนค่าปัจจุบัน `/lots/estimate` คืน `weather_basis: forecast_72h_daytime_avg` คู่กับ `weather_source` (`live` | `fallback`)
+
+เหตุผลที่เพิ่มปัจจัยความชื้น: ความชื้นสูงเร่งการเน่าเสียของผลผลิตสด เมื่อความชื้นเฉลี่ยกลางวัน **มากกว่า 85%** ให้คูณอายุที่คำนวณได้ด้วย 0.9 (ลดลงอีก 10%) ก่อนปัดและก่อนเพดานขั้นต่ำ 6 ชั่วโมง ค่าเท่ากับ 85% ไม่ลด เพื่อไม่ให้ขอบเขตกำกวม บันทึกสูตรนี้ใน `src/domain/shelfLife.ts` และตัวอย่างใน `phase2Samples`
 
 ## D005 — เซิร์ฟเวอร์ใช้ CommonJS
 
