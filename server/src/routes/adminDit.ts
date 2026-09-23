@@ -1,0 +1,215 @@
+import { Router } from 'express';
+import type { ResultSetHeader, RowDataPacket } from 'mysql2';
+import { z } from 'zod';
+import { pool } from '../db/pool';
+import { asyncHandler } from '../http/asyncHandler';
+import { HttpError } from '../http/errors';
+import { requireAuth, requireCapability } from '../middleware/auth';
+import { fetchMocProducts } from '../pricing/mocClient';
+import { syncAllMappedCropPrices, syncCropReferencePrice } from '../pricing/referencePrices';
+
+export const adminDitRouter = Router();
+
+adminDitRouter.use(requireAuth, requireCapability('admin'));
+
+const mappingSchema = z.object({
+  product_code: z.string().trim().min(1).max(32),
+  unit_to_kg: z.number().positive().nullable().optional(),
+});
+
+adminDitRouter.get(
+  '/products',
+  asyncHandler(async (_req, res) => {
+    const products = await fetchMocProducts();
+    res.json({ products });
+  }),
+);
+
+adminDitRouter.get(
+  '/crops',
+  asyncHandler(async (_req, res) => {
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT c.id, c.name_th, c.market_price_per_kg, c.dit_product_code, c.dit_unit, c.dit_unit_to_kg,
+              r.date AS ref_date, r.wholesale_price AS ref_wholesale_price, r.unit AS ref_unit
+       FROM crops c
+       LEFT JOIN crop_reference_prices r
+         ON r.id = (
+           SELECT r2.id FROM crop_reference_prices r2
+           WHERE r2.crop_id = c.id
+           ORDER BY r2.date DESC, r2.id DESC
+           LIMIT 1
+         )
+       ORDER BY c.id`,
+    );
+    res.json({
+      crops: rows.map((row) => ({
+        id: Number(row.id),
+        name_th: String(row.name_th),
+        market_price_per_kg: Number(row.market_price_per_kg),
+        dit_product_code: row.dit_product_code === null ? null : String(row.dit_product_code),
+        dit_unit: row.dit_unit === null ? null : String(row.dit_unit),
+        dit_unit_to_kg: row.dit_unit_to_kg === null ? null : Number(row.dit_unit_to_kg),
+        latest_ref_price:
+          row.ref_wholesale_price === null || row.ref_wholesale_price === undefined
+            ? null
+            : {
+                date: String(row.ref_date).slice(0, 10),
+                wholesale_price: Number(row.ref_wholesale_price),
+                unit: row.ref_unit === null ? null : String(row.ref_unit),
+              },
+      })),
+    });
+  }),
+);
+
+adminDitRouter.post(
+  '/crops/:id/mapping',
+  asyncHandler(async (req, res) => {
+    const cropId = z.coerce.number().int().positive().parse(req.params.id);
+    const body = mappingSchema.parse(req.body);
+    const [crops] = await pool.query<RowDataPacket[]>('SELECT id FROM crops WHERE id = ?', [cropId]);
+    if (crops[0] === undefined) {
+      throw new HttpError(404, 'NOT_FOUND', 'ไม่พบพืชผล');
+    }
+    if (body.unit_to_kg === undefined) {
+      await pool.query(`UPDATE crops SET dit_product_code = ? WHERE id = ?`, [body.product_code, cropId]);
+    } else {
+      await pool.query(`UPDATE crops SET dit_product_code = ?, dit_unit_to_kg = ? WHERE id = ?`, [
+        body.product_code,
+        body.unit_to_kg,
+        cropId,
+      ]);
+    }
+    const sync = await syncCropReferencePrice({
+      cropId,
+      productCode: body.product_code,
+    });
+    res.json({
+      crop_id: cropId,
+      product_code: body.product_code,
+      unit_to_kg: body.unit_to_kg === undefined ? undefined : body.unit_to_kg,
+      sync,
+    });
+  }),
+);
+
+adminDitRouter.post(
+  '/crops/:id/suggest',
+  asyncHandler(async (req, res) => {
+    const cropId = z.coerce.number().int().positive().parse(req.params.id);
+    const [crops] = await pool.query<RowDataPacket[]>(
+      'SELECT id, name_th FROM crops WHERE id = ?',
+      [cropId],
+    );
+    const crop = crops[0];
+    if (crop === undefined) {
+      throw new HttpError(404, 'NOT_FOUND', 'ไม่พบพืชผล');
+    }
+    const nameTh = String(crop.name_th);
+    const products = await fetchMocProducts();
+    const matches = products.filter(
+      (p) => p.product_name.includes(nameTh) && p.sell_type === 'ขายส่ง',
+    );
+    const suggestions = [];
+    for (const match of matches) {
+      const [result] = await pool.query<ResultSetHeader>(
+        `INSERT INTO dit_mapping_suggestions
+           (crop_id, product_code, product_name, sell_type, unit, note_th, status)
+         VALUES (?, ?, ?, ?, NULL, ?, 'pending')`,
+        [
+          cropId,
+          match.product_id,
+          match.product_name,
+          match.sell_type,
+          `แนะนำจากชื่อ "${nameTh}"`,
+        ],
+      );
+      suggestions.push({
+        id: result.insertId,
+        crop_id: cropId,
+        product_code: match.product_id,
+        product_name: match.product_name,
+        sell_type: match.sell_type,
+        status: 'pending' as const,
+      });
+    }
+    res.json({ suggestions });
+  }),
+);
+
+adminDitRouter.post(
+  '/suggestions/:id/accept',
+  asyncHandler(async (req, res) => {
+    const suggestionId = z.coerce.number().int().positive().parse(req.params.id);
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [rows] = await connection.query<RowDataPacket[]>(
+        `SELECT id, crop_id, product_code, status FROM dit_mapping_suggestions WHERE id = ? FOR UPDATE`,
+        [suggestionId],
+      );
+      const suggestion = rows[0];
+      if (suggestion === undefined) {
+        throw new HttpError(404, 'NOT_FOUND', 'ไม่พบคำแนะนำการจับคู่');
+      }
+      if (String(suggestion.status) !== 'pending') {
+        throw new HttpError(409, 'CONFLICT', 'คำแนะนำนี้ถูกตรวจแล้ว');
+      }
+      const cropId = Number(suggestion.crop_id);
+      const productCode = String(suggestion.product_code);
+      await connection.query(`UPDATE crops SET dit_product_code = ? WHERE id = ?`, [
+        productCode,
+        cropId,
+      ]);
+      await connection.query(
+        `UPDATE dit_mapping_suggestions
+         SET status = 'accepted', reviewed_at = UTC_TIMESTAMP()
+         WHERE id = ?`,
+        [suggestionId],
+      );
+      await connection.commit();
+      const sync = await syncCropReferencePrice({ cropId, productCode });
+      res.json({
+        suggestion_id: suggestionId,
+        crop_id: cropId,
+        product_code: productCode,
+        status: 'accepted',
+        sync,
+      });
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }),
+);
+
+adminDitRouter.post(
+  '/suggestions/:id/reject',
+  asyncHandler(async (req, res) => {
+    const suggestionId = z.coerce.number().int().positive().parse(req.params.id);
+    const [result] = await pool.query<ResultSetHeader>(
+      `UPDATE dit_mapping_suggestions
+       SET status = 'rejected', reviewed_at = UTC_TIMESTAMP()
+       WHERE id = ? AND status = 'pending'`,
+      [suggestionId],
+    );
+    if (result.affectedRows === 0) {
+      throw new HttpError(404, 'NOT_FOUND', 'ไม่พบคำแนะนำที่รอตรวจ');
+    }
+    res.json({ suggestion_id: suggestionId, status: 'rejected' });
+  }),
+);
+
+adminDitRouter.post(
+  '/sync',
+  asyncHandler(async (_req, res) => {
+    if (process.env.MOC_SYNC_SKIP === '1') {
+      res.json({ synced: 0, skipped: true });
+      return;
+    }
+    const synced = await syncAllMappedCropPrices();
+    res.json({ synced, skipped: false });
+  }),
+);

@@ -4,6 +4,7 @@ export type Grade = 'normal' | 'substandard';
 export type AppMode = 'sell' | 'buy';
 export type DonorTier = 'volunteer' | 'trusted_volunteer' | 'verified_org';
 export type DonationAudience = 'verified_org_only' | 'all_donors';
+export type SaleMode = 'sell' | 'donate' | 'sell_then_donate';
 
 export interface User {
   id: number;
@@ -79,9 +80,27 @@ export interface Plot {
   area_rai: number;
 }
 
+export interface MarketQuote {
+  label_th: string;
+  price_per_kg: number;
+  is_estimate: boolean;
+  as_of: string | null;
+  source: string;
+}
+
+export interface PriceForecastRow {
+  hours: number;
+  price_per_kg: number;
+}
+
 export interface EstimateResponse {
   shelf_hours: number;
   price_per_kg: number;
+  suggested_start_price_per_kg: number;
+  suggested_floor_price_per_kg: number;
+  market_quote: MarketQuote;
+  forecast: PriceForecastRow[];
+  nearby_median_price_per_kg: number | null;
   temp_c: number;
   humidity: number;
   weather_source: 'live' | 'fallback';
@@ -116,15 +135,20 @@ export interface MyLot {
   grade: Grade;
   ripeness: number;
   photo_url: string | null;
+  sale_mode: SaleMode;
   allow_donation: number | boolean;
   donation_audience?: DonationAudience;
+  donation_opened: boolean;
+  start_price_per_kg: number | null;
+  floor_price_per_kg: number | null;
+  market_price_label?: string | null;
   predicted_shelf_hours: number;
   expires_at: string;
   status: string;
   created_at: string;
   crop_name_th: string;
   plot_name: string;
-  price_per_kg: number;
+  price_per_kg: number | null;
 }
 
 export interface MarketLot {
@@ -134,14 +158,44 @@ export interface MarketLot {
   weight_kg: number;
   grade: Grade;
   ripeness: number;
+  sale_mode: SaleMode;
+  donation_opened: boolean;
   allow_donation: boolean;
   donation_audience?: DonationAudience;
   expires_at: string;
   hours_left: number;
   distance_km: number;
-  price_per_kg: number;
+  price_per_kg: number | null;
+  market_price_label?: string | null;
+  start_price_per_kg?: number | null;
+  floor_price_per_kg?: number | null;
   lat: number;
   lng: number;
+}
+
+export interface DitCropRefPrice {
+  date: string;
+  wholesale_price: number;
+  unit: string | null;
+}
+
+export interface DitCrop {
+  id: number;
+  name_th: string;
+  market_price_per_kg: number;
+  dit_product_code: string | null;
+  dit_unit: string | null;
+  dit_unit_to_kg: number | null;
+  latest_ref_price: DitCropRefPrice | null;
+}
+
+export interface DitSuggestion {
+  id: number;
+  crop_id: number;
+  product_code: string;
+  product_name: string;
+  sell_type: string;
+  status: 'pending' | 'accepted' | 'rejected';
 }
 
 export interface Order {

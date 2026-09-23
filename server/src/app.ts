@@ -1,5 +1,6 @@
 import express, { type Express } from 'express';
 import { errorHandler } from './middleware/errorHandler';
+import { adminDitRouter } from './routes/adminDit';
 import { authRouter } from './routes/auth';
 import { batchesRouter } from './routes/batches';
 import { donorsRouter } from './routes/donors';
@@ -36,6 +37,7 @@ export function createApp(): Express {
   app.use('/api/batches', batchesRouter);
   app.use('/api/stops', stopsRouter);
   app.use('/api/impact', impactRouter);
+  app.use('/api/admin/dit', adminDitRouter);
   app.use(errorHandler);
   return app;
 }

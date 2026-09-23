@@ -1,7 +1,7 @@
 import request from 'supertest';
 import bcrypt from 'bcryptjs';
 import type { Express } from 'express';
-import type { ResultSetHeader } from 'mysql2';
+import type { ResultSetHeader, RowDataPacket } from 'mysql2';
 import { pool } from '../src/db/pool';
 import { createApp } from '../src/app';
 import type { UserRole } from '../src/types/express';
@@ -118,20 +118,55 @@ export async function insertLot(input: {
   donationAudience?: 'verified_org_only' | 'all_donors';
   grade?: 'normal' | 'substandard';
   weightKg?: number;
+  saleMode?: 'sell' | 'donate' | 'sell_then_donate';
+  startPricePerKg?: number | null;
+  floorPricePerKg?: number | null;
 }): Promise<number> {
+  const [cropRows] = await pool.query<RowDataPacket[]>(
+    'SELECT market_price_per_kg FROM crops WHERE id = ?',
+    [input.cropId],
+  );
+  const market = Number(cropRows[0]?.market_price_per_kg ?? 40);
+  const grade = input.grade ?? 'normal';
+  const startDefault = Math.round(market * (grade === 'substandard' ? 0.7 : 1) * 100) / 100;
+  const floorDefault = Math.round(startDefault * 0.3 * 100) / 100;
+  // Legacy allowDonation:true without saleMode → sell_then_donate already open (donation_opened=1)
+  const legacyOpen = input.allowDonation === true && input.saleMode === undefined;
+  const saleMode = input.saleMode ?? (legacyOpen ? 'sell_then_donate' : 'sell');
+  const donationOpened = legacyOpen ? 1 : 0;
+  const allowDonation = saleMode === 'donate' || donationOpened === 1 ? 1 : 0;
+  const start =
+    saleMode === 'donate'
+      ? null
+      : input.startPricePerKg === undefined
+        ? startDefault
+        : input.startPricePerKg;
+  const floor =
+    saleMode === 'donate'
+      ? null
+      : input.floorPricePerKg === undefined
+        ? floorDefault
+        : input.floorPricePerKg;
   const [result] = await pool.query<ResultSetHeader>(
     `INSERT INTO harvest_lots (
        plot_id, crop_id, weight_kg, grade, ripeness, allow_donation, donation_audience,
+       start_price_per_kg, floor_price_per_kg, sale_mode, donation_opened,
+       market_price_snapshot, market_price_is_estimate,
        predicted_shelf_hours, expires_at, status
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open')`,
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, 'open')`,
     [
       input.plotId,
       input.cropId,
       input.weightKg ?? 10,
-      input.grade ?? 'normal',
+      grade,
       2,
-      input.allowDonation === true ? 1 : 0,
+      allowDonation,
       input.donationAudience ?? 'verified_org_only',
+      start,
+      floor,
+      saleMode,
+      donationOpened,
+      market,
       61,
       input.expiresAt,
     ],

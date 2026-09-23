@@ -49,12 +49,20 @@ export function loadVisionConfig(env: NodeJS.ProcessEnv = process.env): VisionCo
   return { baseUrl: baseUrl.replace(/\/$/, ''), apiKey, model };
 }
 
-export function buildRipenessPrompt(cropNameTh: string): string {
+export function buildRipenessPrompt(
+  cropNameTh: string,
+  features?: { normalFeaturesTh?: string | null; defectExamplesTh?: string | null },
+): string {
   const levels = RIPENESS_LABELS.map((label, index) => `${index} = ${label}`).join(', ');
+  const normal = features?.normalFeaturesTh?.trim() || 'ลักษณะปกติทั่วไปของพืชชนิดนี้';
+  const defects = features?.defectExamplesTh?.trim() || 'รอยช้ำ แผลแตก รา จุดดำยุบ';
   return [
     `คุณเป็นผู้ช่วยเกษตรประเมินความสุกของผลผลิตจากภาพถ่าย`,
     `พืชที่ประเมิน: ${cropNameTh}`,
     `ตั้ง subject_match = true เฉพาะเมื่อในรูปเห็น${cropNameTh}ชัดเจน ถ้าไม่มีหรือเป็นพืชอื่นให้เป็น false`,
+    `ลักษณะปกติของ${cropNameTh} (ห้ามนับเป็นตำหนิ): ${normal}`,
+    `ตัวอย่างตำหนิของ${cropNameTh}: ${defects}`,
+    `ห้ามนับลักษณะปกติเป็นตำหนิ; ถ้าไม่มีตำหนิจริงให้ defects เป็น [] ได้`,
     `ระดับความสุกที่อนุญาต: ${levels}`,
     `ตอบเป็น JSON เท่านั้น ตามสคีมา: {"subject_match":true|false,"ripeness":0-4,"confidence":0-1,"defects":["ตำหนิเป็นภาษาไทย"],"note_th":"คำอธิบายสั้นภาษาไทย"}`,
     `ถ้า subject_match เป็น false ยังต้องใส่ ripeness/confidence/defects/note_th ได้ (ค่าประมาณก็ได้) แต่ระบบจะไม่ใช้ค่าความสุก`,
@@ -110,6 +118,7 @@ function buildChatPayload(
   cropNameTh: string,
   dataUri: string,
   options: ChatPayloadOptions,
+  features?: { normalFeaturesTh?: string | null; defectExamplesTh?: string | null },
 ): Record<string, unknown> {
   const payload: Record<string, unknown> = {
     model: config.model,
@@ -117,7 +126,7 @@ function buildChatPayload(
       {
         role: 'user',
         content: [
-          { type: 'text', text: buildRipenessPrompt(cropNameTh) },
+          { type: 'text', text: buildRipenessPrompt(cropNameTh, features) },
           { type: 'image_url', image_url: { url: dataUri } },
         ],
       },
@@ -164,11 +173,17 @@ export async function assessRipenessFromPhoto(input: {
   cropNameTh: string;
   imageBase64: string;
   mime: 'image/jpeg' | 'image/png';
+  normalFeaturesTh?: string | null;
+  defectExamplesTh?: string | null;
   config?: VisionConfig;
   fetchImpl?: typeof fetch;
 }): Promise<AssessPhotoResult> {
   const config = input.config ?? loadVisionConfig();
   const fetchImpl = input.fetchImpl ?? fetch;
+  const features = {
+    normalFeaturesTh: input.normalFeaturesTh,
+    defectExamplesTh: input.defectExamplesTh,
+  };
 
   if (config.apiKey === '') {
     return { available: false, reason: 'ไม่ได้ตั้งค่า AI_VISION_API_KEY' };
@@ -195,7 +210,7 @@ export async function assessRipenessFromPhoto(input: {
     let options: ChatPayloadOptions = { includeResponseFormat: true, includeThinking: true };
     let response = await postChatCompletions(
       config,
-      buildChatPayload(config, input.cropNameTh, dataUri, options),
+      buildChatPayload(config, input.cropNameTh, dataUri, options, features),
       controller.signal,
       fetchImpl,
     );
@@ -209,7 +224,7 @@ export async function assessRipenessFromPhoto(input: {
       };
       response = await postChatCompletions(
         config,
-        buildChatPayload(config, input.cropNameTh, dataUri, options),
+        buildChatPayload(config, input.cropNameTh, dataUri, options, features),
         controller.signal,
         fetchImpl,
       );

@@ -19,11 +19,48 @@ export const PROTOTYPE_WEATHER_FALLBACK = { tempC: 34, humidity: 78 } as const;
 export const RIPENESS_LABELS = ['ดิบ', 'เริ่มสุก', 'สุกพอดี', 'สุกมาก', 'ใกล้งอม'] as const;
 
 export const crops = [
-  { key: 'mango', nameTh: 'มะม่วง', baseShelfDays: 5, marketPricePerKg: 40 },
-  { key: 'banana', nameTh: 'กล้วยน้ำว้า', baseShelfDays: 4, marketPricePerKg: 25 },
-  { key: 'tomato', nameTh: 'มะเขือเทศ', baseShelfDays: 6, marketPricePerKg: 30 },
-  { key: 'morning-glory', nameTh: 'ผักบุ้ง', baseShelfDays: 2, marketPricePerKg: 20 },
-  { key: 'lime', nameTh: 'มะนาว', baseShelfDays: 14, marketPricePerKg: 35 },
+  {
+    key: 'mango',
+    nameTh: 'มะม่วง',
+    baseShelfDays: 5,
+    marketPricePerKg: 40,
+    normalFeaturesTh:
+      'ผิวเรียบหรือเป็นลายจุดเล็ก ๆ ตามพันธุ์, สีเปลือกเปลี่ยนตามความสุก, ขั้วติดแน่น, ไม่มีน้ำเยิ้ม',
+    defectExamplesTh: 'รอยช้ำนิ่มยุบ, แผลแตก, ราขาว/ดำ, จุดดำที่ยุบลึก, เนื้อฉ่ำน้ำผิดปกติ, กลิ่นหมัก',
+  },
+  {
+    key: 'banana',
+    nameTh: 'กล้วยน้ำว้า',
+    baseShelfDays: 4,
+    marketPricePerKg: 25,
+    normalFeaturesTh:
+      'จุดน้ำตาลเล็ก ๆ บนเปลือกเมื่อสุก, ปลายขั้วและปลายผลสีดำ, รอยเส้นตามแนวยาวของเปลือก',
+    defectExamplesTh: 'รอยช้ำนิ่มยุบ, แผลแตก, รา, จุดดำที่ยุบลึกลงเนื้อ, เปลือกฉีก',
+  },
+  {
+    key: 'tomato',
+    nameTh: 'มะเขือเทศ',
+    baseShelfDays: 6,
+    marketPricePerKg: 30,
+    normalFeaturesTh: 'ผิวตึงตามความสุก, ขั้วเขียวหรือน้ำตาลอ่อน, จุดสีตามพันธุ์, ไม่มีน้ำไหล',
+    defectExamplesTh: 'รอยช้ำนิ่ม, แผลแตก, รา, จุดดำยุบ, เน่าที่ขั้ว',
+  },
+  {
+    key: 'morning-glory',
+    nameTh: 'ผักบุ้ง',
+    baseShelfDays: 2,
+    marketPricePerKg: 20,
+    normalFeaturesTh: 'ใบเขียวสด อาจมีจุดน้ำเล็กน้อยหลังเก็บ, ลำต้นกรอบ ไม่เหลืองทั้งต้น',
+    defectExamplesTh: 'ใบเหลืองไหม้, เน่าเละ, รา, ลำต้นเละยุบ, กลิ่นเหม็น',
+  },
+  {
+    key: 'lime',
+    nameTh: 'มะนาว',
+    baseShelfDays: 14,
+    marketPricePerKg: 35,
+    normalFeaturesTh: 'ผิวขรุขระตามพันธุ์, จุดน้ำมันบนเปลือก, สีเขียวถึงเหลืองอ่อนตามความสุก',
+    defectExamplesTh: 'รอยช้ำยุบ, แผลแตก, ราขาว, จุดดำเน่า, เปลือกแห้งเหี่ยวผิดปกติ',
+  },
 ] as const;
 
 export type CropKey = (typeof crops)[number]['key'];

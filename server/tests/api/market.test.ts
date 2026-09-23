@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { urgentPricePerKg } from '../../src/domain/pricing';
+import { lotPricePerKg } from '../../src/domain/sellerPricing';
 import { bearer, insertCrop, insertLot, insertPlot, registerUser, testApp } from '../helpers';
 
 describe('market', () => {
@@ -33,14 +33,18 @@ describe('market', () => {
       hours_left: number;
       price_per_kg: number;
       grade: 'normal' | 'substandard';
+      sale_mode: string;
     }>) {
       expect(lot.hours_left).toBeGreaterThan(0);
+      expect(lot.sale_mode).toBe('sell');
+      const start = lot.grade === 'substandard' ? 28 : 40;
+      const floor = Math.round(start * 0.3 * 100) / 100;
       expect(lot.price_per_kg).toBe(
-        urgentPricePerKg({
-          marketPricePerKg: 40,
+        lotPricePerKg({
+          startPricePerKg: start,
+          floorPricePerKg: floor,
           baseShelfHours: 5 * 24,
           hoursLeft: lot.hours_left,
-          grade: lot.grade,
         }),
       );
     }
