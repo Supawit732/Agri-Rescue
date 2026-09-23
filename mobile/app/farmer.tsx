@@ -101,7 +101,9 @@ function NewLotForm({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [assessing, setAssessing] = useState(false);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
-  const [aiResult, setAiResult] = useState<Extract<AssessPhotoResponse, { available: true }> | null>(null);
+  const [aiResult, setAiResult] = useState<
+    Extract<AssessPhotoResponse, { available: true; subject_match: true }> | null
+  >(null);
   const [aiEdited, setAiEdited] = useState(false);
   const [aiMessage, setAiMessage] = useState<string | null>(null);
 
@@ -195,6 +197,7 @@ function NewLotForm({
     setAssessing(true);
     setAiMessage(null);
     setPhotoPreview(uri);
+    const cropName = crops.find((entry) => entry.id === cropId)?.name_th ?? 'พืชที่เลือก';
     try {
       const prepared = await resizeForUpload(uri, width, height);
       const result = await api.assessPhoto({
@@ -206,6 +209,12 @@ function NewLotForm({
         setAiResult(null);
         setAiEdited(false);
         setAiMessage('ประเมินจากภาพไม่ได้ เลือกระดับความสุกเอง');
+        return;
+      }
+      if (!result.subject_match) {
+        setAiResult(null);
+        setAiEdited(false);
+        setAiMessage(`ในรูปไม่พบ${cropName} กรุณาถ่ายใหม่`);
         return;
       }
       setAiResult(result);

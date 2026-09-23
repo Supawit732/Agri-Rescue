@@ -17,6 +17,7 @@ describe('POST /api/lots/assess-photo and AI lot creation', () => {
     const owner = await registerUser(app, { role: 'farmer', name: 'เกษตรกร AI' });
     jest.spyOn(vision, 'assessRipenessFromPhoto').mockResolvedValue({
       available: true,
+      subject_match: true,
       ripeness: 3,
       confidence: 0.91,
       defects: ['แผลเล็ก'],
@@ -37,6 +38,27 @@ describe('POST /api/lots/assess-photo and AI lot creation', () => {
     expect(response.body.available).toBe(true);
     expect(response.body.ripeness).toBe(3);
     expect(vision.assessRipenessFromPhoto).toHaveBeenCalled();
+  });
+
+  it('forwards subject_match false from the vision client', async () => {
+    const cropId = await insertCrop('กล้วยน้ำว้า', 4, 25);
+    const owner = await registerUser(app, { role: 'farmer', name: 'รูปไม่ตรงพืช' });
+    jest.spyOn(vision, 'assessRipenessFromPhoto').mockResolvedValue({
+      available: true,
+      subject_match: false,
+    });
+
+    const response = await request(app)
+      .post('/api/lots/assess-photo')
+      .set(bearer(owner.token))
+      .send({
+        crop_id: cropId,
+        image_base64: Buffer.from('tiny').toString('base64'),
+        mime: 'image/jpeg',
+      });
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ available: true, subject_match: false });
+    expect(response.body.ripeness).toBeUndefined();
   });
 
   it('stores method model when the farmer keeps the AI ripeness', async () => {

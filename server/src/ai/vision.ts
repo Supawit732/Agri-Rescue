@@ -7,6 +7,7 @@ export const DEFAULT_AI_VISION_BASE_URL = 'https://opencode.ai/zen/go/v1';
 export const DEFAULT_AI_VISION_MODEL = 'mimo-v2.6-flash';
 
 export const aiAssessmentSchema = z.object({
+  subject_match: z.boolean(),
   ripeness: z.number().int().min(0).max(4),
   confidence: z.number().min(0).max(1),
   defects: z.array(z.string()),
@@ -18,12 +19,17 @@ export type AiAssessment = z.infer<typeof aiAssessmentSchema>;
 export type AssessPhotoResult =
   | {
       available: true;
+      subject_match: true;
       ripeness: number;
       confidence: number;
       defects: string[];
       note_th: string;
       low_confidence: boolean;
       model: string;
+    }
+  | {
+      available: true;
+      subject_match: false;
     }
   | {
       available: false;
@@ -48,8 +54,10 @@ export function buildRipenessPrompt(cropNameTh: string): string {
   return [
     `คุณเป็นผู้ช่วยเกษตรประเมินความสุกของผลผลิตจากภาพถ่าย`,
     `พืชที่ประเมิน: ${cropNameTh}`,
+    `ตั้ง subject_match = true เฉพาะเมื่อในรูปเห็น${cropNameTh}ชัดเจน ถ้าไม่มีหรือเป็นพืชอื่นให้เป็น false`,
     `ระดับความสุกที่อนุญาต: ${levels}`,
-    `ตอบเป็น JSON เท่านั้น ตามสคีมา: {"ripeness":0-4,"confidence":0-1,"defects":["ตำหนิเป็นภาษาไทย"],"note_th":"คำอธิบายสั้นภาษาไทย"}`,
+    `ตอบเป็น JSON เท่านั้น ตามสคีมา: {"subject_match":true|false,"ripeness":0-4,"confidence":0-1,"defects":["ตำหนิเป็นภาษาไทย"],"note_th":"คำอธิบายสั้นภาษาไทย"}`,
+    `ถ้า subject_match เป็น false ยังต้องใส่ ripeness/confidence/defects/note_th ได้ (ค่าประมาณก็ได้) แต่ระบบจะไม่ใช้ค่าความสุก`,
     `อย่าใส่ข้อความอื่นนอก JSON`,
   ].join('\n');
 }
@@ -57,12 +65,13 @@ export function buildRipenessPrompt(cropNameTh: string): string {
 const ripenessJsonSchema = {
   type: 'object',
   properties: {
+    subject_match: { type: 'boolean' },
     ripeness: { type: 'integer', minimum: 0, maximum: 4 },
     confidence: { type: 'number', minimum: 0, maximum: 1 },
     defects: { type: 'array', items: { type: 'string' } },
     note_th: { type: 'string' },
   },
-  required: ['ripeness', 'confidence', 'defects', 'note_th'],
+  required: ['subject_match', 'ripeness', 'confidence', 'defects', 'note_th'],
   additionalProperties: false,
 } as const;
 
@@ -225,8 +234,13 @@ export async function assessRipenessFromPhoto(input: {
       return { available: false, reason: 'ถอด JSON จากโมเดลไม่สำเร็จ' };
     }
 
+    if (!parsed.subject_match) {
+      return { available: true, subject_match: false };
+    }
+
     return {
       available: true,
+      subject_match: true,
       ripeness: parsed.ripeness,
       confidence: parsed.confidence,
       defects: parsed.defects,

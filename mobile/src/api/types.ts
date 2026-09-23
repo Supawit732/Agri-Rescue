@@ -44,12 +44,17 @@ export interface EstimateResponse {
 export type AssessPhotoResponse =
   | {
       available: true;
+      subject_match: true;
       ripeness: number;
       confidence: number;
       defects: string[];
       note_th: string;
       low_confidence: boolean;
       model: string;
+    }
+  | {
+      available: true;
+      subject_match: false;
     }
   | {
       available: false;

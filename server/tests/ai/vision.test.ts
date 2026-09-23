@@ -7,6 +7,7 @@ import {
 } from '../../src/ai/vision';
 
 const sampleAssessment = {
+  subject_match: true,
   ripeness: 2,
   confidence: 0.82,
   defects: ['จุดช้ำเล็กน้อย'],
@@ -48,8 +49,10 @@ describe('AI vision client', () => {
   });
 
   it('extracts JSON from a fenced code block', () => {
-    const text = 'ผลลัพธ์:\n```json\n{"ripeness":3,"confidence":0.9,"defects":[],"note_th":"สุกมาก"}\n```\n';
+    const text =
+      'ผลลัพธ์:\n```json\n{"subject_match":true,"ripeness":3,"confidence":0.9,"defects":[],"note_th":"สุกมาก"}\n```\n';
     expect(extractJsonObject(text)).toEqual({
+      subject_match: true,
       ripeness: 3,
       confidence: 0.9,
       defects: [],
@@ -68,7 +71,11 @@ describe('AI vision client', () => {
     });
     expect(result).toEqual({
       available: true,
-      ...sampleAssessment,
+      subject_match: true,
+      ripeness: sampleAssessment.ripeness,
+      confidence: sampleAssessment.confidence,
+      defects: sampleAssessment.defects,
+      note_th: sampleAssessment.note_th,
       low_confidence: false,
       model: 'test-model',
     });
@@ -98,7 +105,7 @@ describe('AI vision client', () => {
       fetchImpl: fetchImpl as unknown as typeof fetch,
     });
     expect(result.available).toBe(true);
-    if (result.available) {
+    if (result.available && result.subject_match) {
       expect(result.ripeness).toBe(2);
     }
   });
@@ -195,9 +202,33 @@ describe('AI vision client', () => {
     });
     expect(result).toEqual({
       available: true,
-      ...low,
+      subject_match: true,
+      ripeness: low.ripeness,
+      confidence: low.confidence,
+      defects: low.defects,
+      note_th: low.note_th,
       low_confidence: true,
       model: 'test-model',
     });
+  });
+
+  it('returns subject_match false without ripeness when the crop is not in the photo', async () => {
+    const mismatch = {
+      subject_match: false,
+      ripeness: 0,
+      confidence: 0.1,
+      defects: [],
+      note_th: 'ไม่พบมะม่วงในภาพ',
+    };
+    const fetchImpl = jest.fn(async () => jsonResponse(completionWithContent(JSON.stringify(mismatch))));
+    const result = await assessRipenessFromPhoto({
+      cropNameTh: 'มะม่วง',
+      imageBase64: Buffer.from('img').toString('base64'),
+      mime: 'image/jpeg',
+      config: testConfig,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    expect(result).toEqual({ available: true, subject_match: false });
+    expect(result).not.toHaveProperty('ripeness');
   });
 });
