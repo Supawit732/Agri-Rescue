@@ -4,8 +4,9 @@ import type { ResultSetHeader, RowDataPacket } from 'mysql2';
 import { z } from 'zod';
 import { pool } from '../db/pool';
 import { assertLotTransition, type LotStatus } from '../domain/lotStateMachine';
-import { urgentPricePerKg, type ProduceGrade } from '../domain/pricing';
+import type { ProduceGrade } from '../domain/pricing';
 import type { DonationAudience } from '../domain/donorRules';
+import { lotAcceptsDonation, lotPricePerKg } from '../domain/sellerPricing';
 import {
   assertMayRequestDonation,
   loadDonorProfile,
@@ -30,10 +31,13 @@ interface LotLock extends RowDataPacket {
   grade: ProduceGrade;
   allow_donation: number;
   donation_audience: DonationAudience;
+  start_price_per_kg: number | null;
+  floor_price_per_kg: number | null;
+  sale_mode: string;
+  donation_opened: number;
   weight_kg: number;
   expires_at: Date;
   base_shelf_days: number;
-  market_price_per_kg: number;
   farmer_id: number;
 }
 
@@ -69,8 +73,9 @@ ordersRouter.post(
         throw new HttpError(403, 'FORBIDDEN', 'ไม่มีสิทธิ์เข้าถึง');
       }
       const [lots] = await connection.query<LotLock[]>(
-        `SELECT h.id, h.status, h.grade, h.allow_donation, h.donation_audience, h.weight_kg, h.expires_at,
-                c.base_shelf_days, c.market_price_per_kg, p.farmer_id
+        `SELECT h.id, h.status, h.grade, h.allow_donation, h.donation_audience,
+                h.start_price_per_kg, h.floor_price_per_kg, h.sale_mode, h.donation_opened,
+                h.weight_kg, h.expires_at, c.base_shelf_days, p.farmer_id
          FROM harvest_lots h
          JOIN crops c ON c.id = h.crop_id
          JOIN plots p ON p.id = h.plot_id
@@ -91,6 +96,8 @@ ordersRouter.post(
       if (lot.status !== 'open') {
         throw new HttpError(409, 'LOT_NOT_OPEN', 'ล็อตนี้ถูกจองแล้ว');
       }
+      const saleMode = String(lot.sale_mode);
+      const acceptsDonation = lotAcceptsDonation(saleMode, lot.donation_opened);
       const donation = body.donation;
       let agreedPrice = 0;
       let distributionPlace: string | null = null;
@@ -108,17 +115,23 @@ ordersRouter.post(
           audience: lot.donation_audience,
           lotWeightKg: Number(lot.weight_kg),
           usedKg,
-          allowDonation: Number(lot.allow_donation) === 1,
+          allowDonation: acceptsDonation,
           distributionPlace,
           distributionAt,
         });
       } else {
+        if (saleMode === 'donate') {
+          throw new HttpError(403, 'FORBIDDEN', 'ล็อตนี้เปิดรับบริจาคเท่านั้น ซื้อไม่ได้');
+        }
+        if (lot.start_price_per_kg === null || lot.floor_price_per_kg === null) {
+          throw new HttpError(409, 'CONFLICT', 'ล็อตนี้ยังไม่มีราคาขาย');
+        }
         const hoursLeft = (new Date(lot.expires_at).getTime() - Date.now()) / (60 * 60 * 1000);
-        agreedPrice = urgentPricePerKg({
-          marketPricePerKg: Number(lot.market_price_per_kg),
+        agreedPrice = lotPricePerKg({
+          startPricePerKg: Number(lot.start_price_per_kg),
+          floorPricePerKg: Number(lot.floor_price_per_kg),
           baseShelfHours: Number(lot.base_shelf_days) * 24,
           hoursLeft,
-          grade: lot.grade,
         });
       }
       assertLotTransition(lot.status, 'reserved');

@@ -15,6 +15,7 @@ import {
   PrimaryButton,
   Screen,
   SectionTitle,
+  SecondaryButton,
   Segmented,
   TopBar,
 } from '../src/components/ui';
@@ -24,21 +25,57 @@ import { useAuth } from '../src/context/AuthContext';
 import { useApiData } from '../src/hooks/useApiData';
 import { formatCountdown, hoursLeftFrom, useNow } from '../src/hooks/useNow';
 import { C, urgency } from '../src/theme';
-import type { AssessPhotoResponse, Crop, DonationAudience, EstimateResponse, Grade, MyLot, Plot } from '../src/api/types';
+import type {
+  AssessPhotoResponse,
+  Crop,
+  DonationAudience,
+  EstimateResponse,
+  Grade,
+  MyLot,
+  Plot,
+  SaleMode,
+} from '../src/api/types';
+
+const SALE_MODE_OPTIONS: { key: SaleMode; label: string }[] = [
+  { key: 'sell', label: 'ขาย' },
+  { key: 'donate', label: 'บริจาค' },
+  { key: 'sell_then_donate', label: 'ขายแล้วค่อยบริจาค' },
+];
+
+const SALE_MODE_BADGE: Record<SaleMode, string> = {
+  sell: 'ขาย',
+  donate: 'บริจาค',
+  sell_then_donate: 'ขายแล้วค่อยบริจาค',
+};
+
+function modeHasDonation(mode: SaleMode): boolean {
+  return mode === 'donate' || mode === 'sell_then_donate';
+}
+
+function modeHasPrice(mode: SaleMode): boolean {
+  return mode === 'sell' || mode === 'sell_then_donate';
+}
 
 export default function FarmerScreen(): React.ReactElement {
   const { api, logout, user, mode, setMode } = useAuth();
   const router = useRouter();
   const [tab, setTab] = useState<'new' | 'mine'>('new');
   const [refreshKey, setRefreshKey] = useState(0);
+  const [editingLot, setEditingLot] = useState<MyLot | null>(null);
 
   const onCreated = useCallback(() => {
+    setEditingLot(null);
     setRefreshKey((value) => value + 1);
     setTab('mine');
   }, []);
 
   const onPlotCreated = useCallback(() => {
     setRefreshKey((value) => value + 1);
+  }, []);
+
+  const onEditLot = useCallback((lot: MyLot) => {
+    setEditingLot(lot);
+    setTab('new');
   }, []);
 
   const switchMode = (next: 'sell' | 'buy'): void => {
@@ -61,16 +98,29 @@ export default function FarmerScreen(): React.ReactElement {
       />
       <Segmented
         options={[
-          { key: 'new', label: 'ลงล็อต' },
+          { key: 'new', label: editingLot !== null ? 'แก้ไขล็อต' : 'ลงล็อต' },
           { key: 'mine', label: 'ล็อตของฉัน' },
         ]}
         value={tab}
-        onChange={(key) => setTab(key as 'new' | 'mine')}
+        onChange={(key) => {
+          const next = key as 'new' | 'mine';
+          if (next === 'mine') {
+            setEditingLot(null);
+          }
+          setTab(next);
+        }}
       />
       {tab === 'new' ? (
-        <NewLot api={api} refreshKey={refreshKey} onCreated={onCreated} onPlotCreated={onPlotCreated} />
+        <NewLot
+          api={api}
+          refreshKey={refreshKey}
+          editingLot={editingLot}
+          onCreated={onCreated}
+          onPlotCreated={onPlotCreated}
+          onCancelEdit={() => setEditingLot(null)}
+        />
       ) : (
-        <MyLots api={api} refreshKey={refreshKey} />
+        <MyLots api={api} refreshKey={refreshKey} onEdit={onEditLot} />
       )}
     </Screen>
   );
@@ -79,13 +129,17 @@ export default function FarmerScreen(): React.ReactElement {
 function NewLot({
   api,
   refreshKey,
+  editingLot,
   onCreated,
   onPlotCreated,
+  onCancelEdit,
 }: {
   api: ReturnType<typeof useAuth>['api'];
   refreshKey: number;
+  editingLot: MyLot | null;
   onCreated: () => void;
   onPlotCreated: () => void;
+  onCancelEdit: () => void;
 }): React.ReactElement {
   const meta = useApiData(async () => {
     const [crops, plots] = await Promise.all([api.getCrops(), api.getPlots()]);
@@ -105,7 +159,14 @@ function NewLot({
         data.plots.length === 0 ? (
           <AddPlotForm api={api} onCreated={onPlotCreated} />
         ) : (
-          <NewLotForm api={api} crops={data.crops} plots={data.plots} onCreated={onCreated} />
+          <NewLotForm
+            api={api}
+            crops={data.crops}
+            plots={data.plots}
+            editingLot={editingLot}
+            onCreated={onCreated}
+            onCancelEdit={onCancelEdit}
+          />
         )
       }
     </DataState>
@@ -167,20 +228,40 @@ function NewLotForm({
   api,
   crops,
   plots,
+  editingLot,
   onCreated,
+  onCancelEdit,
 }: {
   api: ReturnType<typeof useAuth>['api'];
   crops: Crop[];
   plots: Plot[];
+  editingLot: MyLot | null;
   onCreated: () => void;
+  onCancelEdit: () => void;
 }): React.ReactElement {
-  const [cropId, setCropId] = useState<number>(crops[0]?.id ?? 0);
-  const [plotId, setPlotId] = useState<number>(plots[0]?.id ?? 0);
-  const [weight, setWeight] = useState('');
-  const [ripeness, setRipeness] = useState(2);
-  const [grade, setGrade] = useState<Grade>('substandard');
-  const [donation, setDonation] = useState(false);
-  const [donationAudience, setDonationAudience] = useState<DonationAudience>('verified_org_only');
+  const isEditing = editingLot !== null;
+  const [cropId, setCropId] = useState<number>(editingLot?.crop_id ?? crops[0]?.id ?? 0);
+  const [plotId, setPlotId] = useState<number>(editingLot?.plot_id ?? plots[0]?.id ?? 0);
+  const [weight, setWeight] = useState(editingLot !== null ? String(editingLot.weight_kg) : '');
+  const [ripeness, setRipeness] = useState(editingLot?.ripeness ?? 2);
+  const [grade, setGrade] = useState<Grade>(editingLot?.grade ?? 'substandard');
+  const [saleMode, setSaleMode] = useState<SaleMode>(editingLot?.sale_mode ?? 'sell');
+  const [donationAudience, setDonationAudience] = useState<DonationAudience>(
+    editingLot?.donation_audience ?? 'verified_org_only',
+  );
+  const [startPrice, setStartPrice] = useState(
+    editingLot?.start_price_per_kg !== null && editingLot?.start_price_per_kg !== undefined
+      ? String(editingLot.start_price_per_kg)
+      : '',
+  );
+  const [floorPrice, setFloorPrice] = useState(
+    editingLot?.floor_price_per_kg !== null && editingLot?.floor_price_per_kg !== undefined
+      ? String(editingLot.floor_price_per_kg)
+      : '',
+  );
+  const [pricesSeeded, setPricesSeeded] = useState(
+    editingLot?.start_price_per_kg !== null && editingLot?.start_price_per_kg !== undefined,
+  );
   const [estimate, setEstimate] = useState<EstimateResponse | null>(null);
   const [estimateError, setEstimateError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -196,11 +277,49 @@ function NewLotForm({
   const plot = useMemo(() => plots.find((entry) => entry.id === plotId), [plots, plotId]);
 
   useEffect(() => {
+    if (editingLot === null) {
+      return;
+    }
+    setCropId(editingLot.crop_id);
+    setPlotId(editingLot.plot_id);
+    setWeight(String(editingLot.weight_kg));
+    setRipeness(editingLot.ripeness);
+    setGrade(editingLot.grade);
+    setSaleMode(editingLot.sale_mode);
+    setDonationAudience(editingLot.donation_audience ?? 'verified_org_only');
+    setStartPrice(
+      editingLot.start_price_per_kg !== null && editingLot.start_price_per_kg !== undefined
+        ? String(editingLot.start_price_per_kg)
+        : '',
+    );
+    setFloorPrice(
+      editingLot.floor_price_per_kg !== null && editingLot.floor_price_per_kg !== undefined
+        ? String(editingLot.floor_price_per_kg)
+        : '',
+    );
+    setPricesSeeded(
+      editingLot.start_price_per_kg !== null && editingLot.start_price_per_kg !== undefined,
+    );
     setAiResult(null);
     setAiEdited(false);
     setAiMessage(null);
     setPhotoPreview(null);
-  }, [cropId]);
+    setSubmitError(null);
+  }, [editingLot]);
+
+  useEffect(() => {
+    setAiResult(null);
+    setAiEdited(false);
+    setAiMessage(null);
+    setPhotoPreview(null);
+    if (!isEditing) {
+      setPricesSeeded(false);
+    }
+  }, [cropId, isEditing]);
+
+  const startNum = Number(startPrice);
+  const floorNum = Number(floorPrice);
+  const hasCustomPrices = modeHasPrice(saleMode) && startNum > 0 && floorNum > 0;
 
   // Debounced 400ms shelf-life + price preview from the API (no local pricing).
   useEffect(() => {
@@ -218,9 +337,17 @@ function NewLotForm({
             grade,
             lat: Number(plot.lat),
             lng: Number(plot.lng),
+            ...(hasCustomPrices
+              ? { start_price_per_kg: startNum, floor_price_per_kg: floorNum }
+              : {}),
           });
           if (active) {
             setEstimate(result);
+            if (modeHasPrice(saleMode) && !pricesSeeded) {
+              setStartPrice(String(result.suggested_start_price_per_kg));
+              setFloorPrice(String(result.suggested_floor_price_per_kg));
+              setPricesSeeded(true);
+            }
           }
         } catch (err) {
           if (active) {
@@ -234,10 +361,12 @@ function NewLotForm({
       active = false;
       clearTimeout(timer);
     };
-  }, [api, cropId, plotId, ripeness, grade, plot]);
+  }, [api, cropId, plotId, ripeness, grade, plot, saleMode, hasCustomPrices, startNum, floorNum, pricesSeeded]);
 
   const weightNum = Number(weight);
-  const totalPrice = estimate !== null && weightNum > 0 ? Math.round(estimate.price_per_kg * weightNum) : null;
+  const displayPrice =
+    estimate !== null && modeHasPrice(saleMode) ? estimate.price_per_kg : null;
+  const totalPrice = displayPrice !== null && weightNum > 0 ? Math.round(displayPrice * weightNum) : null;
   const tone = estimate !== null ? urgency(estimate.shelf_hours) : null;
 
   const applyRipeness = (value: number, fromAi: boolean): void => {
@@ -255,7 +384,7 @@ function NewLotForm({
     uri: string,
     width: number,
     height: number,
-  ): Promise<{ base64: string; mime: 'image/jpeg'; }> => {
+  ): Promise<{ base64: string; mime: 'image/jpeg' }> => {
     const longEdge = Math.max(width, height);
     const actions =
       longEdge > 1024
@@ -374,6 +503,15 @@ function NewLotForm({
     ]);
   };
 
+  const onChangeSaleMode = (next: SaleMode): void => {
+    setSaleMode(next);
+    if (modeHasPrice(next) && !pricesSeeded && estimate !== null) {
+      setStartPrice(String(estimate.suggested_start_price_per_kg));
+      setFloorPrice(String(estimate.suggested_floor_price_per_kg));
+      setPricesSeeded(true);
+    }
+  };
+
   const onSubmit = async (): Promise<void> => {
     setSubmitError(null);
     if (plot === undefined || cropId === 0) {
@@ -384,23 +522,44 @@ function NewLotForm({
       setSubmitError('กรุณากรอกน้ำหนักให้ถูกต้อง');
       return;
     }
+    if (modeHasPrice(saleMode) && (!(startNum > 0) || !(floorNum > 0))) {
+      setSubmitError('กรุณากรอกราคาเริ่มและราคาต่ำสุด');
+      return;
+    }
     setSubmitting(true);
     try {
-      await api.createLot({
-        plot_id: plotId,
-        crop_id: cropId,
-        weight_kg: weightNum,
-        grade,
-        ripeness,
-        allow_donation: donation,
-        donation_audience: donation ? donationAudience : undefined,
-        ai_ripeness: aiResult?.ripeness ?? null,
-        ai_confidence: aiResult?.confidence ?? null,
-        ai_model: aiResult?.model ?? null,
-      });
+      const priceFields = modeHasPrice(saleMode)
+        ? { start_price_per_kg: startNum, floor_price_per_kg: floorNum }
+        : { start_price_per_kg: null, floor_price_per_kg: null };
+      const audience = modeHasDonation(saleMode) ? donationAudience : undefined;
+      if (isEditing && editingLot !== null) {
+        await api.patchLot(editingLot.id, {
+          weight_kg: weightNum,
+          grade,
+          ripeness,
+          sale_mode: saleMode,
+          donation_audience: audience,
+          ...priceFields,
+          ...(aiResult !== null ? { ai_ripeness: aiResult.ripeness } : {}),
+        });
+      } else {
+        await api.createLot({
+          plot_id: plotId,
+          crop_id: cropId,
+          weight_kg: weightNum,
+          grade,
+          ripeness,
+          sale_mode: saleMode,
+          donation_audience: audience,
+          ...priceFields,
+          ai_ripeness: aiResult?.ripeness ?? null,
+          ai_confidence: aiResult?.confidence ?? null,
+          ai_model: aiResult?.model ?? null,
+        });
+      }
       onCreated();
     } catch (err) {
-      setSubmitError(err instanceof ApiError ? err.message : 'ลงประกาศไม่สำเร็จ');
+      setSubmitError(err instanceof ApiError ? err.message : isEditing ? 'แก้ไขล็อตไม่สำเร็จ' : 'ลงประกาศไม่สำเร็จ');
     } finally {
       setSubmitting(false);
     }
@@ -408,10 +567,23 @@ function NewLotForm({
 
   return (
     <Body>
+      {isEditing ? (
+        <Text style={styles.editHint}>กำลังแก้ไขล็อต #{editingLot.id}</Text>
+      ) : null}
+
       <SectionTitle>เลือกพืช</SectionTitle>
       <View style={styles.row}>
         {crops.map((crop) => (
-          <Chip key={crop.id} label={crop.name_th} selected={crop.id === cropId} onPress={() => setCropId(crop.id)} />
+          <Chip
+            key={crop.id}
+            label={crop.name_th}
+            selected={crop.id === cropId}
+            onPress={() => {
+              if (!isEditing) {
+                setCropId(crop.id);
+              }
+            }}
+          />
         ))}
       </View>
 
@@ -421,7 +593,16 @@ function NewLotForm({
       ) : (
         <View style={styles.row}>
           {plots.map((entry) => (
-            <Chip key={entry.id} label={entry.name} selected={entry.id === plotId} onPress={() => setPlotId(entry.id)} />
+            <Chip
+              key={entry.id}
+              label={entry.name}
+              selected={entry.id === plotId}
+              onPress={() => {
+                if (!isEditing) {
+                  setPlotId(entry.id);
+                }
+              }}
+            />
           ))}
         </View>
       )}
@@ -484,18 +665,19 @@ function NewLotForm({
         ))}
       </View>
 
-      <Pressable
-        accessibilityRole="checkbox"
-        accessibilityState={{ checked: donation }}
-        onPress={() => setDonation((value) => !value)}
-        style={styles.checkboxRow}
-      >
-        <View style={[styles.checkbox, donation ? styles.checkboxOn : null]}>
-          {donation ? <Text style={styles.checkboxMark}>✓</Text> : null}
-        </View>
-        <Text style={styles.checkboxLabel}>ยินดีบริจาค</Text>
-      </Pressable>
-      {donation ? (
+      <SectionTitle>โหมดขาย</SectionTitle>
+      <View style={styles.row}>
+        {SALE_MODE_OPTIONS.map((option) => (
+          <Chip
+            key={option.key}
+            label={option.label}
+            selected={saleMode === option.key}
+            onPress={() => onChangeSaleMode(option.key)}
+          />
+        ))}
+      </View>
+
+      {modeHasDonation(saleMode) ? (
         <>
           <SectionTitle>เปิดรับผู้รับบริจาค</SectionTitle>
           <View style={styles.row}>
@@ -513,6 +695,55 @@ function NewLotForm({
         </>
       ) : null}
 
+      {modeHasPrice(saleMode) ? (
+        <>
+          {estimate?.market_quote !== undefined ? (
+            <Card>
+              <Text style={styles.marketLabel}>{estimate.market_quote.label_th}</Text>
+              <Text style={styles.previewPrice}>
+                ราคาตลาด {estimate.market_quote.price_per_kg} บาท/กก.
+                {estimate.market_quote.is_estimate ? ' (ประมาณ)' : ''}
+              </Text>
+              {estimate.nearby_median_price_per_kg !== null ? (
+                <Text style={styles.previewMuted}>
+                  มัธยฐานใกล้เคียง {estimate.nearby_median_price_per_kg} บาท/กก.
+                </Text>
+              ) : null}
+            </Card>
+          ) : null}
+          <Field
+            label="ราคาเริ่ม (บาท/กก.)"
+            value={startPrice}
+            onChangeText={(text) => {
+              setStartPrice(text);
+              setPricesSeeded(true);
+            }}
+            keyboardType="numeric"
+            placeholder="แนะนำจากตลาด"
+          />
+          <Field
+            label="ราคาต่ำสุด (บาท/กก.)"
+            value={floorPrice}
+            onChangeText={(text) => {
+              setFloorPrice(text);
+              setPricesSeeded(true);
+            }}
+            keyboardType="numeric"
+            placeholder="แนะนำจากราคาเริ่ม"
+          />
+          {estimate !== null && estimate.forecast.length > 0 ? (
+            <Card>
+              <Text style={styles.forecastTitle}>พยากรณ์ราคา</Text>
+              {estimate.forecast.map((row) => (
+                <Text key={row.hours} style={styles.forecastLine}>
+                  อีก {row.hours} ชม. → {row.price_per_kg} บาท/กก.
+                </Text>
+              ))}
+            </Card>
+          ) : null}
+        </>
+      ) : null}
+
       <Card style={tone !== null ? { borderColor: tone.fg, backgroundColor: tone.bg } : undefined}>
         {estimateError !== null ? (
           <Text style={styles.previewError}>{estimateError}</Text>
@@ -523,10 +754,16 @@ function NewLotForm({
             <Text style={[styles.previewUrgency, { color: tone?.fg }]}>
               ขายได้อีก {formatCountdown(estimate.shelf_hours).replace('เหลือ ', '')} · {tone?.label}
             </Text>
-            <Text style={styles.previewPrice}>ราคาด่วน {estimate.price_per_kg} บาท/กก.</Text>
-            <Text style={styles.previewTotal}>
-              {totalPrice !== null ? `ราคารวม ${totalPrice} บาท` : 'กรอกน้ำหนักเพื่อดูราคารวม'}
-            </Text>
+            {modeHasPrice(saleMode) && displayPrice !== null ? (
+              <>
+                <Text style={styles.previewPrice}>ราคาด่วน {displayPrice} บาท/กก.</Text>
+                <Text style={styles.previewTotal}>
+                  {totalPrice !== null ? `ราคารวม ${totalPrice} บาท` : 'กรอกน้ำหนักเพื่อดูราคารวม'}
+                </Text>
+              </>
+            ) : (
+              <Text style={styles.previewPrice}>โหมดบริจาค — ไม่คิดเงิน</Text>
+            )}
             <Text style={styles.previewMuted}>
               คำนวณจากพยากรณ์อากาศ 3 วันข้างหน้า (เฉลี่ยกลางวัน {estimate.temp_c}°C ความชื้น{' '}
               {estimate.humidity}%)
@@ -540,11 +777,12 @@ function NewLotForm({
 
       {submitError !== null ? <Text style={styles.previewError}>{submitError}</Text> : null}
       <PrimaryButton
-        label="ลงประกาศ"
+        label={isEditing ? 'บันทึกการแก้ไข' : 'ลงประกาศ'}
         onPress={onSubmit}
         loading={submitting}
         disabled={!(weightNum > 0)}
       />
+      {isEditing ? <SecondaryButton label="ยกเลิกการแก้ไข" onPress={onCancelEdit} /> : null}
     </Body>
   );
 }
@@ -552,9 +790,11 @@ function NewLotForm({
 function MyLots({
   api,
   refreshKey,
+  onEdit,
 }: {
   api: ReturnType<typeof useAuth>['api'];
   refreshKey: number;
+  onEdit: (lot: MyLot) => void;
 }): React.ReactElement {
   const { data, loading, error, reload } = useApiData(() => api.getMyLots(), [refreshKey]);
   const now = useNow();
@@ -573,6 +813,7 @@ function MyLots({
           {lots.map((lot: MyLot) => {
             const hours = hoursLeftFrom(lot.expires_at, now);
             const tone = urgency(hours);
+            const canEdit = lot.status === 'open';
             return (
               <Card key={lot.id}>
                 <View style={styles.lotHeader}>
@@ -581,13 +822,32 @@ function MyLots({
                   </Text>
                   <Badge text={STATUS_LABELS[lot.status] ?? lot.status} fg={C.leaf} bg={C.leafSoft} />
                 </View>
+                <View style={styles.badgeRow}>
+                  <Badge
+                    text={SALE_MODE_BADGE[lot.sale_mode] ?? lot.sale_mode}
+                    fg={lot.sale_mode === 'donate' ? C.turmeric : C.leaf}
+                    bg={lot.sale_mode === 'donate' ? C.turmericSoft : C.leafSoft}
+                  />
+                  {lot.sale_mode === 'sell_then_donate' && lot.donation_opened ? (
+                    <Badge text="เปิดบริจาคแล้ว" fg={C.turmeric} bg={C.turmericSoft} />
+                  ) : null}
+                </View>
                 <Text style={styles.lotMeta}>ล็อต #{lot.id}</Text>
                 <Text style={styles.lotLine}>แปลง {lot.plot_name}</Text>
-                <Text style={styles.lotLine}>ราคาด่วน {lot.price_per_kg} บาท/กก.</Text>
+                {lot.sale_mode === 'donate' || lot.price_per_kg === null ? (
+                  <Text style={styles.lotLine}>บริจาค — ไม่คิดเงิน</Text>
+                ) : (
+                  <Text style={styles.lotLine}>ราคาด่วน {lot.price_per_kg} บาท/กก.</Text>
+                )}
                 <Text style={styles.lotLine}>
                   {lot.grade === 'substandard' ? 'ตกเกรด' : 'ปกติ'} · ความสุก {RIPENESS_LABELS[lot.ripeness] ?? lot.ripeness}
                 </Text>
                 <Badge text={lot.status === 'open' ? formatCountdown(hours) : tone.label} fg={tone.fg} bg={tone.bg} />
+                {canEdit ? (
+                  <View style={styles.editBtn}>
+                    <SecondaryButton label="แก้ไข" onPress={() => onEdit(lot)} />
+                  </View>
+                ) : null}
               </Card>
             );
           })}
@@ -599,24 +859,15 @@ function MyLots({
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap' },
+  badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 6 },
   plotName: { color: C.ink, fontSize: 16, fontWeight: '400', marginBottom: 12 },
   addPlotHint: { color: C.mute, marginBottom: 12 },
+  editHint: { color: C.turmeric, fontWeight: '700', marginBottom: 8 },
   aiWarn: { color: C.turmeric, marginBottom: 8, marginTop: 4 },
   aiLine: { color: C.ink, marginTop: 6 },
-  checkboxRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 12 },
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: C.leaf,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  checkboxOn: { backgroundColor: C.leaf },
-  checkboxMark: { color: C.white, fontWeight: '800' },
-  checkboxLabel: { color: C.ink, flex: 1 },
+  marketLabel: { fontSize: 15, fontWeight: '700', color: C.ink, marginBottom: 4 },
+  forecastTitle: { fontSize: 15, fontWeight: '700', color: C.ink, marginBottom: 4 },
+  forecastLine: { color: C.ink, marginTop: 2 },
   previewUrgency: { fontSize: 18, fontWeight: '800', marginBottom: 4 },
   previewPrice: { fontSize: 16, fontWeight: '700', color: C.ink },
   previewTotal: { fontSize: 15, color: C.ink, marginTop: 2 },
@@ -626,4 +877,5 @@ const styles = StyleSheet.create({
   lotTitle: { fontSize: 16, fontWeight: '700', color: C.ink, flex: 1, marginRight: 8 },
   lotMeta: { color: C.mute, fontSize: 12, marginBottom: 6 },
   lotLine: { color: C.ink, marginBottom: 4 },
+  editBtn: { marginTop: 10 },
 });

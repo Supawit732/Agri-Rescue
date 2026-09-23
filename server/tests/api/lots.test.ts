@@ -2,7 +2,7 @@ import request from 'supertest';
 import type { RowDataPacket } from 'mysql2';
 import { PLAN_WEATHER_FALLBACK } from '../../src/db/seedData';
 import { pool } from '../../src/db/pool';
-import { urgentPricePerKg } from '../../src/domain/pricing';
+import { lotPricePerKg, suggestedFloorPrice, suggestedStartPrice } from '../../src/domain/sellerPricing';
 import { predictShelfHours } from '../../src/domain/shelfLife';
 import { bearer, insertCrop, registerUser, testApp } from '../helpers';
 import { installWeatherFailure, installWeatherSuccess } from '../weatherMock';
@@ -34,15 +34,21 @@ describe('lots and plots', () => {
     });
     expect(estimate.status).toBe(200);
     const shelfHours = predictShelfHours(5, 2, 34, 78);
+    const start = suggestedStartPrice(40, 'normal');
+    const floor = suggestedFloorPrice(start);
     expect(estimate.body.shelf_hours).toBe(shelfHours);
     expect(estimate.body.price_per_kg).toBe(
-      urgentPricePerKg({
-        marketPricePerKg: 40,
+      lotPricePerKg({
+        startPricePerKg: start,
+        floorPricePerKg: floor,
         baseShelfHours: 5 * 24,
         hoursLeft: shelfHours,
-        grade: 'normal',
       }),
     );
+    expect(estimate.body.suggested_start_price_per_kg).toBe(start);
+    expect(estimate.body.suggested_floor_price_per_kg).toBe(floor);
+    expect(estimate.body.market_quote.label_th).toContain('บาท');
+    expect(estimate.body.forecast).toHaveLength(3);
     expect(estimate.body.temp_c).toBe(34);
     expect(estimate.body.humidity).toBe(78);
     expect(estimate.body.weather_source).toBe('live');
@@ -59,11 +65,13 @@ describe('lots and plots', () => {
       weight_kg: 12,
       grade: 'substandard',
       ripeness: 2,
-      allow_donation: true,
+      sale_mode: 'sell_then_donate',
     });
     expect(lot.status).toBe(201);
     expect(lot.body.assessment.method).toBe('rule');
     expect(lot.body.lot.predicted_shelf_hours).toBe(shelfHours);
+    expect(lot.body.lot.sale_mode).toBe('sell_then_donate');
+    expect(lot.body.lot.donation_opened).toBe(false);
 
     const mine = await request(app).get('/api/lots/mine').set(bearer(owner.token));
     expect(mine.status).toBe(200);
@@ -73,6 +81,7 @@ describe('lots and plots', () => {
       plot_name: 'แปลงมะม่วง',
       weight_kg: 12,
       grade: 'substandard',
+      sale_mode: 'sell_then_donate',
     });
     expect(typeof mine.body.lots[0].price_per_kg).toBe('number');
     expect(mine.body.lots[0].price_per_kg).toBeGreaterThan(0);
@@ -88,6 +97,7 @@ describe('lots and plots', () => {
       weight_kg: 5,
       grade: 'normal',
       ripeness: 1,
+      sale_mode: 'sell',
     });
     expect(forbidden.status).toBe(403);
     expect(forbidden.body.error.code).toBe('FORBIDDEN');
@@ -115,12 +125,14 @@ describe('lots and plots', () => {
       expect(estimate.body.shelf_hours).toBe(
         predictShelfHours(4, 1, PLAN_WEATHER_FALLBACK.tempC, PLAN_WEATHER_FALLBACK.humidity),
       );
+      const start = suggestedStartPrice(20, 'substandard');
+      const floor = suggestedFloorPrice(start);
       expect(estimate.body.price_per_kg).toBe(
-        urgentPricePerKg({
-          marketPricePerKg: 20,
+        lotPricePerKg({
+          startPricePerKg: start,
+          floorPricePerKg: floor,
           baseShelfHours: 4 * 24,
           hoursLeft: estimate.body.shelf_hours,
-          grade: 'substandard',
         }),
       );
     } finally {

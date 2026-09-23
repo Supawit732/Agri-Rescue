@@ -129,3 +129,24 @@ JWT เก็บ `sub`, `role`, `can_sell`, `can_buy`, `is_admin` (อายุ 
 บัญชี charity ที่อนุมัติแล้ว migration เป็น `verified_org` พร้อม `beneficiary_count` สำรอง 100 ถ้าไม่มีค่า
 
 ผู้สมัครองค์กรที่ยัง `pending` / `needs_more_info` / `rejected` ไม่มีสิทธิ์ขอรับบริจาค (แม้เคยเป็นจิตอาสา) — ตรวจแล้วใน DB ว่าจองล็อต `verified_org_only` ตอนรออนุมัติถูกบันทึกเป็นซื้อปกติ (`is_donation=0`) ไม่ใช่บริจาค; UI จึงแยกปุ่มซื้อ/ขอรับชัดเจน
+
+## D020 — Phase 6.1c ราคาอ้างอิงและโหมดขาย
+
+ค่าใน `server/src/domain/sellerPricing.ts` (`PRICING_CONFIG`) และแหล่ง MOC:
+
+| รายการ | ค่า |
+|---|---|
+| API สินค้า | `GET https://dataapi.moc.go.th/gis-products` |
+| API ราคา | `GET https://dataapi.moc.go.th/gis-product-prices?product_id=&from_date=&to_date=` (พหูพจน์; เอกพจน์ 404) |
+| ราคาวัน | ค่ากลาง `(price_min + price_max) / 2` ของวันล่าสุดใน `price_list` |
+| รหัสขายส่ง/ปลีก | `W…` = ขายส่ง, `P…` = ขายปลีก; ราคาตลาดใช้ขายส่ง |
+| อายุอ้างอิงสูงสุด | 7 วัน แล้วค่อย fallback `crops.market_price_per_kg` (ป้ายราคาประมาณ) |
+| หน่วยนอก กก. | เก็บ `dit_unit`; ใช้ได้เมื่อ admin ใส่ `dit_unit_to_kg` เท่านั้น (ห้ามเดา) |
+| ตัวคูณเกรดตก | start = ตลาด × 0.7 |
+| floor แนะนำ | 30% ของ start |
+| floor ขั้นต่ำ | ≥ 20% ของราคาตลาด; ต่ำกว่านี้แนะนำโหมดบริจาค |
+| สูตรราคาล็อต | `max(floor, round(start × (0.3 + 0.7 × freshness)))` |
+| เปิดบริจาค sell_then_donate | เมื่อเหลือ &lt; 12 ชม. (job 10 นาที) |
+| มัธยฐานใกล้เคียง | รัศมี 15 กม. และ ≥ 3 ล็อตพืชเดียวกัน |
+
+`crop_reference_prices` เก็บ `product_code`, `unit`, `source_url`, `date`, `wholesale_price` เพื่อตรวจย้อนได้

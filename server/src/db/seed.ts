@@ -20,7 +20,16 @@ export async function seed(): Promise<void> {
     await connection.beginTransaction();
     const cropIds = new Map<CropKey, number>();
     for (const crop of crops) {
-      cropIds.set(crop.key, await upsertCrop(connection, crop.nameTh, crop.baseShelfDays, crop.marketPricePerKg));
+      cropIds.set(
+        crop.key,
+        await upsertCrop(connection, {
+          nameTh: crop.nameTh,
+          baseShelfDays: crop.baseShelfDays,
+          marketPricePerKg: crop.marketPricePerKg,
+          normalFeaturesTh: crop.normalFeaturesTh,
+          defectExamplesTh: crop.defectExamplesTh,
+        }),
+      );
     }
 
     for (const farmer of farmers) {
@@ -87,21 +96,34 @@ export async function seed(): Promise<void> {
 
 async function upsertCrop(
   connection: PoolConnection,
-  nameTh: string,
-  baseShelfDays: number,
-  marketPricePerKg: number,
+  input: {
+    nameTh: string;
+    baseShelfDays: number;
+    marketPricePerKg: number;
+    normalFeaturesTh: string;
+    defectExamplesTh: string;
+  },
 ): Promise<number> {
   const [existing] = await connection.query<RowDataPacket[]>(
     'SELECT id FROM crops WHERE name_th = ?',
-    [nameTh],
+    [input.nameTh],
   );
   const row = existing[0];
   if (row !== undefined) {
+    await connection.query(
+      `UPDATE crops
+       SET base_shelf_days = ?, market_price_per_kg = ?,
+           normal_features_th = ?, defect_examples_th = ?
+       WHERE id = ?`,
+      [input.baseShelfDays, input.marketPricePerKg, input.normalFeaturesTh, input.defectExamplesTh, row.id],
+    );
     return Number(row.id);
   }
   const [result] = await connection.query<ResultSetHeader>(
-    'INSERT INTO crops (name_th, base_shelf_days, market_price_per_kg) VALUES (?, ?, ?)',
-    [nameTh, baseShelfDays, marketPricePerKg],
+    `INSERT INTO crops
+       (name_th, base_shelf_days, market_price_per_kg, normal_features_th, defect_examples_th)
+     VALUES (?, ?, ?, ?, ?)`,
+    [input.nameTh, input.baseShelfDays, input.marketPricePerKg, input.normalFeaturesTh, input.defectExamplesTh],
   );
   return result.insertId;
 }
@@ -201,11 +223,21 @@ async function upsertLot(
   if (existing.length > 0) {
     return;
   }
+  const [cropRows] = await connection.query<RowDataPacket[]>(
+    'SELECT market_price_per_kg FROM crops WHERE id = ?',
+    [lot.cropId],
+  );
+  const market = Number(cropRows[0]?.market_price_per_kg ?? 0);
+  const start = Math.round(market * (lot.grade === 'substandard' ? 0.7 : 1) * 100) / 100;
+  const floor = Math.round(start * 0.3 * 100) / 100;
+  const saleMode = lot.allowDonation ? 'sell_then_donate' : 'sell';
   await connection.query(
     `INSERT INTO harvest_lots (
-       plot_id, crop_id, weight_kg, grade, ripeness, photo_url, allow_donation,
+       plot_id, crop_id, weight_kg, grade, ripeness, photo_url, allow_donation, donation_audience,
+       start_price_per_kg, floor_price_per_kg, sale_mode, donation_opened,
+       market_price_snapshot, market_price_is_estimate,
        predicted_shelf_hours, expires_at, status, created_at
-     ) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, 'open', ?)`,
+     ) VALUES (?, ?, ?, ?, ?, NULL, ?, 'verified_org_only', ?, ?, ?, 0, ?, 1, ?, ?, 'open', ?)`,
     [
       lot.plotId,
       lot.cropId,
@@ -213,6 +245,10 @@ async function upsertLot(
       lot.grade,
       lot.ripeness,
       lot.allowDonation ? 1 : 0,
+      start,
+      floor,
+      saleMode,
+      market,
       lot.shelfHours,
       lot.expiresAt,
       lot.createdAt,

@@ -42,6 +42,16 @@
 - บัญชี charity ที่อนุมัติแล้ว ย้ายเป็น `verified_org`
 - **Done when:** test เพดาน, เลื่อนระดับ, audience, ระงับ/ปลด, pending org/volunteer/suspended → 403, needs_more_info→resubmit, reject ไม่มีเหตุผล → 400, ดาวน์โหลดเอกสาร 403 สำหรับ non-admin, mock vision ทุกกรณี
 
+## 6.1c ราคาอ้างอิง · ราคาผู้ขาย · โหมดขาย · AI ตำหนิ · แก้ไขล็อต
+- ดึงราคาจาก MOC Open Data วันละครั้ง: `GET https://dataapi.moc.go.th/gis-product-prices` (พหูพจน์) + `gis-products`; ราคาตลาด = ค่ากลาง `(price_min+price_max)/2` ของวันล่าสุด; ใช้ขายส่ง (`W…` / `sell_type=ขายส่ง`) เป็นหลัก
+- `crops.dit_product_code`, `dit_unit`, `dit_unit_to_kg`; ถ้าหน่วยไม่ใช่บาท/กก. ใช้ได้เมื่อ admin ใส่ตัวแปลงเท่านั้น (ห้ามเดา); `crop_reference_prices` เก็บ wholesale/retail, product_code, unit, source_url, date
+- ไม่มีข้อมูลวันนี้ → ใช้ล่าสุด ≤ 7 วัน; ไม่มีเลย → `market_price_per_kg` + ป้าย "ราคาประมาณ"; ห้ามใช้ LLM สร้างตัวเลข; admin จับคู่รหัส (AI เสนอได้ แต่ต้องกดยืนยัน)
+- ผู้ขายกำหนด `start_price_per_kg` / `floor_price_per_kg`; สูตร `max(floor, round(start×(0.3+0.7×freshness)))`; กรอบและ % ใน DECISIONS; แสดงราคาตลาด + มัธยฐานใกล้เคียง + พยากรณ์ 6/12/24 ชม.
+- `sale_mode` (`sell` | `donate` | `sell_then_donate`) แทน `allow_donation` (migrate ค่าเดิม); job ทุก 10 นาทีเปิดบริจาคเมื่อ `sell_then_donate` เหลือ &lt; 12 ชม.
+- `crops.normal_features_th` / `defect_examples_th` ใส่ใน vision prompt; ห้ามนับลักษณะปกติเป็นตำหนิ
+- `PATCH /lots/:id` เจ้าของ+open เท่านั้น; `lot_edit_logs`; แอปมีปุ่มแก้ไข
+- **Done when:** mock MOC ใน test, หน่วยนอก กก. ต้องมีตัวแปลง, ราคานอกกรอบ 400, แก้หลังจอง 409, คนอื่นแก้ 403, ยืดอายุ/เพิ่มน้ำหนักไม่ได้, prompt มี features ของพืช
+
 ## 6.2 หน้าแรกดูสินค้าแบบไม่ต้อง login
 - เก็บรูปล็อต: `lot_photos(id, lot_id, path, created_at)` เก็บไฟล์ใน `server/uploads/` (ไม่ commit), เสิร์ฟผ่าน `/uploads/...`, jpeg/webp ไม่เกิน 1MB หลังย่อ; รูปที่ใช้ให้ AI ประเมินบันทึกเป็นรูปของล็อตอัตโนมัติ
 - `GET /api/public/market?lat=&lng=&radius_km=&crop_id=&sort=` ไม่ต้อง login, rate limit 60/นาที/IP

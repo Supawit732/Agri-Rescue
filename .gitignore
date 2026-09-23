@@ -9,3 +9,4 @@ coverage/
 .DS_Store
 server/private_uploads/
 server/uploads/
+server/.cache/

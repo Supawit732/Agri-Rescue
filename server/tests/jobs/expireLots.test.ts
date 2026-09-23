@@ -13,7 +13,9 @@ describe('expire lots job', () => {
     const serverSource = fs.readFileSync(path.resolve(__dirname, '../../src/server.ts'), 'utf8');
     const appSource = fs.readFileSync(path.resolve(__dirname, '../../src/app.ts'), 'utf8');
     expect(serverSource).toContain('startExpireSchedule');
+    expect(serverSource).toContain('startDitBackgroundWarm');
     expect(appSource).not.toContain('startExpireSchedule');
+    expect(appSource).not.toContain('startDitBackgroundWarm');
 
     const farmer = await registerUser(app, { role: 'farmer' });
     const cropId = await insertCrop();
