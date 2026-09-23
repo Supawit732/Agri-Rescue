@@ -33,7 +33,7 @@ describe('lots and plots', () => {
       lng: 100.63,
     });
     expect(estimate.status).toBe(200);
-    const shelfHours = predictShelfHours(5, 2, 34);
+    const shelfHours = predictShelfHours(5, 2, 34, 78);
     expect(estimate.body.shelf_hours).toBe(shelfHours);
     expect(estimate.body.price_per_kg).toBe(
       urgentPricePerKg({
@@ -46,6 +46,7 @@ describe('lots and plots', () => {
     expect(estimate.body.temp_c).toBe(34);
     expect(estimate.body.humidity).toBe(78);
     expect(estimate.body.weather_source).toBe('live');
+    expect(estimate.body.weather_basis).toBe('forecast_72h_daytime_avg');
     expect(estimate.body.shelf_hours).toBe(61);
     expect(estimate.body.price_per_kg).toBe(26);
 
@@ -67,6 +68,14 @@ describe('lots and plots', () => {
     const mine = await request(app).get('/api/lots/mine').set(bearer(owner.token));
     expect(mine.status).toBe(200);
     expect(mine.body.lots).toHaveLength(1);
+    expect(mine.body.lots[0]).toMatchObject({
+      crop_name_th: 'มะม่วง',
+      plot_name: 'แปลงมะม่วง',
+      weight_kg: 12,
+      grade: 'substandard',
+    });
+    expect(typeof mine.body.lots[0].price_per_kg).toBe('number');
+    expect(mine.body.lots[0].price_per_kg).toBeGreaterThan(0);
 
     const hidden = await request(app).get('/api/lots').set(bearer(other.token));
     expect(hidden.body.lots).toHaveLength(0);
@@ -102,8 +111,9 @@ describe('lots and plots', () => {
       expect(estimate.body.temp_c).toBe(PLAN_WEATHER_FALLBACK.tempC);
       expect(estimate.body.humidity).toBe(PLAN_WEATHER_FALLBACK.humidity);
       expect(estimate.body.weather_source).toBe('fallback');
+      expect(estimate.body.weather_basis).toBe('forecast_72h_daytime_avg');
       expect(estimate.body.shelf_hours).toBe(
-        predictShelfHours(4, 1, PLAN_WEATHER_FALLBACK.tempC),
+        predictShelfHours(4, 1, PLAN_WEATHER_FALLBACK.tempC, PLAN_WEATHER_FALLBACK.humidity),
       );
       expect(estimate.body.price_per_kg).toBe(
         urgentPricePerKg({

@@ -90,8 +90,14 @@ export const farmers = [
   },
 ] as const;
 
-/** Expected results at 34°C. Price is the normal-grade urgent price when hoursLeft equals shelfHours. */
+/**
+ * Expected shelf-life / price samples.
+ * tempC + humidity are daytime (10:00–17:00) averages over the next 72h.
+ * Price is the normal-grade urgent price when hoursLeft equals shelfHours.
+ * Humidity above 85% shortens shelf-life by 10% (see DECISIONS.md).
+ */
 export const phase2Samples = [
-  { cropKey: 'mango' as const, ripeness: 2, tempC: 34, shelfHours: 61, priceNormal: 26 },
-  { cropKey: 'mango' as const, ripeness: 3, tempC: 34, shelfHours: 44 },
+  { cropKey: 'mango' as const, ripeness: 2, tempC: 34, humidity: 78, shelfHours: 61, priceNormal: 26 },
+  { cropKey: 'mango' as const, ripeness: 3, tempC: 34, humidity: 78, shelfHours: 44 },
+  { cropKey: 'mango' as const, ripeness: 2, tempC: 34, humidity: 90, shelfHours: 55 },
 ] as const;

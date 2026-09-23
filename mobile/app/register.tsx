@@ -2,6 +2,7 @@ import { Link } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
 import { ApiError } from '../src/api/client';
+import { LocationPicker, type LatLng } from '../src/components/LocationPicker';
 import { Body, Chip, Field, PrimaryButton, Screen, SectionTitle } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
 import { C } from '../src/theme';
@@ -20,12 +21,21 @@ export default function RegisterScreen(): React.ReactElement {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [buyerType, setBuyerType] = useState<BuyerType>('vendor');
-  const [lat, setLat] = useState('13.65');
-  const [lng, setLng] = useState('100.62');
+  const [coords, setCoords] = useState<LatLng | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  const canSubmit =
+    name.trim().length > 0 &&
+    phone.trim().length > 0 &&
+    password.length >= 8 &&
+    coords !== null;
+
   const onSubmit = async (): Promise<void> => {
+    if (coords === null) {
+      setError('กรุณาเลือกตำแหน่งก่อนสมัคร');
+      return;
+    }
     setError(null);
     setSubmitting(true);
     try {
@@ -35,8 +45,8 @@ export default function RegisterScreen(): React.ReactElement {
         password,
         role,
         buyer_type: role === 'buyer' ? buyerType : null,
-        lat: Number(lat),
-        lng: Number(lng),
+        lat: coords.lat,
+        lng: coords.lng,
       });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'สมัครสมาชิกไม่สำเร็จ');
@@ -79,16 +89,14 @@ export default function RegisterScreen(): React.ReactElement {
             placeholder="เช่น 0899999999"
           />
           <Field label="รหัสผ่าน (อย่างน้อย 8 ตัว)" value={password} onChangeText={setPassword} secureTextEntry />
-          <View style={styles.coords}>
-            <View style={{ flex: 1 }}>
-              <Field label="ละติจูด" value={lat} onChangeText={setLat} keyboardType="numeric" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Field label="ลองจิจูด" value={lng} onChangeText={setLng} keyboardType="numeric" />
-            </View>
-          </View>
+          <LocationPicker value={coords} onChange={setCoords} label="ตำแหน่ง" />
           {error !== null ? <Text style={styles.error}>{error}</Text> : null}
-          <PrimaryButton label="สมัครสมาชิก" onPress={onSubmit} loading={submitting} />
+          <PrimaryButton
+            label="สมัครสมาชิก"
+            onPress={onSubmit}
+            loading={submitting}
+            disabled={!canSubmit}
+          />
           <View style={styles.footer}>
             <Text style={styles.footerText}>มีบัญชีแล้ว? </Text>
             <Link href="/login" style={styles.link}>
@@ -104,7 +112,6 @@ export default function RegisterScreen(): React.ReactElement {
 const styles = StyleSheet.create({
   brand: { fontSize: 26, fontWeight: '800', color: C.leaf, marginTop: 12, marginBottom: 12 },
   row: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 8 },
-  coords: { flexDirection: 'row', gap: 12 },
   error: { color: C.chili, marginBottom: 8 },
   footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 20 },
   footerText: { color: C.mute },

@@ -47,10 +47,13 @@ export async function apiRequest<T>({ method = 'GET', path, token, body }: Reque
   }
 
   if (response.status === 401) {
-    if (unauthorizedHandler !== null) {
-      unauthorizedHandler();
+    // Only force logout for authenticated calls — login/register 401s carry their own message.
+    if (token !== undefined && token !== null && token.length > 0) {
+      if (unauthorizedHandler !== null) {
+        unauthorizedHandler();
+      }
+      throw new ApiError(401, 'UNAUTHORIZED', 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่');
     }
-    throw new ApiError(401, 'UNAUTHORIZED', 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่');
   }
 
   let payload: unknown = null;

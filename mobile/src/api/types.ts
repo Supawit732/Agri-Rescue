@@ -39,7 +39,28 @@ export interface EstimateResponse {
   temp_c: number;
   humidity: number;
   weather_source: 'live' | 'fallback';
+  weather_basis: 'forecast_72h_daytime_avg';
 }
+
+export type AssessPhotoResponse =
+  | {
+      available: true;
+      subject_match: true;
+      ripeness: number;
+      confidence: number;
+      defects: string[];
+      note_th: string;
+      low_confidence: boolean;
+      model: string;
+    }
+  | {
+      available: true;
+      subject_match: false;
+    }
+  | {
+      available: false;
+      reason: string;
+    };
 
 export interface MyLot {
   id: number;
@@ -54,6 +75,9 @@ export interface MyLot {
   expires_at: string;
   status: string;
   created_at: string;
+  crop_name_th: string;
+  plot_name: string;
+  price_per_kg: number;
 }
 
 export interface MarketLot {

@@ -1,6 +1,8 @@
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import * as ImageManipulator from 'expo-image-manipulator';
+import * as ImagePicker from 'expo-image-picker';
 import { ApiError } from '../src/api/client';
 import {
   Badge,
@@ -11,16 +13,18 @@ import {
   Field,
   PrimaryButton,
   Screen,
+  SecondaryButton,
   SectionTitle,
   Segmented,
   TopBar,
 } from '../src/components/ui';
+import { LocationPicker, type LatLng } from '../src/components/LocationPicker';
 import { GRADE_OPTIONS, RIPENESS_LABELS, STATUS_LABELS } from '../src/constants';
 import { useAuth } from '../src/context/AuthContext';
 import { useApiData } from '../src/hooks/useApiData';
 import { formatCountdown, hoursLeftFrom, useNow } from '../src/hooks/useNow';
 import { C, urgency } from '../src/theme';
-import type { Crop, EstimateResponse, Grade, MyLot, Plot } from '../src/api/types';
+import type { AssessPhotoResponse, Crop, EstimateResponse, Grade, MyLot, Plot } from '../src/api/types';
 
 export default function FarmerScreen(): React.ReactElement {
   const { api, logout } = useAuth();
@@ -31,6 +35,10 @@ export default function FarmerScreen(): React.ReactElement {
   const onCreated = useCallback(() => {
     setRefreshKey((value) => value + 1);
     setTab('mine');
+  }, []);
+
+  const onPlotCreated = useCallback(() => {
+    setRefreshKey((value) => value + 1);
   }, []);
 
   return (
@@ -44,22 +52,30 @@ export default function FarmerScreen(): React.ReactElement {
         value={tab}
         onChange={(key) => setTab(key as 'new' | 'mine')}
       />
-      {tab === 'new' ? <NewLot api={api} onCreated={onCreated} /> : <MyLots api={api} refreshKey={refreshKey} />}
+      {tab === 'new' ? (
+        <NewLot api={api} refreshKey={refreshKey} onCreated={onCreated} onPlotCreated={onPlotCreated} />
+      ) : (
+        <MyLots api={api} refreshKey={refreshKey} />
+      )}
     </Screen>
   );
 }
 
 function NewLot({
   api,
+  refreshKey,
   onCreated,
+  onPlotCreated,
 }: {
   api: ReturnType<typeof useAuth>['api'];
+  refreshKey: number;
   onCreated: () => void;
+  onPlotCreated: () => void;
 }): React.ReactElement {
   const meta = useApiData(async () => {
     const [crops, plots] = await Promise.all([api.getCrops(), api.getPlots()]);
     return { crops, plots };
-  }, []);
+  }, [refreshKey]);
 
   return (
     <DataState
@@ -67,11 +83,68 @@ function NewLot({
       error={meta.error}
       data={meta.data}
       onRetry={meta.reload}
-      isEmpty={(d) => d.plots.length === 0 || d.crops.length === 0}
-      emptyText="ยังไม่มีแปลงหรือพืชสำหรับลงล็อต"
+      isEmpty={(d) => d.crops.length === 0}
+      emptyText="ยังไม่มีพืชในระบบ"
     >
-      {(data) => <NewLotForm api={api} crops={data.crops} plots={data.plots} onCreated={onCreated} />}
+      {(data) =>
+        data.plots.length === 0 ? (
+          <AddPlotForm api={api} onCreated={onPlotCreated} />
+        ) : (
+          <NewLotForm api={api} crops={data.crops} plots={data.plots} onCreated={onCreated} />
+        )
+      }
     </DataState>
+  );
+}
+
+function AddPlotForm({
+  api,
+  onCreated,
+}: {
+  api: ReturnType<typeof useAuth>['api'];
+  onCreated: () => void;
+}): React.ReactElement {
+  const [name, setName] = useState('');
+  const [area, setArea] = useState('1');
+  const [coords, setCoords] = useState<LatLng | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const areaNum = Number(area);
+  const canSubmit = name.trim().length > 0 && coords !== null && areaNum > 0;
+
+  const onSubmit = async (): Promise<void> => {
+    if (coords === null) {
+      setError('กรุณาเลือกตำแหน่งแปลง');
+      return;
+    }
+    setError(null);
+    setSubmitting(true);
+    try {
+      await api.createPlot({
+        name: name.trim(),
+        lat: coords.lat,
+        lng: coords.lng,
+        area_rai: areaNum,
+      });
+      onCreated();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'เพิ่มแปลงไม่สำเร็จ');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Body>
+      <SectionTitle>เพิ่มแปลงแรก</SectionTitle>
+      <Text style={styles.addPlotHint}>ต้องมีแปลงก่อนจึงจะลงล็อตได้</Text>
+      <Field label="ชื่อแปลง" value={name} onChangeText={setName} placeholder="เช่น แปลงหน้าบ้าน" />
+      <Field label="พื้นที่ (ไร่)" value={area} onChangeText={setArea} keyboardType="numeric" />
+      <LocationPicker value={coords} onChange={setCoords} label="ตำแหน่งแปลง" />
+      {error !== null ? <Text style={styles.previewError}>{error}</Text> : null}
+      <PrimaryButton label="บันทึกแปลง" onPress={onSubmit} loading={submitting} disabled={!canSubmit} />
+    </Body>
   );
 }
 
@@ -96,8 +169,22 @@ function NewLotForm({
   const [estimateError, setEstimateError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [assessing, setAssessing] = useState(false);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [aiResult, setAiResult] = useState<
+    Extract<AssessPhotoResponse, { available: true; subject_match: true }> | null
+  >(null);
+  const [aiEdited, setAiEdited] = useState(false);
+  const [aiMessage, setAiMessage] = useState<string | null>(null);
 
   const plot = useMemo(() => plots.find((entry) => entry.id === plotId), [plots, plotId]);
+
+  useEffect(() => {
+    setAiResult(null);
+    setAiEdited(false);
+    setAiMessage(null);
+    setPhotoPreview(null);
+  }, [cropId]);
 
   // Debounced 400ms shelf-life + price preview from the API (no local pricing).
   useEffect(() => {
@@ -137,6 +224,133 @@ function NewLotForm({
   const totalPrice = estimate !== null && weightNum > 0 ? Math.round(estimate.price_per_kg * weightNum) : null;
   const tone = estimate !== null ? urgency(estimate.shelf_hours) : null;
 
+  const applyRipeness = (value: number, fromAi: boolean): void => {
+    setRipeness(value);
+    if (fromAi) {
+      setAiEdited(false);
+      return;
+    }
+    if (aiResult !== null) {
+      setAiEdited(value !== aiResult.ripeness);
+    }
+  };
+
+  const resizeForUpload = async (
+    uri: string,
+    width: number,
+    height: number,
+  ): Promise<{ base64: string; mime: 'image/jpeg'; }> => {
+    const longEdge = Math.max(width, height);
+    const actions =
+      longEdge > 1024
+        ? [
+            {
+              resize:
+                width >= height
+                  ? { width: 1024 }
+                  : { height: 1024 },
+            },
+          ]
+        : [];
+    const result = await ImageManipulator.manipulateAsync(uri, actions, {
+      compress: 0.8,
+      format: ImageManipulator.SaveFormat.JPEG,
+      base64: true,
+    });
+    if (result.base64 === undefined || result.base64 === '') {
+      throw new Error('เตรียมรูปไม่สำเร็จ');
+    }
+    return { base64: result.base64, mime: 'image/jpeg' };
+  };
+
+  const runAssessment = async (uri: string, width: number, height: number): Promise<void> => {
+    setAssessing(true);
+    setAiMessage(null);
+    setPhotoPreview(uri);
+    const cropName = crops.find((entry) => entry.id === cropId)?.name_th ?? 'พืชที่เลือก';
+    try {
+      const prepared = await resizeForUpload(uri, width, height);
+      const result = await api.assessPhoto({
+        crop_id: cropId,
+        image_base64: prepared.base64,
+        mime: prepared.mime,
+      });
+      if (!result.available) {
+        setAiResult(null);
+        setAiEdited(false);
+        setAiMessage('ประเมินจากภาพไม่ได้ เลือกระดับความสุกเอง');
+        return;
+      }
+      if (!result.subject_match) {
+        setAiResult(null);
+        setAiEdited(false);
+        setAiMessage(`ในรูปไม่พบ${cropName} กรุณาถ่ายใหม่`);
+        return;
+      }
+      setAiResult(result);
+      applyRipeness(result.ripeness, true);
+      if (result.low_confidence) {
+        setAiMessage('AI ไม่แน่ใจ กรุณาตรวจสอบระดับความสุก');
+      } else {
+        setAiMessage(null);
+      }
+    } catch (err) {
+      setAiResult(null);
+      setAiEdited(false);
+      setAiMessage(err instanceof ApiError ? err.message : 'ประเมินจากภาพไม่ได้ เลือกระดับความสุกเอง');
+    } finally {
+      setAssessing(false);
+    }
+  };
+
+  const pickPhoto = (): void => {
+    Alert.alert('ประเมินความสุกจากภาพ', 'เลือกแหล่งรูป', [
+      {
+        text: 'ถ่ายรูป',
+        onPress: () => {
+          void (async () => {
+            const permission = await ImagePicker.requestCameraPermissionsAsync();
+            if (!permission.granted) {
+              setAiMessage('ไม่ได้รับสิทธิ์กล้อง');
+              return;
+            }
+            const picked = await ImagePicker.launchCameraAsync({
+              mediaTypes: ['images'],
+              quality: 0.9,
+            });
+            if (picked.canceled || picked.assets[0] === undefined) {
+              return;
+            }
+            const asset = picked.assets[0];
+            await runAssessment(asset.uri, asset.width, asset.height);
+          })();
+        },
+      },
+      {
+        text: 'คลังรูป',
+        onPress: () => {
+          void (async () => {
+            const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (!permission.granted) {
+              setAiMessage('ไม่ได้รับสิทธิ์คลังรูป');
+              return;
+            }
+            const picked = await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ['images'],
+              quality: 0.9,
+            });
+            if (picked.canceled || picked.assets[0] === undefined) {
+              return;
+            }
+            const asset = picked.assets[0];
+            await runAssessment(asset.uri, asset.width, asset.height);
+          })();
+        },
+      },
+      { text: 'ยกเลิก', style: 'cancel' },
+    ]);
+  };
+
   const onSubmit = async (): Promise<void> => {
     setSubmitError(null);
     if (plot === undefined || cropId === 0) {
@@ -156,6 +370,9 @@ function NewLotForm({
         grade,
         ripeness,
         allow_donation: donation,
+        ai_ripeness: aiResult?.ripeness ?? null,
+        ai_confidence: aiResult?.confidence ?? null,
+        ai_model: aiResult?.model ?? null,
       });
       onCreated();
     } catch (err) {
@@ -194,9 +411,39 @@ function NewLotForm({
       />
 
       <SectionTitle>ความสุก</SectionTitle>
+      <SecondaryButton
+        label={assessing ? 'กำลังประเมินจากภาพ…' : 'ถ่ายรูปให้ AI ประเมิน'}
+        onPress={pickPhoto}
+        disabled={assessing || cropId === 0}
+      />
+      {photoPreview !== null ? (
+        <Image source={{ uri: photoPreview }} style={styles.photoPreview} accessibilityLabel="รูปผลผลิต" />
+      ) : null}
+      {aiMessage !== null ? <Text style={styles.aiWarn}>{aiMessage}</Text> : null}
+      {aiResult !== null ? (
+        <Card>
+          <Badge
+            text={aiEdited ? 'แก้โดยเกษตรกร' : 'ประเมินโดย AI'}
+            fg={aiEdited ? C.turmeric : C.leaf}
+            bg={aiEdited ? C.turmericSoft : C.leafSoft}
+          />
+          <Text style={styles.aiLine}>ความมั่นใจ {Math.round(aiResult.confidence * 100)}%</Text>
+          {aiResult.defects.length > 0 ? (
+            <Text style={styles.aiLine}>ตำหนิ: {aiResult.defects.join(', ')}</Text>
+          ) : (
+            <Text style={styles.aiLine}>ไม่พบตำหนิชัดเจน</Text>
+          )}
+          <Text style={styles.aiLine}>{aiResult.note_th}</Text>
+        </Card>
+      ) : null}
       <View style={styles.row}>
         {RIPENESS_LABELS.map((label, index) => (
-          <Chip key={label} label={label} selected={ripeness === index} onPress={() => setRipeness(index)} />
+          <Chip
+            key={label}
+            label={label}
+            selected={ripeness === index}
+            onPress={() => applyRipeness(index, false)}
+          />
         ))}
       </View>
 
@@ -234,7 +481,8 @@ function NewLotForm({
               {totalPrice !== null ? `ราคารวม ${totalPrice} บาท` : 'กรอกน้ำหนักเพื่อดูราคารวม'}
             </Text>
             <Text style={styles.previewMuted}>
-              คำนวณจากอากาศที่แปลง {estimate.temp_c}°C ความชื้น {estimate.humidity}%
+              คำนวณจากพยากรณ์อากาศ 3 วันข้างหน้า (เฉลี่ยกลางวัน {estimate.temp_c}°C ความชื้น{' '}
+              {estimate.humidity}%)
             </Text>
             {estimate.weather_source === 'fallback' ? (
               <Text style={styles.previewMuted}>ใช้ค่าอากาศสำรอง</Text>
@@ -281,11 +529,17 @@ function MyLots({
             return (
               <Card key={lot.id}>
                 <View style={styles.lotHeader}>
-                  <Text style={styles.lotTitle}>ล็อต #{lot.id}</Text>
+                  <Text style={styles.lotTitle}>
+                    {lot.crop_name_th} {lot.weight_kg} กก.
+                  </Text>
                   <Badge text={STATUS_LABELS[lot.status] ?? lot.status} fg={C.leaf} bg={C.leafSoft} />
                 </View>
-                <Text style={styles.lotLine}>น้ำหนัก {lot.weight_kg} กก. · {lot.grade === 'substandard' ? 'ตกเกรด' : 'ปกติ'}</Text>
-                <Text style={styles.lotLine}>ความสุก: {RIPENESS_LABELS[lot.ripeness] ?? lot.ripeness}</Text>
+                <Text style={styles.lotMeta}>ล็อต #{lot.id}</Text>
+                <Text style={styles.lotLine}>แปลง {lot.plot_name}</Text>
+                <Text style={styles.lotLine}>ราคาด่วน {lot.price_per_kg} บาท/กก.</Text>
+                <Text style={styles.lotLine}>
+                  {lot.grade === 'substandard' ? 'ตกเกรด' : 'ปกติ'} · ความสุก {RIPENESS_LABELS[lot.ripeness] ?? lot.ripeness}
+                </Text>
                 <Badge text={lot.status === 'open' ? formatCountdown(hours) : tone.label} fg={tone.fg} bg={tone.bg} />
               </Card>
             );
@@ -298,7 +552,11 @@ function MyLots({
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap' },
-  plotName: { color: C.ink, fontSize: 16, fontWeight: '600', marginBottom: 12 },
+  plotName: { color: C.ink, fontSize: 16, fontWeight: '400', marginBottom: 12 },
+  addPlotHint: { color: C.mute, marginBottom: 12 },
+  photoPreview: { width: '100%', height: 180, borderRadius: 12, marginVertical: 8, backgroundColor: C.line },
+  aiWarn: { color: C.turmeric, marginBottom: 8, marginTop: 4 },
+  aiLine: { color: C.ink, marginTop: 6 },
   checkboxRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 12 },
   checkbox: {
     width: 24,
@@ -318,7 +576,8 @@ const styles = StyleSheet.create({
   previewTotal: { fontSize: 15, color: C.ink, marginTop: 2 },
   previewMuted: { color: C.mute, marginTop: 4 },
   previewError: { color: C.chili, marginBottom: 8 },
-  lotHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  lotTitle: { fontSize: 16, fontWeight: '700', color: C.ink },
+  lotHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  lotTitle: { fontSize: 16, fontWeight: '700', color: C.ink, flex: 1, marginRight: 8 },
+  lotMeta: { color: C.mute, fontSize: 12, marginBottom: 6 },
   lotLine: { color: C.ink, marginBottom: 4 },
 });

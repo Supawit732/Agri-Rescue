@@ -3,6 +3,7 @@ import { errorHandler } from './middleware/errorHandler';
 import { authRouter } from './routes/auth';
 import { batchesRouter } from './routes/batches';
 import { cropsRouter } from './routes/crops';
+import { geoRouter } from './routes/geo';
 import { impactRouter } from './routes/impact';
 import { lotsRouter } from './routes/lots';
 import { marketRouter } from './routes/market';
@@ -22,8 +23,9 @@ export function createApp(): Express {
     }
     next();
   });
-  app.use(express.json());
+  app.use(express.json({ limit: '8mb' }));
   app.use('/api/auth', authRouter);
+  app.use('/api/geo', geoRouter);
   app.use('/api/crops', cropsRouter);
   app.use('/api/plots', plotsRouter);
   app.use('/api/lots', lotsRouter);

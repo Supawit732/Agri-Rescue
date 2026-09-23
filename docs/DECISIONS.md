@@ -63,7 +63,7 @@ Nearest-neighbor เริ่มที่ depot แล้วเลือกจ�
 
 `GET /market` เลือกเฉพาะล็อต `open` ที่ `expires_at > UTC_TIMESTAMP()` ใน SQL แล้วตัดล็อตนอก `radius_km` (ค่าเริ่มต้น 15) ราคาใน `/market`, `/lots/estimate`, การสร้างล็อต และการจองเรียก `urgentPricePerKg` และ `predictShelfHours` จาก `src/domain`
 
-ไคลเอนต์ Open-Meteo ตัดการเชื่อมต่อที่ 3000 มิลลิวินาที แล้วใช้ 32°C / 75%
+ไคลเอนต์ Open-Meteo ตัดการเชื่อมต่อที่ 3000 มิลลิวินาที แล้วใช้ 32°C / 75% (รายละเอียดพยากรณ์ 72 ชม. ดู D014)
 
 Jest โหลด `server/.env.test` ก่อน แล้วรีเซ็ตตารางข้อมูลใน `agri_rescue_test` ก่อนแต่ละไฟล์ รันทีละไฟล์ และ mock `fetch` ทั้งกรณีสำเร็จและกรณี timeout คัดลอก `server/.env.test.example` เป็น `server/.env.test` แล้วใส่รหัสฐานเทสในเครื่อง ไฟล์นี้ไม่ถูก commit
 
@@ -77,6 +77,28 @@ Jest โหลด `server/.env.test` ก่อน แล้วรีเซ็ต
 
 `expireOpenLots(now)` เปลี่ยนเฉพาะล็อต `open` ที่เลยเวลาเป็น `expired` `startExpireSchedule` ถูกเรียกจาก `server.ts` เท่านั้น
 
+## D014 — พยากรณ์อากาศ 72 ชม. และผลของความชื้นต่อ shelf-life
+
+ไคลเอนต์ Open-Meteo ดึง `hourly=temperature_2m,relative_humidity_2m` ล่วงหน้า 72 ชั่วโมง ตามพิกัดแปลง ตั้ง `timezone=Asia/Bangkok` แล้วใช้**ค่าเฉลี่ยช่วงกลางวัน 10:00–17:00** ของช่วงนั้นเป็น `temp_c` / `humidity` ใน `predictShelfHours` แทนค่าปัจจุบัน `/lots/estimate` คืน `weather_basis: forecast_72h_daytime_avg` คู่กับ `weather_source` (`live` | `fallback`)
+
+เหตุผลที่เพิ่มปัจจัยความชื้น: ความชื้นสูงเร่งการเน่าเสียของผลผลิตสด เมื่อความชื้นเฉลี่ยกลางวัน **มากกว่า 85%** ให้คูณอายุที่คำนวณได้ด้วย 0.9 (ลดลงอีก 10%) ก่อนปัดและก่อนเพดานขั้นต่ำ 6 ชั่วโมง ค่าเท่ากับ 85% ไม่ลด เพื่อไม่ให้ขอบเขตกำกวม บันทึกสูตรนี้ใน `src/domain/shelfLife.ts` และตัวอย่างใน `phase2Samples`
+
+## D015 — ประเมินความสุกจากภาพผ่าน OpenAI-compatible vision API
+
+ใช้ตัวแปร `AI_VISION_BASE_URL` / `AI_VISION_API_KEY` / `AI_VISION_MODEL` (ค่าใน `.env.example` ว่าง; ถ้าไม่ใส่ base/model จะใช้ค่าเริ่มต้นของแผน) เรียก `POST {base}/chat/completions` ส่งรูปเป็น data URI ไม่ผูกกับผู้ให้บริการรายใดรายหนึ่ง ใส่ `User-Agent: agri-rescue/0.1` และ `x-opencode-session` ทุกครั้ง (โฮสต์ OpenAI-compatible ทั่วไปมักเพิกเฉย ส่วน OpenCode Go ใช้เพื่อ routing)
+
+`POST /lots/assess-photo` จำกัด jpeg/png ≤ 5MB timeout 20 วินาที ส่ง `response_format` แบบ json_schema และ `thinking: { type: "disabled" }` ถ้าได้ 400 เพราะไม่รองรับพารามิเตอร์ ให้ retry ครั้งเดียวโดยตัดพารามิเตอร์นั้นออก แล้วดึง JSON จากคำตอบ (รองรับ code fence) validate ด้วย zod ฟิลด์ `subject_match` บอกว่าในรูปมีพืชที่เลือกชัดเจนหรือไม่ ถ้าเป็น false ตอบ `{ available: true, subject_match: false }` โดยไม่ส่ง ripeness ถ้าไม่มี key / timeout / error / parse ไม่ได้ ตอบ `{ available: false, reason }` ความมั่นใจต่ำกว่า 0.6 ตอบพร้อม `low_confidence: true`
+
+ตอนสร้างล็อต ถ้ามีค่า AI และเกษตรกรใช้ความสุกเดียวกับ AI → `quality_assessments.method = model` ถ้าแก้ค่า → `method = rule` แต่ยังเก็บ `ai_ripeness` / `ai_confidence` / `ai_model` (migration `003_ai_assessment.sql`) เทส mock ทุกกรณีห้ามยิง API จริง สคริปต์ `npm run ai:smoke` ไว้ทดสอบมือกับ API จริง
+
 ## D005 — เซิร์ฟเวอร์ใช้ CommonJS
 
 `tsconfig` ตั้ง `module` เป็น `commonjs` เพื่อให้ Express, Jest และ ts-jest ทำงานร่วมกันโดยไม่ตั้งค่า ESM เพิ่ม
+
+## D016 — LocationPicker และ geo API
+
+หน้าสมัครและหน้าเพิ่มแปลงใช้ `LocationPicker` ร่วมกัน ไม่ใส่พิกัดเริ่มต้น 13.65/100.62 ต้องมีพิกัดก่อนส่ง ลิงก์ Google Maps แบบเต็มแยกพิกัดในแอป ลิงก์สั้น `maps.app.goo.gl` / `goo.gl/maps` ไปที่ `POST /api/geo/resolve-link` (ตาม redirect แบบ `manual` สูงสุด 5 ทอด ตรวจ allowlist ทุกทอด ห้าม IP/localhost ภายใน 5 วินาที) ชื่อสถานที่จาก `GET /api/geo/reverse` เรียก Nominatim ด้วย User-Agent ของแอป แคช 24 ชม. และไม่เกิน 1 request/วินาที ถ้าเรียกไม่ได้แสดงพิกัดตัวเลข พิกัดนอกกรอบไทยคร่าว ๆ (lat 5–21, lng 97–106) เตือนแต่ไม่บล็อก `/api/geo/*` จำกัด 20 requests/นาทีต่อ IP ด้วย `express-rate-limit` ตอบ 429 ภาษาไทย
+
+## D017 — ข้อความ 401 ของ mobile client
+
+`mobile/src/api/client.ts` บังคับ logout และข้อความ «เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่» **เฉพาะเมื่อส่ง Bearer token ไปแล้วได้ 401** (เซสชันจริงหมดอายุ) ถ้าเรียกโดยไม่มี token (เช่น `POST /api/auth/login` ที่เบอร์/รหัสผิด ซึ่งเซิร์ฟเวอร์ตอบ 401 พร้อม «เบอร์โทรหรือรหัสผ่านไม่ถูกต้อง») ให้ parse body แล้วแสดงข้อความจากเซิร์ฟเวอร์ตามปกติ ไม่มี unit test ฝั่ง mobile ใน repo นี้ จึงบันทึกพฤติกรรมไว้ที่นี่
