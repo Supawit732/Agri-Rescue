@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import { apiRequest, setUnauthorizedHandler } from '../api/client';
 import { clearToken, loadToken, saveToken } from '../api/storage';
 import type {
+  AssessPhotoResponse,
   AuthResponse,
   Batch,
   BatchDetail,
@@ -35,6 +36,11 @@ interface Api {
   getPlots: () => Promise<Plot[]>;
   createPlot: (input: { name: string; lat: number; lng: number; area_rai: number }) => Promise<Plot>;
   estimate: (input: { crop_id: number; ripeness: number; grade: Grade; lat: number; lng: number }) => Promise<EstimateResponse>;
+  assessPhoto: (input: {
+    crop_id: number;
+    image_base64: string;
+    mime: 'image/jpeg' | 'image/png';
+  }) => Promise<AssessPhotoResponse>;
   createLot: (input: {
     plot_id: number;
     crop_id: number;
@@ -42,6 +48,9 @@ interface Api {
     grade: Grade;
     ripeness: number;
     allow_donation: boolean;
+    ai_ripeness?: number | null;
+    ai_confidence?: number | null;
+    ai_model?: string | null;
   }) => Promise<unknown>;
   getMyLots: () => Promise<MyLot[]>;
   getMarket: (lat: number, lng: number, radiusKm: number) => Promise<MarketLot[]>;
@@ -136,6 +145,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
       getPlots: () => authed<{ plots: Plot[] }>('GET', '/api/plots/mine').then((r) => r.plots),
       createPlot: (input) => authed<{ plot: Plot }>('POST', '/api/plots', input).then((r) => r.plot),
       estimate: (input) => authed<EstimateResponse>('POST', '/api/lots/estimate', input),
+      assessPhoto: (input) => authed<AssessPhotoResponse>('POST', '/api/lots/assess-photo', input),
       createLot: (input) => authed('POST', '/api/lots', input),
       getMyLots: () => authed<{ lots: MyLot[] }>('GET', '/api/lots/mine').then((r) => r.lots),
       getMarket: (lat, lng, radiusKm) =>

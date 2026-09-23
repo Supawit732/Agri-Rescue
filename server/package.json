@@ -9,6 +9,7 @@
     "migrate": "tsx src/db/migrate.ts",
     "seed": "tsx src/db/seed.ts",
     "seed:reset": "tsx src/db/resetLots.ts",
+    "ai:smoke": "tsx scripts/aiSmoke.ts",
     "lint": "eslint ."
   },
   "dependencies": {

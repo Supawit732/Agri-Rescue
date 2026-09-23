@@ -42,6 +42,26 @@ export interface EstimateResponse {
   weather_basis: 'forecast_72h_daytime_avg';
 }
 
+export type AssessPhotoResponse =
+  | {
+      available: true;
+      subject_match: true;
+      ripeness: number;
+      confidence: number;
+      defects: string[];
+      note_th: string;
+      low_confidence: boolean;
+      model: string;
+    }
+  | {
+      available: true;
+      subject_match: false;
+    }
+  | {
+      available: false;
+      reason: string;
+    };
+
 export interface MyLot {
   id: number;
   plot_id: number;

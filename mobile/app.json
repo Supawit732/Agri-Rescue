@@ -44,6 +44,13 @@
         {
           "locationWhenInUsePermission": "ใช้ตำแหน่งเพื่อระบุที่อยู่ตอนสมัครและตำแหน่งแปลงเกษตร"
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "ใช้เลือกรูปผลผลิตเพื่อประเมินความสุก",
+          "cameraPermission": "ใช้ถ่ายรูปผลผลิตเพื่อประเมินความสุก"
+        }
       ]
     ],
     "experiments": {

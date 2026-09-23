@@ -23,7 +23,7 @@ export function createApp(): Express {
     }
     next();
   });
-  app.use(express.json());
+  app.use(express.json({ limit: '8mb' }));
   app.use('/api/auth', authRouter);
   app.use('/api/geo', geoRouter);
   app.use('/api/crops', cropsRouter);
