@@ -2,7 +2,7 @@ import type { RowDataPacket } from 'mysql2';
 import { pool } from '../db/pool';
 import { assertLotTransition, type LotStatus } from '../domain/lotStateMachine';
 import { expireMissedDonationProofs } from '../donors/donationService';
-import { syncAllMappedCropPrices } from '../pricing/referencePrices';
+import { maybeRunDitDailyJob } from './ditPipeline';
 import { openSellThenDonateLots } from './openDonationWindows';
 
 export const EXPIRE_INTERVAL_MS = 10 * 60 * 1000;
@@ -34,21 +34,6 @@ export async function expireOpenLots(now = new Date()): Promise<number> {
   }
 }
 
-let lastPriceSyncDay: string | null = null;
-
-export async function maybeSyncDitPrices(now = new Date()): Promise<number> {
-  const day = now.toISOString().slice(0, 10);
-  if (lastPriceSyncDay === day) {
-    return 0;
-  }
-  if (process.env.NODE_ENV === 'test') {
-    return 0;
-  }
-  const n = await syncAllMappedCropPrices();
-  lastPriceSyncDay = day;
-  return n;
-}
-
 export async function runExpireJobs(
   now = new Date(),
 ): Promise<{ lots: number; proofs: number; donationOpened: number; pricesSynced: number }> {
@@ -57,9 +42,10 @@ export async function runExpireJobs(
   const donationOpened = await openSellThenDonateLots(now);
   let pricesSynced = 0;
   try {
-    pricesSynced = await maybeSyncDitPrices(now);
+    const dit = await maybeRunDitDailyJob(now);
+    pricesSynced = dit?.prices.saved ?? 0;
   } catch (error) {
-    console.error('DIT price sync failed', error);
+    console.error('DIT daily job failed', error);
   }
   return { lots, proofs, donationOpened, pricesSynced };
 }

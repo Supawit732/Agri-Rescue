@@ -12,6 +12,7 @@ import type {
   DitCropsResponse,
   DitProductSearchHit,
   DitSuggestion,
+  DitSyncJob,
   DonationAudience,
   Driver,
   EstimateResponse,
@@ -114,7 +115,8 @@ interface Api {
   mapDitCrop: (cropId: number, body: { product_code: string; unit_to_kg?: number | null }) => Promise<unknown>;
   searchDitProducts: (q: string) => Promise<DitProductSearchHit[]>;
   refreshDitProducts: () => Promise<{ count: number; fetched_at: string }>;
-  syncDitPrices: () => Promise<{ synced: number; skipped: boolean }>;
+  syncDitPrices: () => Promise<{ started: boolean; job: DitSyncJob }>;
+  getDitSyncStatus: () => Promise<DitSyncJob>;
   suggestDit: (cropId: number) => Promise<DitSuggestion[]>;
   acceptDitSuggestion: (suggestionId: number) => Promise<unknown>;
   rejectDitSuggestion: (suggestionId: number) => Promise<unknown>;
@@ -339,7 +341,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
         ),
       refreshDitProducts: () =>
         authed<{ count: number; fetched_at: string }>('POST', '/api/admin/dit/products/refresh', {}),
-      syncDitPrices: () => authed<{ synced: number; skipped: boolean }>('POST', '/api/admin/dit/sync', {}),
+      syncDitPrices: () => authed<{ started: boolean; job: DitSyncJob }>('POST', '/api/admin/dit/sync', {}),
+      getDitSyncStatus: () => authed<{ job: DitSyncJob }>('GET', '/api/admin/dit/sync/status').then((r) => r.job),
       suggestDit: (cropId) =>
         authed<{ suggestions: DitSuggestion[] }>('POST', `/api/admin/dit/crops/${cropId}/suggest`, {}).then(
           (r) => r.suggestions,

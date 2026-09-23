@@ -180,8 +180,10 @@ describe('admin DIT mapping', () => {
 
     const crops = await request(app).get('/api/admin/dit/crops').set(bearer(admin.token));
     expect(crops.status).toBe(200);
-    const row = (crops.body.crops as Array<{ id: number; suggestions: unknown[] }>).find((c) => c.id === cropId);
-    expect(row?.suggestions).toHaveLength(2);
+    const row = (crops.body.crops as Array<{ id: number; dit_match_source: string | null }>).find(
+      (c) => c.id === cropId,
+    );
+    expect(row?.dit_match_source).toBe('manual');
 
     const search = await request(app)
       .get('/api/admin/dit/products')

@@ -25,14 +25,43 @@ export interface MocPriceResponse {
 
 export type FetchJson = (url: string) => Promise<unknown>;
 
-async function defaultFetchJson(url: string): Promise<unknown> {
-  const response = await fetch(url, {
-    headers: { Accept: 'application/json', 'User-Agent': 'Agri-Rescue/6.1c' },
-  });
-  if (!response.ok) {
-    throw new Error(`MOC HTTP ${response.status} for ${url}`);
+async function fetchOnce(url: string, timeoutMs: number): Promise<unknown> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: { Accept: 'application/json', 'User-Agent': 'Agri-Rescue/6.1c' },
+    });
+    if (!response.ok) {
+      throw new Error(`MOC HTTP ${response.status} for ${url}`);
+    }
+    return await response.json();
+  } finally {
+    clearTimeout(timer);
   }
-  return response.json();
+}
+
+/** Default MOC fetch: 15s timeout, 1 retry (2 attempts), logs elapsed ms. */
+export async function defaultFetchJson(url: string): Promise<unknown> {
+  const timeoutMs = PRICING_CONFIG.mocFetchTimeoutMs;
+  const maxAttempts = 1 + PRICING_CONFIG.mocFetchRetries;
+  const started = Date.now();
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const result = await fetchOnce(url, timeoutMs);
+      console.log(`MOC fetch ok attempt=${attempt} ms=${Date.now() - started} url=${url}`);
+      return result;
+    } catch (error) {
+      lastError = error;
+      console.warn(
+        `MOC fetch fail attempt=${attempt}/${maxAttempts} ms=${Date.now() - started} url=${url}`,
+        error instanceof Error ? error.message : error,
+      );
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
 export async function fetchMocProducts(fetchJson: FetchJson = defaultFetchJson): Promise<MocProduct[]> {

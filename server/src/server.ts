@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { createApp } from './app';
+import { startDitBackgroundWarm } from './jobs/ditPipeline';
 import { startExpireSchedule } from './jobs/expireLots';
 
 const port = Number(process.env.PORT ?? 3000);
@@ -10,3 +11,4 @@ app.listen(port, () => {
 });
 
 startExpireSchedule();
+startDitBackgroundWarm();

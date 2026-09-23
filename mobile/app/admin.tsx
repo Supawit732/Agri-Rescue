@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { ApiError } from '../src/api/client';
 import {
@@ -16,7 +16,7 @@ import {
 import { useAuth } from '../src/context/AuthContext';
 import { useApiData } from '../src/hooks/useApiData';
 import { C } from '../src/theme';
-import type { DitCrop, DitLiveSuggestion, DitProductSearchHit, OrgApplication } from '../src/api/types';
+import type { DitCrop, DitProductSearchHit, DitSyncJob, OrgApplication } from '../src/api/types';
 
 const QUICK_REASONS = ['ขอหนังสือรับรองฉบับล่าสุด', 'เอกสารไม่ชัด', 'ชื่อองค์กรไม่ตรงกับเอกสาร'] as const;
 
@@ -212,15 +212,67 @@ function OrgApplicationsPanel(): React.ReactElement {
 function DitMappingPanel(): React.ReactElement {
   const { api } = useAuth();
   const [refreshKey, setRefreshKey] = useState(0);
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [unitDrafts, setUnitDrafts] = useState<Record<number, string>>({});
   const [searchQueries, setSearchQueries] = useState<Record<number, string>>({});
   const [searchHits, setSearchHits] = useState<Record<number, DitProductSearchHit[]>>({});
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
+  const [syncJob, setSyncJob] = useState<DitSyncJob | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { data, loading, error: loadError, reload } = useApiData(() => api.listDitCrops(), [api, refreshKey]);
   const bump = useCallback(() => setRefreshKey((v) => v + 1), []);
+
+  useEffect(() => {
+    if (data?.sync_job !== undefined) {
+      setSyncJob(data.sync_job);
+    }
+  }, [data?.sync_job]);
+
+  useEffect(() => {
+    return () => {
+      if (pollRef.current !== null) {
+        clearInterval(pollRef.current);
+      }
+    };
+  }, []);
+
+  const stopPoll = (): void => {
+    if (pollRef.current !== null) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  };
+
+  const startPoll = (): void => {
+    stopPoll();
+    pollRef.current = setInterval(() => {
+      void (async () => {
+        try {
+          const job = await api.getDitSyncStatus();
+          setSyncJob(job);
+          if (job.status === 'done' || job.status === 'error') {
+            stopPoll();
+            setBusyKey(null);
+            if (job.status === 'done') {
+              setBanner(
+                `ดึงราคาเสร็จ: จับคู่ ${job.matched} · บันทึก ${job.saved}/${job.total}` +
+                  (job.outliers > 0 ? ` · ราคาเพี้ยน ${job.outliers}` : ''),
+              );
+            } else {
+              setError(job.message ?? 'ดึงราคาไม่สำเร็จ');
+            }
+            bump();
+            reload();
+          }
+        } catch {
+          // keep polling
+        }
+      })();
+    }, 1500);
+  };
 
   const unitDraftFor = (crop: DitCrop): string => {
     if (unitDrafts[crop.id] !== undefined) {
@@ -252,12 +304,13 @@ function DitMappingPanel(): React.ReactElement {
         product_code: product.product_code,
         ...(unit_to_kg !== undefined ? { unit_to_kg } : {}),
       });
-      setBanner(`ยืนยัน ${crop.name_th} → ${product.product_code} แล้ว`);
+      setBanner(`แก้คู่ ${crop.name_th} → ${product.product_code} (manual)`);
       setSearchHits((prev) => ({ ...prev, [crop.id]: [] }));
+      setEditingId(null);
       bump();
       reload();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'ยืนยันการจับคู่ไม่สำเร็จ');
+      setError(err instanceof ApiError ? err.message : 'แก้คู่ไม่สำเร็จ');
     } finally {
       setBusyKey(null);
     }
@@ -271,7 +324,6 @@ function DitMappingPanel(): React.ReactElement {
     }
     setBusyKey(`search-${crop.id}`);
     setError(null);
-    setBanner(null);
     try {
       const hits = await api.searchDitProducts(q);
       setSearchHits((prev) => ({ ...prev, [crop.id]: hits }));
@@ -283,98 +335,57 @@ function DitMappingPanel(): React.ReactElement {
     }
   };
 
-  const refreshCatalog = async (): Promise<void> => {
-    setBusyKey('refresh-catalog');
-    setError(null);
-    setBanner(null);
-    try {
-      const res = await api.refreshDitProducts();
-      setBanner(`อัปเดตรายการสินค้า ${res.count} รายการ`);
-      bump();
-      reload();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'ดึงรายการสินค้าไม่สำเร็จ');
-    } finally {
-      setBusyKey(null);
-    }
-  };
-
   const fetchPricesNow = async (): Promise<void> => {
     setBusyKey('sync-prices');
     setError(null);
     setBanner(null);
     try {
       const res = await api.syncDitPrices();
-      setBanner(
-        res.skipped ? 'ข้ามการดึงราคา (โหมดทดสอบ)' : `ดึงราคาอ้างอิงแล้ว ${res.synced} พืช`,
-      );
-      bump();
-      reload();
+      setSyncJob(res.job);
+      setBanner('เริ่มดึงราคาเบื้องหลังแล้ว…');
+      if (res.job.status === 'running') {
+        startPoll();
+      } else {
+        setBusyKey(null);
+        bump();
+        reload();
+      }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'ดึงราคาไม่สำเร็จ');
-    } finally {
       setBusyKey(null);
+      setError(err instanceof ApiError ? err.message : 'ดึงราคาไม่สำเร็จ');
     }
   };
 
-  const renderSuggestion = (crop: DitCrop, suggestion: DitLiveSuggestion): React.ReactElement => {
-    const priceLabel =
-      suggestion.latest_price !== null
-        ? `ราคาล่าสุด ${suggestion.latest_price}${suggestion.price_unit !== null ? ` ${suggestion.price_unit}` : ''}${suggestion.price_date !== null ? ` (${suggestion.price_date})` : ''}`
-        : 'ยังไม่มีราคาล่าสุด';
-    return (
-      <View key={suggestion.product_code} style={styles.suggestionBox}>
-        <Text style={styles.name}>{suggestion.product_name}</Text>
-        <Text style={styles.meta}>
-          {suggestion.product_code} · หน่วย {suggestion.unit}
-          {suggestion.sell_type !== null ? ` · ${suggestion.sell_type}` : ''}
-        </Text>
-        <Text style={styles.meta}>{priceLabel}</Text>
-        <View style={styles.actions}>
-          <View style={styles.slot}>
-            <PrimaryButton
-              label="ยืนยัน"
-              loading={busyKey === `map-${crop.id}-${suggestion.product_code}`}
-              disabled={busyKey !== null}
-              onPress={() =>
-                void confirmProduct(crop, {
-                  product_code: suggestion.product_code,
-                  product_name: suggestion.product_name,
-                  unit: suggestion.unit,
-                })
-              }
-            />
-          </View>
-        </View>
-      </View>
-    );
-  };
+  const syncLabel =
+    syncJob === null
+      ? null
+      : syncJob.status === 'running'
+        ? `กำลังดึงราคา ${syncJob.done}/${syncJob.total || '…'}`
+        : syncJob.status === 'done'
+          ? `ดึงล่าสุดเสร็จ · บันทึก ${syncJob.saved}`
+          : syncJob.status === 'error'
+            ? `ดึงราคาล้มเหลว: ${syncJob.message ?? ''}`
+            : null;
 
   return (
     <Body>
-      <Text style={styles.lead}>จับคู่รหัสสินค้า DIT / MOC</Text>
-      <Text style={styles.meta}>ระบบแนะนำ 3 อันดับแรกต่อพืช — กดยืนยันได้ทันที หรือค้นหาด้วยชื่อ</Text>
-      {data !== null ? (
+      <Text style={styles.lead}>ราคา DIT / MOC</Text>
+      <Text style={styles.meta}>ระบบจับคู่และดึงราคาอัตโนมัติ — หน้านี้สำหรับดูและแก้เมื่อจำเป็น</Text>
+      {data?.products_fetched_at !== null && data?.products_fetched_at !== undefined ? (
         <Text style={styles.meta}>
           แคตตาล็อก {data.products_from_cache ? 'จากแคช' : 'เพิ่งดึง'} · {data.products_fetched_at}
         </Text>
       ) : null}
+      {syncLabel !== null ? <Text style={styles.banner}>{syncLabel}</Text> : null}
       {banner !== null ? <Text style={styles.banner}>{banner}</Text> : null}
       {error !== null ? <Text style={styles.error}>{error}</Text> : null}
       <View style={styles.actions}>
         <View style={styles.slot}>
           <PrimaryButton
             label="ดึงราคาตอนนี้"
-            loading={busyKey === 'sync-prices'}
-            disabled={busyKey !== null}
+            loading={busyKey === 'sync-prices' || syncJob?.status === 'running'}
+            disabled={busyKey !== null && busyKey !== 'sync-prices'}
             onPress={() => void fetchPricesNow()}
-          />
-        </View>
-        <View style={styles.slot}>
-          <SecondaryButton
-            label="รีเฟรชรายการสินค้า"
-            disabled={busyKey !== null}
-            onPress={() => void refreshCatalog()}
           />
         </View>
       </View>
@@ -389,77 +400,109 @@ function DitMappingPanel(): React.ReactElement {
         {(crops: DitCrop[]) => (
           <>
             {crops.map((crop) => {
+              const editing = editingId === crop.id;
               const hits = searchHits[crop.id] ?? [];
+              const matchLabel =
+                crop.dit_match_source === 'auto'
+                  ? 'auto'
+                  : crop.dit_match_source === 'manual'
+                    ? 'manual'
+                    : 'ยังไม่จับคู่';
               return (
                 <Card key={crop.id}>
                   <Text style={styles.name}>{crop.name_th}</Text>
-                  <Text style={styles.meta}>ราคาตลาดในระบบ {crop.market_price_per_kg} บาท/กก.</Text>
                   <Text style={styles.meta}>
-                    รหัสปัจจุบัน {crop.dit_product_code ?? '—'}
-                    {crop.dit_unit !== null ? ` · หน่วย ${crop.dit_unit}` : ''}
-                    {crop.dit_unit_to_kg !== null ? ` · แปลง ${crop.dit_unit_to_kg}` : ''}
+                    รหัส {crop.dit_product_code ?? '—'} · {matchLabel}
+                    {crop.dit_unit !== null ? ` · ${crop.dit_unit}` : ''}
                   </Text>
+                  <Text style={styles.meta}>ราคาตลาดในระบบ {crop.market_price_per_kg} บาท/กก.</Text>
                   {crop.latest_ref_price !== null ? (
-                    <Text style={styles.meta}>
-                      อ้างอิงล่าสุด {crop.latest_ref_price.date}: {crop.latest_ref_price.wholesale_price}
-                      {crop.latest_ref_price.unit !== null ? ` ${crop.latest_ref_price.unit}` : ''}
-                    </Text>
+                    <>
+                      <Text style={styles.meta}>
+                        ราคาล่าสุด {crop.latest_ref_price.wholesale_price}
+                        {crop.latest_ref_price.unit !== null ? ` ${crop.latest_ref_price.unit}` : ''}
+                        {' · '}
+                        {crop.latest_ref_price.date}
+                      </Text>
+                      {crop.latest_ref_price.fetched_at !== null ? (
+                        <Text style={styles.meta}>ดึงเมื่อ {crop.latest_ref_price.fetched_at}</Text>
+                      ) : null}
+                      {crop.latest_ref_price.rejected_as_outlier ? (
+                        <Text style={styles.error}>
+                          flag: ราคาเพี้ยน (baseline {crop.latest_ref_price.outlier_baseline ?? '—'}
+                          {crop.latest_ref_price.outlier_ratio !== null
+                            ? ` · ${crop.latest_ref_price.outlier_ratio.toFixed(2)}×`
+                            : ''}
+                          ) — ไม่ใช้ประเมิน
+                        </Text>
+                      ) : null}
+                    </>
                   ) : (
-                    <Text style={styles.meta}>ยังไม่มีราคาอ้างอิงจาก DIT</Text>
+                    <Text style={styles.meta}>ยังไม่มีราคาอ้างอิง — ใช้ราคาประมาณ</Text>
                   )}
-                  <Field
-                    label="ตัวแปลงเป็น กก. (ถ้าหน่วยไม่ใช่ กก.)"
-                    value={unitDraftFor(crop)}
-                    onChangeText={(text) => setUnitDrafts((prev) => ({ ...prev, [crop.id]: text }))}
-                    keyboardType="numeric"
-                    placeholder="เว้นว่างถ้าเป็นบาท/กก."
-                  />
-                  <Text style={styles.historyTitle}>แนะนำอัตโนมัติ</Text>
-                  {crop.suggestions.length === 0 ? (
-                    <Text style={styles.meta}>ไม่พบรายการแนะนำ — ลองค้นหาด้วยชื่อ</Text>
-                  ) : (
-                    crop.suggestions.map((suggestion) => renderSuggestion(crop, suggestion))
-                  )}
-                  <Field
-                    label="ค้นหาสินค้าด้วยชื่อ"
-                    value={searchQueries[crop.id] ?? ''}
-                    onChangeText={(text) => setSearchQueries((prev) => ({ ...prev, [crop.id]: text }))}
-                    placeholder={`เช่น ${crop.name_th}`}
-                  />
                   <View style={styles.actions}>
                     <View style={styles.slot}>
                       <SecondaryButton
-                        label="ค้นหา"
+                        label={editing ? 'ปิดการแก้' : 'แก้คู่'}
                         disabled={busyKey !== null}
-                        onPress={() => void searchProducts(crop)}
+                        onPress={() => {
+                          setEditingId(editing ? null : crop.id);
+                          setError(null);
+                        }}
                       />
                     </View>
                   </View>
-                  {hits.map((hit) => (
-                    <View key={hit.product_id} style={styles.suggestionBox}>
-                      <Text style={styles.name}>{hit.product_name}</Text>
-                      <Text style={styles.meta}>
-                        {hit.product_id} · หน่วย {hit.unit}
-                        {hit.sell_type !== null ? ` · ${hit.sell_type}` : ''}
-                      </Text>
+                  {editing ? (
+                    <>
+                      <Field
+                        label="ตัวแปลงเป็น กก. (ถ้าหน่วยไม่ใช่ กก.)"
+                        value={unitDraftFor(crop)}
+                        onChangeText={(text) => setUnitDrafts((prev) => ({ ...prev, [crop.id]: text }))}
+                        keyboardType="numeric"
+                        placeholder="เว้นว่างถ้าเป็นบาท/กก."
+                      />
+                      <Field
+                        label="ค้นหาสินค้าด้วยชื่อ"
+                        value={searchQueries[crop.id] ?? ''}
+                        onChangeText={(text) => setSearchQueries((prev) => ({ ...prev, [crop.id]: text }))}
+                        placeholder={`เช่น ${crop.name_th}`}
+                      />
                       <View style={styles.actions}>
                         <View style={styles.slot}>
-                          <PrimaryButton
-                            label="ยืนยัน"
-                            loading={busyKey === `map-${crop.id}-${hit.product_id}`}
+                          <SecondaryButton
+                            label="ค้นหา"
                             disabled={busyKey !== null}
-                            onPress={() =>
-                              void confirmProduct(crop, {
-                                product_code: hit.product_id,
-                                product_name: hit.product_name,
-                                unit: hit.unit,
-                              })
-                            }
+                            onPress={() => void searchProducts(crop)}
                           />
                         </View>
                       </View>
-                    </View>
-                  ))}
+                      {hits.map((hit) => (
+                        <View key={hit.product_id} style={styles.suggestionBox}>
+                          <Text style={styles.name}>{hit.product_name}</Text>
+                          <Text style={styles.meta}>
+                            {hit.product_id} · หน่วย {hit.unit}
+                            {hit.sell_type !== null ? ` · ${hit.sell_type}` : ''}
+                          </Text>
+                          <View style={styles.actions}>
+                            <View style={styles.slot}>
+                              <PrimaryButton
+                                label="บันทึกคู่ (manual)"
+                                loading={busyKey === `map-${crop.id}-${hit.product_id}`}
+                                disabled={busyKey !== null}
+                                onPress={() =>
+                                  void confirmProduct(crop, {
+                                    product_code: hit.product_id,
+                                    product_name: hit.product_name,
+                                    unit: hit.unit,
+                                  })
+                                }
+                              />
+                            </View>
+                          </View>
+                        </View>
+                      ))}
+                    </>
+                  ) : null}
                 </Card>
               );
             })}

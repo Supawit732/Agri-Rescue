@@ -8,6 +8,8 @@ import {
   suggestedFloorPrice,
   suggestedStartPrice,
 } from '../domain/sellerPricing';
+import { isPriceOutlier, priceOutlierRatio } from '../domain/priceSanity';
+import { mapPool } from '../lib/mapPool';
 import {
   daysAgoIso,
   fetchMocPrices,
@@ -49,6 +51,7 @@ export async function resolveMarketPrice(cropId: number, today = new Date()): Pr
     `SELECT date, wholesale_price, unit, product_code, source_url
      FROM crop_reference_prices
      WHERE crop_id = ? AND date >= ? AND wholesale_price IS NOT NULL
+       AND rejected_as_outlier = 0
      ORDER BY date DESC
      LIMIT 1`,
     [cropId, minDate],
@@ -88,12 +91,33 @@ export async function resolveMarketPrice(cropId: number, today = new Date()): Pr
   };
 }
 
+async function baselinePricePerUnit(cropId: number, marketPricePerKg: number): Promise<number> {
+  const [refs] = await pool.query<RowDataPacket[]>(
+    `SELECT wholesale_price
+     FROM crop_reference_prices
+     WHERE crop_id = ? AND wholesale_price IS NOT NULL AND rejected_as_outlier = 0
+     ORDER BY date DESC, id DESC
+     LIMIT 1`,
+    [cropId],
+  );
+  if (refs[0] !== undefined) {
+    return Number(refs[0].wholesale_price);
+  }
+  return marketPricePerKg;
+}
+
+export type SyncCropPriceResult = {
+  saved: boolean;
+  rejected_as_outlier?: boolean;
+  reason?: string;
+};
+
 export async function syncCropReferencePrice(input: {
   cropId: number;
   productCode: string;
   fetchJson?: FetchJson;
   today?: Date;
-}): Promise<{ saved: boolean; reason?: string }> {
+}): Promise<SyncCropPriceResult> {
   const today = input.today ?? new Date();
   const toDate = isoDateOnly(today);
   const fromDate = daysAgoIso(PRICING_CONFIG.referenceMaxAgeDays + 3, today);
@@ -108,48 +132,104 @@ export async function syncCropReferencePrice(input: {
     return { saved: false, reason: 'no_price_list' };
   }
   const unit = latest.unit ?? response.unit;
-  await pool.query(
-    `UPDATE crops SET dit_unit = COALESCE(?, dit_unit) WHERE id = ?`,
-    [unit, input.cropId],
+  const [cropRows] = await pool.query<RowDataPacket[]>(
+    `SELECT market_price_per_kg, dit_unit_to_kg FROM crops WHERE id = ?`,
+    [input.cropId],
   );
+  const crop = cropRows[0];
+  if (crop === undefined) {
+    return { saved: false, reason: 'crop_not_found' };
+  }
+  const baseline = await baselinePricePerUnit(input.cropId, Number(crop.market_price_per_kg));
+  const outlier = isPriceOutlier(latest.midpoint, baseline);
+  const ratio = priceOutlierRatio(latest.midpoint, baseline);
+
+  await pool.query(`UPDATE crops SET dit_unit = COALESCE(?, dit_unit) WHERE id = ?`, [unit, input.cropId]);
   await pool.query(
     `INSERT INTO crop_reference_prices
-       (crop_id, date, wholesale_price, retail_price, source, product_code, unit, source_url, fetched_at)
-     VALUES (?, ?, ?, NULL, 'moc_dit', ?, ?, ?, UTC_TIMESTAMP())
+       (crop_id, date, wholesale_price, retail_price, source, product_code, unit, source_url, fetched_at,
+        rejected_as_outlier, outlier_baseline, outlier_ratio)
+     VALUES (?, ?, ?, NULL, 'moc_dit', ?, ?, ?, UTC_TIMESTAMP(), ?, ?, ?)
      ON DUPLICATE KEY UPDATE
        wholesale_price = VALUES(wholesale_price),
        unit = VALUES(unit),
        source_url = VALUES(source_url),
-       fetched_at = UTC_TIMESTAMP()`,
-    [input.cropId, latest.date, latest.midpoint, input.productCode, unit, sourceUrl],
-  );
-  if (!isKgUnit(unit)) {
-    const [rows] = await pool.query<RowDataPacket[]>(`SELECT dit_unit_to_kg FROM crops WHERE id = ?`, [
+       fetched_at = UTC_TIMESTAMP(),
+       rejected_as_outlier = VALUES(rejected_as_outlier),
+       outlier_baseline = VALUES(outlier_baseline),
+       outlier_ratio = VALUES(outlier_ratio)`,
+    [
       input.cropId,
-    ]);
-    if (rows[0]?.dit_unit_to_kg === null || rows[0]?.dit_unit_to_kg === undefined) {
+      latest.date,
+      latest.midpoint,
+      input.productCode,
+      unit,
+      sourceUrl,
+      outlier ? 1 : 0,
+      outlier ? baseline : null,
+      outlier ? ratio : null,
+    ],
+  );
+  if (outlier) {
+    return { saved: true, rejected_as_outlier: true, reason: 'outlier' };
+  }
+  if (!isKgUnit(unit)) {
+    if (crop.dit_unit_to_kg === null || crop.dit_unit_to_kg === undefined) {
       return { saved: true, reason: 'needs_unit_conversion' };
     }
   }
   return { saved: true };
 }
 
-export async function syncAllMappedCropPrices(fetchJson?: FetchJson): Promise<number> {
+export type SyncProgress = {
+  done: number;
+  total: number;
+  saved: number;
+  outliers: number;
+  failed: number;
+};
+
+export async function syncAllMappedCropPrices(
+  fetchJson?: FetchJson,
+  onProgress?: (progress: SyncProgress) => void,
+): Promise<{ saved: number; outliers: number; failed: number; total: number; elapsed_ms: number }> {
+  const started = Date.now();
   const [rows] = await pool.query<RowDataPacket[]>(
     `SELECT id, dit_product_code FROM crops WHERE dit_product_code IS NOT NULL AND dit_product_code <> ''`,
   );
-  let n = 0;
-  for (const row of rows) {
-    const result = await syncCropReferencePrice({
-      cropId: Number(row.id),
-      productCode: String(row.dit_product_code),
-      fetchJson,
-    });
-    if (result.saved) {
-      n += 1;
+  const total = rows.length;
+  let saved = 0;
+  let outliers = 0;
+  let failed = 0;
+  let done = 0;
+
+  await mapPool(rows, PRICING_CONFIG.mocPriceConcurrency, async (row) => {
+    try {
+      const result = await syncCropReferencePrice({
+        cropId: Number(row.id),
+        productCode: String(row.dit_product_code),
+        fetchJson,
+      });
+      if (result.rejected_as_outlier) {
+        outliers += 1;
+      } else if (result.saved) {
+        saved += 1;
+      } else {
+        failed += 1;
+      }
+    } catch {
+      failed += 1;
+    } finally {
+      done += 1;
+      onProgress?.({ done, total, saved, outliers, failed });
     }
-  }
-  return n;
+  });
+
+  const elapsed_ms = Date.now() - started;
+  console.log(
+    `DIT price sync finished elapsed_ms=${elapsed_ms} total=${total} saved=${saved} outliers=${outliers} failed=${failed}`,
+  );
+  return { saved, outliers, failed, total, elapsed_ms };
 }
 
 export function defaultLotPrices(marketPricePerKg: number, grade: ProduceGrade): {

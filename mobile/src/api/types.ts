@@ -177,17 +177,11 @@ export interface DitCropRefPrice {
   date: string;
   wholesale_price: number;
   unit: string | null;
-}
-
-export interface DitLiveSuggestion {
-  product_code: string;
-  product_name: string;
-  unit: string;
-  sell_type: string | null;
-  category_name: string | null;
-  latest_price: number | null;
-  price_date: string | null;
-  price_unit: string | null;
+  fetched_at: string | null;
+  rejected_as_outlier: boolean;
+  outlier_baseline: number | null;
+  outlier_ratio: number | null;
+  product_code: string | null;
 }
 
 export interface DitCrop {
@@ -197,8 +191,8 @@ export interface DitCrop {
   dit_product_code: string | null;
   dit_unit: string | null;
   dit_unit_to_kg: number | null;
+  dit_match_source: 'auto' | 'manual' | null;
   latest_ref_price: DitCropRefPrice | null;
-  suggestions: DitLiveSuggestion[];
 }
 
 export interface DitProductSearchHit {
@@ -209,10 +203,25 @@ export interface DitProductSearchHit {
   category_name: string | null;
 }
 
+export interface DitSyncJob {
+  status: 'idle' | 'running' | 'done' | 'error';
+  started_at: string | null;
+  finished_at: string | null;
+  matched: number;
+  done: number;
+  total: number;
+  saved: number;
+  outliers: number;
+  failed: number;
+  message: string | null;
+  elapsed_ms: number | null;
+}
+
 export interface DitCropsResponse {
   crops: DitCrop[];
-  products_fetched_at: string;
+  products_fetched_at: string | null;
   products_from_cache: boolean;
+  sync_job: DitSyncJob;
 }
 
 export interface DitSuggestion {

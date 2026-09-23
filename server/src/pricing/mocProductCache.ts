@@ -82,6 +82,12 @@ function fromDisk(allowStale: boolean, nowMs: number): {
   return { products, fetched_at: disk.fetched_at, from_cache: true };
 }
 
+/** Sync hydrate from disk so requests can use catalog immediately after process start. */
+export function hydrateMocProductCacheFromDisk(): boolean {
+  const loaded = fromDisk(true, Date.now());
+  return loaded !== null;
+}
+
 export async function getCachedMocProducts(input?: {
   forceRefresh?: boolean;
   fetchJson?: FetchJson;
@@ -104,7 +110,6 @@ export async function getCachedMocProducts(input?: {
     writeDiskCache(raw);
     return { products, fetched_at: new Date(nowMs).toISOString(), from_cache: false };
   } catch (error) {
-    // MOC outages are common — prefer any cached catalog over failing the admin UI.
     const staleMemory = fromMemory();
     if (staleMemory !== null) {
       return staleMemory;
@@ -120,4 +125,11 @@ export async function getCachedMocProducts(input?: {
 /** Test helper */
 export function clearMocProductCacheForTests(): void {
   memory = null;
+  try {
+    if (fs.existsSync(CACHE_FILE)) {
+      fs.unlinkSync(CACHE_FILE);
+    }
+  } catch {
+    // ignore
+  }
 }

@@ -1,20 +1,14 @@
 import { Router } from 'express';
 import type { ResultSetHeader, RowDataPacket } from 'mysql2';
 import { z } from 'zod';
-import { searchDitProducts, suggestDitProducts, type DitProductCandidate } from '../domain/ditSuggest';
+import { searchDitProducts, suggestDitProducts } from '../domain/ditSuggest';
 import { pool } from '../db/pool';
 import { asyncHandler } from '../http/asyncHandler';
 import { HttpError } from '../http/errors';
+import { getDitSyncJobState, startDitSyncJob } from '../jobs/ditPipeline';
 import { requireAuth, requireCapability } from '../middleware/auth';
-import {
-  daysAgoIso,
-  fetchMocPrices,
-  isoDateOnly,
-  latestDayMidpoint,
-  type FetchJson,
-} from '../pricing/mocClient';
 import { clearMocProductCacheForTests, getCachedMocProducts } from '../pricing/mocProductCache';
-import { syncAllMappedCropPrices, syncCropReferencePrice } from '../pricing/referencePrices';
+import { syncCropReferencePrice } from '../pricing/referencePrices';
 
 export const adminDitRouter = Router();
 
@@ -31,52 +25,6 @@ async function loadMocCatalog(input?: { forceRefresh?: boolean }) {
   } catch {
     throw new HttpError(502, 'MOC_UNAVAILABLE', 'ดึงรายการสินค้าจากกรมการค้าภายในไม่สำเร็จ ลองใหม่ภายหลัง');
   }
-}
-async function latestPriceForProduct(
-  productId: string,
-  fetchJson?: FetchJson,
-): Promise<{ price: number; date: string; unit: string | null } | null> {
-  try {
-    const today = new Date();
-    const { response } = await fetchMocPrices({
-      productId,
-      fromDate: daysAgoIso(14, today),
-      toDate: isoDateOnly(today),
-      fetchJson,
-    });
-    const latest = latestDayMidpoint(response);
-    if (latest === null) {
-      return null;
-    }
-    return { price: latest.midpoint, date: latest.date, unit: latest.unit };
-  } catch {
-    return null;
-  }
-}
-
-async function attachPrices(
-  candidates: DitProductCandidate[],
-  fetchJson?: FetchJson,
-): Promise<
-  Array<
-    DitProductCandidate & {
-      latest_price: number | null;
-      price_date: string | null;
-      price_unit: string | null;
-    }
-  >
-> {
-  return Promise.all(
-    candidates.map(async (item) => {
-      const price = await latestPriceForProduct(item.product_id, fetchJson);
-      return {
-        ...item,
-        latest_price: price?.price ?? null,
-        price_date: price?.date ?? null,
-        price_unit: price?.unit ?? null,
-      };
-    }),
-  );
 }
 
 adminDitRouter.get(
@@ -110,54 +58,72 @@ adminDitRouter.get(
   asyncHandler(async (_req, res) => {
     const [rows] = await pool.query<RowDataPacket[]>(
       `SELECT c.id, c.name_th, c.market_price_per_kg, c.dit_product_code, c.dit_unit, c.dit_unit_to_kg,
-              r.date AS ref_date, r.wholesale_price AS ref_wholesale_price, r.unit AS ref_unit
+              c.dit_match_source,
+              r.date AS ref_date, r.wholesale_price AS ref_wholesale_price, r.unit AS ref_unit,
+              r.fetched_at AS ref_fetched_at, r.rejected_as_outlier AS ref_outlier,
+              r.outlier_baseline AS ref_outlier_baseline, r.outlier_ratio AS ref_outlier_ratio,
+              r.product_code AS ref_product_code
        FROM crops c
        LEFT JOIN crop_reference_prices r
          ON r.id = (
            SELECT r2.id FROM crop_reference_prices r2
            WHERE r2.crop_id = c.id
-           ORDER BY r2.date DESC, r2.id DESC
+           ORDER BY r2.fetched_at DESC, r2.id DESC
            LIMIT 1
          )
        ORDER BY c.id`,
     );
-    const cached = await loadMocCatalog();
-    const crops = await Promise.all(
-      rows.map(async (row) => {
-        const top = suggestDitProducts(String(row.name_th), cached.products, 3);
-        const suggestions = await attachPrices(top);
-        return {
-          id: Number(row.id),
-          name_th: String(row.name_th),
-          market_price_per_kg: Number(row.market_price_per_kg),
-          dit_product_code: row.dit_product_code === null ? null : String(row.dit_product_code),
-          dit_unit: row.dit_unit === null ? null : String(row.dit_unit),
-          dit_unit_to_kg: row.dit_unit_to_kg === null ? null : Number(row.dit_unit_to_kg),
-          latest_ref_price:
-            row.ref_wholesale_price === null || row.ref_wholesale_price === undefined
-              ? null
-              : {
-                  date: String(row.ref_date).slice(0, 10),
-                  wholesale_price: Number(row.ref_wholesale_price),
-                  unit: row.ref_unit === null ? null : String(row.ref_unit),
-                },
-          suggestions: suggestions.map((s) => ({
-            product_code: s.product_id,
-            product_name: s.product_name,
-            unit: s.unit,
-            sell_type: s.sell_type,
-            category_name: s.category_name,
-            latest_price: s.latest_price,
-            price_date: s.price_date,
-            price_unit: s.price_unit,
-          })),
-        };
-      }),
-    );
+    let productsFetchedAt: string | null = null;
+    let productsFromCache = true;
+    try {
+      const cached = await getCachedMocProducts();
+      productsFetchedAt = cached.fetched_at;
+      productsFromCache = cached.from_cache;
+    } catch {
+      // catalog optional for view page
+    }
+    const crops = rows.map((row) => ({
+      id: Number(row.id),
+      name_th: String(row.name_th),
+      market_price_per_kg: Number(row.market_price_per_kg),
+      dit_product_code: row.dit_product_code === null ? null : String(row.dit_product_code),
+      dit_unit: row.dit_unit === null ? null : String(row.dit_unit),
+      dit_unit_to_kg: row.dit_unit_to_kg === null ? null : Number(row.dit_unit_to_kg),
+      dit_match_source:
+        row.dit_match_source === null || row.dit_match_source === undefined
+          ? null
+          : (String(row.dit_match_source) as 'auto' | 'manual'),
+      latest_ref_price:
+        row.ref_wholesale_price === null || row.ref_wholesale_price === undefined
+          ? null
+          : {
+              date: String(row.ref_date).slice(0, 10),
+              wholesale_price: Number(row.ref_wholesale_price),
+              unit: row.ref_unit === null ? null : String(row.ref_unit),
+              fetched_at:
+                row.ref_fetched_at === null || row.ref_fetched_at === undefined
+                  ? null
+                  : new Date(row.ref_fetched_at as Date).toISOString(),
+              rejected_as_outlier: Number(row.ref_outlier ?? 0) === 1,
+              outlier_baseline:
+                row.ref_outlier_baseline === null || row.ref_outlier_baseline === undefined
+                  ? null
+                  : Number(row.ref_outlier_baseline),
+              outlier_ratio:
+                row.ref_outlier_ratio === null || row.ref_outlier_ratio === undefined
+                  ? null
+                  : Number(row.ref_outlier_ratio),
+              product_code:
+                row.ref_product_code === null || row.ref_product_code === undefined
+                  ? null
+                  : String(row.ref_product_code),
+            },
+    }));
     res.json({
       crops,
-      products_fetched_at: cached.fetched_at,
-      products_from_cache: cached.from_cache,
+      products_fetched_at: productsFetchedAt,
+      products_from_cache: productsFromCache,
+      sync_job: getDitSyncJobState(),
     });
   }),
 );
@@ -175,14 +141,17 @@ adminDitRouter.post(
     const match = cached.products.find((p) => p.product_id === body.product_code);
     const unitFromCatalog = match?.unit && match.unit !== 'unknown' ? match.unit : null;
     if (body.unit_to_kg === undefined) {
-      await pool.query(`UPDATE crops SET dit_product_code = ?, dit_unit = COALESCE(?, dit_unit) WHERE id = ?`, [
-        body.product_code,
-        unitFromCatalog,
-        cropId,
-      ]);
+      await pool.query(
+        `UPDATE crops
+         SET dit_product_code = ?, dit_unit = COALESCE(?, dit_unit), dit_match_source = 'manual'
+         WHERE id = ?`,
+        [body.product_code, unitFromCatalog, cropId],
+      );
     } else {
       await pool.query(
-        `UPDATE crops SET dit_product_code = ?, dit_unit = COALESCE(?, dit_unit), dit_unit_to_kg = ? WHERE id = ?`,
+        `UPDATE crops
+         SET dit_product_code = ?, dit_unit = COALESCE(?, dit_unit), dit_unit_to_kg = ?, dit_match_source = 'manual'
+         WHERE id = ?`,
         [body.product_code, unitFromCatalog, body.unit_to_kg, cropId],
       );
     }
@@ -194,6 +163,7 @@ adminDitRouter.post(
       crop_id: cropId,
       product_code: body.product_code,
       unit_to_kg: body.unit_to_kg === undefined ? undefined : body.unit_to_kg,
+      match_source: 'manual' as const,
       sync,
     });
   }),
@@ -210,16 +180,13 @@ adminDitRouter.post(
     }
     const cached = await loadMocCatalog();
     const top = suggestDitProducts(String(crop.name_th), cached.products, 3);
-    const withPrices = await attachPrices(top);
     res.json({
-      suggestions: withPrices.map((s) => ({
+      suggestions: top.map((s) => ({
         crop_id: cropId,
         product_code: s.product_id,
         product_name: s.product_name,
         sell_type: s.sell_type,
         unit: s.unit,
-        latest_price: s.latest_price,
-        price_date: s.price_date,
         status: 'pending' as const,
       })),
     });
@@ -246,7 +213,10 @@ adminDitRouter.post(
       }
       const cropId = Number(suggestion.crop_id);
       const productCode = String(suggestion.product_code);
-      await connection.query(`UPDATE crops SET dit_product_code = ? WHERE id = ?`, [productCode, cropId]);
+      await connection.query(
+        `UPDATE crops SET dit_product_code = ?, dit_match_source = 'manual' WHERE id = ?`,
+        [productCode, cropId],
+      );
       await connection.query(
         `UPDATE dit_mapping_suggestions
          SET status = 'accepted', reviewed_at = UTC_TIMESTAMP()
@@ -291,12 +261,15 @@ adminDitRouter.post(
 adminDitRouter.post(
   '/sync',
   asyncHandler(async (_req, res) => {
-    if (process.env.MOC_SYNC_SKIP === '1') {
-      res.json({ synced: 0, skipped: true });
-      return;
-    }
-    const synced = await syncAllMappedCropPrices();
-    res.json({ synced, skipped: false });
+    const job = startDitSyncJob();
+    res.json({ started: true, job });
+  }),
+);
+
+adminDitRouter.get(
+  '/sync/status',
+  asyncHandler(async (_req, res) => {
+    res.json({ job: getDitSyncJobState() });
   }),
 );
 

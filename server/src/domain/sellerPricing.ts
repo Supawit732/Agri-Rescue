@@ -14,6 +14,10 @@ export const PRICING_CONFIG = {
   kgUnitTokens: ['บาท/กก', 'บาท/กก.', 'บาท/กิโลกรัม', 'บาทต่อกก', 'บาทต่อกิโลกรัม'] as const,
   mocProductsUrl: 'https://dataapi.moc.go.th/gis-products',
   mocPricesUrl: 'https://dataapi.moc.go.th/gis-product-prices',
+  mocFetchTimeoutMs: 15_000,
+  mocFetchRetries: 1,
+  mocPriceConcurrency: 4,
+  priceOutlierMaxRatio: 3,
 } as const;
 
 export function isKgUnit(unit: string | null | undefined): boolean {
