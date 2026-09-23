@@ -48,6 +48,46 @@ describe('batches and delivery', () => {
     expect(empty.body.error.message).toBe('ไม่มีคำสั่งซื้อที่รอจัดรอบ');
   });
 
+  it('lists drivers for a coordinator but not for a driver', async () => {
+    const coordinator = await loginStaff(app, 'coordinator', 'ผู้ประสานเลือกคนขับ');
+    const driver = await loginStaff(app, 'driver', 'คนขับให้เลือก');
+    const listed = await request(app).get('/api/batches/drivers').set(bearer(coordinator.token));
+    expect(listed.status).toBe(200);
+    const drivers = listed.body.drivers as { id: number; name: string; phone: string }[];
+    expect(drivers.some((entry) => entry.id === driver.user.id)).toBe(true);
+    expect(drivers.every((entry) => typeof entry.phone === 'string')).toBe(true);
+
+    const forbidden = await request(app).get('/api/batches/drivers').set(bearer(driver.token));
+    expect(forbidden.status).toBe(403);
+  });
+
+  it('lists batches scoped to the assigned driver and all for a coordinator', async () => {
+    const farmer = await registerUser(app, { role: 'farmer', name: 'เกษตรกรลิสต์รอบ' });
+    const cropId = await insertCrop('มะม่วงลิสต์', 5, 40);
+    const later = new Date(Date.now() + 4 * 24 * 60 * 60 * 1000);
+    const plot = await insertPlot(farmer.user.id, 13.66, 100.63, 'แปลงลิสต์');
+    const lot = await insertLot({ plotId: plot, cropId, expiresAt: later, weightKg: 15 });
+    const buyer = await registerUser(app, { role: 'buyer', buyer_type: 'shop', name: 'ผู้ซื้อลิสต์', lat: 13.66, lng: 100.63 });
+    expect((await request(app).post('/api/orders').set(bearer(buyer.token)).send({ lot_id: lot, donation: false })).status).toBe(201);
+
+    const coordinator = await loginStaff(app, 'coordinator', 'ผู้ประสานลิสต์');
+    const driver = await loginStaff(app, 'driver', 'คนขับลิสต์');
+    const otherDriver = await loginStaff(app, 'driver', 'คนขับอื่นลิสต์');
+    const created = await request(app).post('/api/batches').set(bearer(coordinator.token)).send({ driver_id: driver.user.id });
+    expect(created.status).toBe(201);
+    const batchId = Number(created.body.batch.id);
+
+    const mine = await request(app).get('/api/batches').set(bearer(driver.token));
+    expect(mine.status).toBe(200);
+    expect((mine.body.batches as { id: number }[]).some((b) => b.id === batchId)).toBe(true);
+
+    const others = await request(app).get('/api/batches').set(bearer(otherDriver.token));
+    expect((others.body.batches as { id: number }[]).some((b) => b.id === batchId)).toBe(false);
+
+    const all = await request(app).get('/api/batches').set(bearer(coordinator.token));
+    expect((all.body.batches as { id: number }[]).some((b) => b.id === batchId)).toBe(true);
+  });
+
   it('delivers a paid order and a donation after an OTP lock', async () => {
     const farmer = await registerUser(app, { role: 'farmer', name: 'เกษตรกรส่งของ' });
     const cropId = await insertCrop();
