@@ -28,6 +28,22 @@ export function isKgUnit(unit: string | null | undefined): boolean {
   return PRICING_CONFIG.kgUnitTokens.some((token) => normalized === token.toLowerCase().replace(/\s+/g, ''));
 }
 
+/** "บาท/หวี" → "หวี", "บาท/กก." → "กก.", bare "หวี" → "หวี" */
+export function unitBaseLabel(unit: string | null | undefined): string {
+  if (unit === null || unit === undefined) {
+    return '';
+  }
+  const trimmed = unit.trim();
+  if (trimmed === '') {
+    return '';
+  }
+  const slash = trimmed.indexOf('/');
+  if (slash >= 0) {
+    return trimmed.slice(slash + 1).trim() || trimmed;
+  }
+  return trimmed;
+}
+
 /** Midpoint of DIT price_min / price_max for one day. */
 export function ditMidpoint(priceMin: number, priceMax: number): number {
   return round2((priceMin + priceMax) / 2);

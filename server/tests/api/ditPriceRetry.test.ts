@@ -1,7 +1,7 @@
 import type { RowDataPacket } from 'mysql2';
 import { pool } from '../../src/db/pool';
 import * as mocClient from '../../src/pricing/mocClient';
-import { clearMocProductCacheForTests } from '../../src/pricing/mocProductCache';
+import { clearMocProductCacheForTests, useTempMocProductCacheForTests } from '../../src/pricing/mocProductCache';
 import { resolveMarketPrice, syncCropReferencePrice, syncMissingTodayPrices } from '../../src/pricing/referencePrices';
 import { resetDitJobStateForTests } from '../../src/jobs/ditPipeline';
 import { insertCrop, registerUser, testApp } from '../helpers';
@@ -12,6 +12,7 @@ describe('DIT price sync status + hourly retry', () => {
   const app = testApp();
 
   beforeEach(() => {
+    useTempMocProductCacheForTests();
     clearMocProductCacheForTests();
     resetDitJobStateForTests();
   });

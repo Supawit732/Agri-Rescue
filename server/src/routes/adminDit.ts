@@ -20,6 +20,10 @@ const mappingSchema = z.object({
   unit_to_kg: z.number().positive().nullable().optional(),
 });
 
+const unitFactorSchema = z.object({
+  unit_to_kg: z.number().positive().nullable(),
+});
+
 async function loadMocCatalog(input?: { forceRefresh?: boolean; allowNetwork?: boolean }) {
   try {
     return await getCachedMocProducts(input);
@@ -189,6 +193,53 @@ adminDitRouter.post(
       product_code: body.product_code,
       unit_to_kg: body.unit_to_kg === undefined ? undefined : body.unit_to_kg,
       match_source: 'manual' as const,
+      sync,
+    });
+  }),
+);
+
+adminDitRouter.post(
+  '/crops/:id/unit-factor',
+  asyncHandler(async (req, res) => {
+    const cropId = z.coerce.number().int().positive().parse(req.params.id);
+    const body = unitFactorSchema.parse(req.body);
+    const [crops] = await pool.query<RowDataPacket[]>(
+      `SELECT id, dit_product_code, dit_unit, dit_product_name FROM crops WHERE id = ?`,
+      [cropId],
+    );
+    const crop = crops[0];
+    if (crop === undefined) {
+      throw new HttpError(404, 'NOT_FOUND', 'ไม่พบพืชผล');
+    }
+    const productCode =
+      crop.dit_product_code === null || crop.dit_product_code === undefined
+        ? null
+        : String(crop.dit_product_code);
+    if (productCode === null || productCode === '') {
+      throw new HttpError(400, 'BAD_REQUEST', 'ยังไม่มีรหัสสินค้า DIT สำหรับใส่ตัวแปลง');
+    }
+    await pool.query(`UPDATE crops SET dit_unit_to_kg = ?, dit_price_status = NULL WHERE id = ?`, [
+      body.unit_to_kg,
+      cropId,
+    ]);
+    let sync: Awaited<ReturnType<typeof syncCropReferencePrice>> | null = null;
+    try {
+      sync = await syncCropReferencePrice({
+        cropId,
+        productCode,
+        productName:
+          crop.dit_product_name === null || crop.dit_product_name === undefined
+            ? null
+            : String(crop.dit_product_name),
+      });
+    } catch {
+      sync = null;
+    }
+    res.json({
+      crop_id: cropId,
+      product_code: productCode,
+      unit: crop.dit_unit === null ? null : String(crop.dit_unit),
+      unit_to_kg: body.unit_to_kg,
       sync,
     });
   }),

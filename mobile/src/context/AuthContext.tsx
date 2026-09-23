@@ -113,6 +113,7 @@ interface Api {
   unlockDonor: (userId: number) => Promise<User>;
   listDitCrops: () => Promise<DitCropsResponse>;
   mapDitCrop: (cropId: number, body: { product_code: string; unit_to_kg?: number | null }) => Promise<unknown>;
+  setDitUnitFactor: (cropId: number, body: { unit_to_kg: number | null }) => Promise<unknown>;
   searchDitProducts: (q: string) => Promise<DitProductSearchHit[]>;
   refreshDitProducts: () => Promise<{ count: number; fetched_at: string }>;
   syncDitPrices: () => Promise<{ started: boolean; job: DitSyncJob }>;
@@ -335,6 +336,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
         authed<{ user: User }>('POST', `/api/donors/admin/donors/${userId}/unlock`).then((r) => r.user),
       listDitCrops: () => authed<DitCropsResponse>('GET', '/api/admin/dit/crops'),
       mapDitCrop: (cropId, body) => authed('POST', `/api/admin/dit/crops/${cropId}/mapping`, body),
+      setDitUnitFactor: (cropId, body) =>
+        authed('POST', `/api/admin/dit/crops/${cropId}/unit-factor`, body),
       searchDitProducts: (q) =>
         authed<{ products: DitProductSearchHit[] }>('GET', `/api/admin/dit/products?q=${encodeURIComponent(q)}`).then(
           (r) => r.products,

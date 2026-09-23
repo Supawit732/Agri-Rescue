@@ -20,6 +20,15 @@ import type { DitCrop, DitProductSearchHit, DitSyncJob, OrgApplication } from '.
 
 const QUICK_REASONS = ['ขอหนังสือรับรองฉบับล่าสุด', 'เอกสารไม่ชัด', 'ชื่อองค์กรไม่ตรงกับเอกสาร'] as const;
 
+/** "บาท/หวี" → "หวี" for conversion labels. */
+function unitBaseFromDit(unit: string | null): string {
+  if (unit === null || unit.trim() === '') {
+    return 'หน่วย';
+  }
+  const slash = unit.indexOf('/');
+  return slash >= 0 ? unit.slice(slash + 1).trim() || unit : unit.trim();
+}
+
 export default function AdminScreen(): React.ReactElement {
   const { logout, user } = useAuth();
   const [tab, setTab] = useState<'orgs' | 'dit'>('orgs');
@@ -357,6 +366,37 @@ function DitMappingPanel(): React.ReactElement {
     }
   };
 
+  const saveUnitFactor = async (crop: DitCrop): Promise<void> => {
+    if (crop.dit_product_code === null) {
+      setError('ยังไม่มีรหัสสินค้า — จับคู่ก่อนแล้วค่อยใส่ตัวแปลง');
+      return;
+    }
+    const unitRaw = unitDraftFor(crop).trim();
+    if (unitRaw === '') {
+      setError('ระบุตัวแปลงเป็นจำนวนกก. ต่อ 1 หน่วยต้นทาง');
+      return;
+    }
+    const unit_to_kg = Number(unitRaw);
+    if (!(unit_to_kg > 0)) {
+      setError('ตัวแปลงหน่วยต้องเป็นจำนวนบวก');
+      return;
+    }
+    setBusyKey(`unit-${crop.id}`);
+    setError(null);
+    setBanner(null);
+    try {
+      await api.setDitUnitFactor(crop.id, { unit_to_kg });
+      const base = unitBaseFromDit(crop.dit_unit);
+      setBanner(`บันทึกตัวแปลง ${crop.name_th}: 1 ${base} = ${unit_to_kg} กก.`);
+      bump();
+      reload();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'บันทึกตัวแปลงไม่สำเร็จ');
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
   const syncLabel =
     syncJob === null
       ? null
@@ -458,6 +498,44 @@ function DitMappingPanel(): React.ReactElement {
                   {advancedOpen ? (
                     <>
                       <Text style={styles.historyTitle}>ขั้นสูง</Text>
+                      {crop.dit_product_code !== null ? (
+                        <>
+                          <Text style={styles.meta}>
+                            หน่วยต้นทางจาก DIT:{' '}
+                            {crop.dit_unit !== null ? crop.dit_unit : 'ยังไม่ทราบ (รอราคา)'}
+                          </Text>
+                          <Field
+                            label={
+                              crop.dit_unit !== null && !crop.dit_unit.includes('กก')
+                                ? `1 ${unitBaseFromDit(crop.dit_unit)} = กี่ กก.?`
+                                : 'ตัวแปลงเป็น กก. (ถ้าหน่วยไม่ใช่ กก.)'
+                            }
+                            value={unitDraftFor(crop)}
+                            onChangeText={(text) => setUnitDrafts((prev) => ({ ...prev, [crop.id]: text }))}
+                            keyboardType="numeric"
+                            placeholder={
+                              crop.dit_unit !== null && !crop.dit_unit.includes('กก')
+                                ? `เช่น 0.5 ถ้า 1 ${unitBaseFromDit(crop.dit_unit)} = 0.5 กก.`
+                                : 'เว้นว่างถ้าเป็นบาท/กก.'
+                            }
+                          />
+                          <View style={styles.actions}>
+                            <View style={styles.slot}>
+                              <PrimaryButton
+                                label="บันทึกตัวแปลงหน่วย"
+                                loading={busyKey === `unit-${crop.id}`}
+                                disabled={busyKey !== null}
+                                onPress={() => void saveUnitFactor(crop)}
+                              />
+                            </View>
+                          </View>
+                          {crop.dit_unit_to_kg !== null ? (
+                            <Text style={styles.meta}>
+                              ใช้ตอนนี้: 1 {unitBaseFromDit(crop.dit_unit)} = {crop.dit_unit_to_kg} กก.
+                            </Text>
+                          ) : null}
+                        </>
+                      ) : null}
                       <View style={styles.actions}>
                         <View style={styles.slot}>
                           <PrimaryButton
@@ -480,13 +558,6 @@ function DitMappingPanel(): React.ReactElement {
                       </View>
                       {editing ? (
                         <>
-                          <Field
-                            label="ตัวแปลงเป็น กก. (ถ้าหน่วยไม่ใช่ กก.)"
-                            value={unitDraftFor(crop)}
-                            onChangeText={(text) => setUnitDrafts((prev) => ({ ...prev, [crop.id]: text }))}
-                            keyboardType="numeric"
-                            placeholder="เว้นว่างถ้าเป็นบาท/กก."
-                          />
                           <Field
                             label="ค้นหาสินค้าด้วยชื่อ"
                             value={searchQueries[crop.id] ?? ''}

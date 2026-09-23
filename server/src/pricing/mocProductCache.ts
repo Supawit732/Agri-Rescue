@@ -1,12 +1,16 @@
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { toDitCandidate, type DitProductCandidate } from '../domain/ditSuggest';
 import { fetchMocProducts, type FetchJson, type MocProduct } from './mocClient';
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-const CACHE_DIR = path.resolve(__dirname, '../../.cache');
-const CACHE_FILE = path.join(CACHE_DIR, 'moc-products.json');
+const DEFAULT_CACHE_DIR = path.resolve(__dirname, '../../.cache');
+const CACHE_FILENAME = 'moc-products.json';
 const PARSE_CHUNK = 250;
+
+/** Production path — never deleted by test helpers. */
+const PRODUCTION_CACHE_FILE = path.join(DEFAULT_CACHE_DIR, CACHE_FILENAME);
 
 interface CachePayload {
   fetched_at: string;
@@ -21,6 +25,21 @@ export type MocCatalogSnapshot = {
 
 let memory: { fetchedAtMs: number; products: DitProductCandidate[] } | null = null;
 let hydratePromise: Promise<boolean> | null = null;
+
+/** When set (tests only), disk read/write uses this directory instead of server/.cache. */
+let testCacheDir: string | null = null;
+
+function activeCacheDir(): string {
+  return testCacheDir ?? DEFAULT_CACHE_DIR;
+}
+
+function activeCacheFile(): string {
+  return path.join(activeCacheDir(), CACHE_FILENAME);
+}
+
+function sanitizeProducts(products: MocProduct[]): MocProduct[] {
+  return products.filter((p) => typeof p.product_id === 'string' && p.product_id.trim() !== '');
+}
 
 function toCandidatesSync(products: MocProduct[]): DitProductCandidate[] {
   return products.map((p) =>
@@ -60,14 +79,15 @@ async function toCandidatesAsync(products: MocProduct[]): Promise<DitProductCand
 
 function readDiskCache(): CachePayload | null {
   try {
-    if (!fs.existsSync(CACHE_FILE)) {
+    const file = activeCacheFile();
+    if (!fs.existsSync(file)) {
       return null;
     }
-    const raw = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8')) as CachePayload;
+    const raw = JSON.parse(fs.readFileSync(file, 'utf8')) as CachePayload;
     if (!Array.isArray(raw.products) || typeof raw.fetched_at !== 'string') {
       return null;
     }
-    return raw;
+    return { fetched_at: raw.fetched_at, products: sanitizeProducts(raw.products) };
   } catch {
     return null;
   }
@@ -75,9 +95,13 @@ function readDiskCache(): CachePayload | null {
 
 function writeDiskCache(products: MocProduct[]): void {
   try {
-    fs.mkdirSync(CACHE_DIR, { recursive: true });
-    const payload: CachePayload = { fetched_at: new Date().toISOString(), products };
-    fs.writeFileSync(CACHE_FILE, JSON.stringify(payload), 'utf8');
+    const dir = activeCacheDir();
+    fs.mkdirSync(dir, { recursive: true });
+    const payload: CachePayload = {
+      fetched_at: new Date().toISOString(),
+      products: sanitizeProducts(products),
+    };
+    fs.writeFileSync(activeCacheFile(), JSON.stringify(payload), 'utf8');
   } catch {
     // cache is best-effort
   }
@@ -204,9 +228,10 @@ export async function getCachedMocProducts(input?: {
 
   try {
     const raw = await fetchMocProducts(input?.fetchJson);
-    const products = await toCandidatesAsync(raw);
+    const clean = sanitizeProducts(raw);
+    const products = await toCandidatesAsync(clean);
     memory = { fetchedAtMs: nowMs, products };
-    writeDiskCache(raw);
+    writeDiskCache(clean);
     return { products, fetched_at: new Date(nowMs).toISOString(), from_cache: false };
   } catch (error) {
     const stale = fromMemory();
@@ -222,15 +247,43 @@ export async function getCachedMocProducts(input?: {
   }
 }
 
-/** Test helper */
+/**
+ * Point disk cache at a fresh temp directory for the current test suite.
+ * Never touches server/.cache.
+ */
+export function useTempMocProductCacheForTests(): string {
+  memory = null;
+  hydratePromise = null;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agri-moc-cache-'));
+  testCacheDir = dir;
+  return dir;
+}
+
+/** Clear memory + test cache file only. Never deletes production server/.cache. */
 export function clearMocProductCacheForTests(): void {
   memory = null;
   hydratePromise = null;
+  if (testCacheDir === null) {
+    return;
+  }
   try {
-    if (fs.existsSync(CACHE_FILE)) {
-      fs.unlinkSync(CACHE_FILE);
+    const file = activeCacheFile();
+    if (file !== PRODUCTION_CACHE_FILE && fs.existsSync(file)) {
+      fs.unlinkSync(file);
     }
   } catch {
     // ignore
   }
+}
+
+/** Restore production cache path (call from afterAll if needed). */
+export function resetMocProductCacheDirForTests(): void {
+  memory = null;
+  hydratePromise = null;
+  testCacheDir = null;
+}
+
+/** Test introspection */
+export function getMocProductCacheFilePathForTests(): string {
+  return activeCacheFile();
 }

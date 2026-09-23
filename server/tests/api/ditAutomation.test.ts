@@ -3,7 +3,10 @@ import type { RowDataPacket } from 'mysql2';
 import { autoMatchUnmappedCrops, resetDitJobStateForTests } from '../../src/jobs/ditPipeline';
 import { pool } from '../../src/db/pool';
 import * as mocClient from '../../src/pricing/mocClient';
-import { clearMocProductCacheForTests } from '../../src/pricing/mocProductCache';
+import {
+  clearMocProductCacheForTests,
+  useTempMocProductCacheForTests,
+} from '../../src/pricing/mocProductCache';
 import { resolveMarketPrice, syncCropReferencePrice } from '../../src/pricing/referencePrices';
 import { bearer, insertCrop, loginStaff, registerUser, testApp } from '../helpers';
 
@@ -11,6 +14,7 @@ describe('DIT automation', () => {
   const app = testApp();
 
   beforeEach(() => {
+    useTempMocProductCacheForTests();
     clearMocProductCacheForTests();
     resetDitJobStateForTests();
   });

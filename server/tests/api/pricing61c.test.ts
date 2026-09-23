@@ -2,7 +2,7 @@ import request from 'supertest';
 import type { RowDataPacket } from 'mysql2';
 import { pool } from '../../src/db/pool';
 import * as mocClient from '../../src/pricing/mocClient';
-import { clearMocProductCacheForTests } from '../../src/pricing/mocProductCache';
+import { clearMocProductCacheForTests, useTempMocProductCacheForTests } from '../../src/pricing/mocProductCache';
 import { bearer, insertCrop, insertLot, insertPlot, loginStaff, registerUser, testApp } from '../helpers';
 
 describe('lots patch and pricing 6.1c', () => {
@@ -104,6 +104,7 @@ describe('admin DIT mapping', () => {
   const app = testApp();
 
   beforeEach(() => {
+    useTempMocProductCacheForTests();
     clearMocProductCacheForTests();
   });
 
@@ -168,6 +169,29 @@ describe('admin DIT mapping', () => {
       .set(bearer(admin.token))
       .send({ product_code: 'W14009', unit_to_kg: 0.5 });
     expect(withFactor.status).toBe(200);
+
+    jest.spyOn(mocClient, 'fetchMocPrices').mockResolvedValue({
+      sourceUrl: 'https://example/moc',
+      response: {
+        product_id: 'W14009',
+        product_name: 'กล้วยน้ำว้า',
+        category_name: 'ขายส่ง',
+        group_name: 'ผลไม้',
+        unit: 'บาท/หวี',
+        price_list: [{ date: '2026-09-23', price_min: 30, price_max: 40 }],
+      },
+    });
+    await pool.query(`UPDATE crops SET dit_unit = 'บาท/หวี', dit_unit_to_kg = NULL WHERE id = ?`, [cropId]);
+    const factorOnly = await request(app)
+      .post(`/api/admin/dit/crops/${cropId}/unit-factor`)
+      .set(bearer(admin.token))
+      .send({ unit_to_kg: 0.4 });
+    expect(factorOnly.status).toBe(200);
+    expect(factorOnly.body.unit_to_kg).toBe(0.4);
+    const [factorRows] = await pool.query<RowDataPacket[]>(`SELECT dit_unit_to_kg FROM crops WHERE id = ?`, [
+      cropId,
+    ]);
+    expect(Number(factorRows[0]?.dit_unit_to_kg)).toBe(0.4);
 
     const suggest = await request(app)
       .post(`/api/admin/dit/crops/${cropId}/suggest`)

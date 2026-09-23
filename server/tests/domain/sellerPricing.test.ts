@@ -9,6 +9,7 @@ import {
   suggestedFloorPrice,
   suggestedStartPrice,
   toBahtPerKg,
+  unitBaseLabel,
   validateSellerPrices,
 } from '../../src/domain/sellerPricing';
 
@@ -16,6 +17,8 @@ describe('sellerPricing', () => {
   it('detects kg units and converts only with explicit factor', () => {
     expect(isKgUnit('บาท/กก.')).toBe(true);
     expect(isKgUnit('บาท/หวี')).toBe(false);
+    expect(unitBaseLabel('บาท/หวี')).toBe('หวี');
+    expect(unitBaseLabel('บาท/กก.')).toBe('กก.');
     expect(toBahtPerKg({ unitPrice: 40, unit: 'บาท/กก.', ditUnitToKg: null })).toBe(40);
     expect(toBahtPerKg({ unitPrice: 65, unit: 'บาท/หวี', ditUnitToKg: null })).toBeNull();
     expect(toBahtPerKg({ unitPrice: 65, unit: 'บาท/หวี', ditUnitToKg: 0.5 })).toBe(32.5);
