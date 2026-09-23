@@ -11,7 +11,12 @@ export interface PublicUser {
   name: string;
   phone: string;
   role: UserRole;
+  can_sell: boolean;
+  can_buy: boolean;
+  is_admin: boolean;
   buyer_type: 'vendor' | 'shop' | 'charity' | null;
+  charity_approved: boolean;
+  line_id: string | null;
   lat: number | null;
   lng: number | null;
 }
@@ -39,21 +44,26 @@ export function bearer(token: string): { Authorization: string } {
 export async function registerUser(
   app: Express,
   input: {
-    role: 'farmer' | 'buyer';
+    role?: 'farmer' | 'buyer';
+    can_sell?: boolean;
+    can_buy?: boolean;
     buyer_type?: 'vendor' | 'shop' | 'charity';
     lat?: number;
     lng?: number;
     name?: string;
   },
 ): Promise<AuthBody> {
+  const canSell = input.can_sell ?? input.role === 'farmer';
+  const canBuy = input.can_buy ?? input.role === 'buyer';
   const response = await request(app)
     .post('/api/auth/register')
     .send({
       name: input.name ?? 'ผู้ใช้ทดสอบ',
       phone: nextPhone(),
       password: 'demo1234',
-      role: input.role,
-      buyer_type: input.role === 'buyer' ? (input.buyer_type ?? 'vendor') : null,
+      can_sell: canSell === true,
+      can_buy: canBuy === true,
+      buyer_type: canBuy === true ? (input.buyer_type ?? 'vendor') : null,
       lat: input.lat ?? 13.65,
       lng: input.lng ?? 100.62,
     });
@@ -70,12 +80,13 @@ export async function loginStaff(
 ): Promise<AuthBody> {
   const phone = nextPhone();
   const passwordHash = await bcrypt.hash('demo1234', 10);
-  await pool.query('INSERT INTO users (name, phone, password_hash, role) VALUES (?, ?, ?, ?)', [
-    name,
-    phone,
-    passwordHash,
-    role,
-  ]);
+  const canBuy = role === 'driver' ? 1 : 0;
+  const isAdmin = role === 'coordinator' ? 1 : 0;
+  await pool.query(
+    `INSERT INTO users (name, phone, password_hash, role, can_sell, can_buy, is_admin, lat, lng)
+     VALUES (?, ?, ?, ?, 0, ?, ?, NULL, NULL)`,
+    [name, phone, passwordHash, role, canBuy, isAdmin],
+  );
   const response = await request(app).post('/api/auth/login').send({ phone, password: 'demo1234' });
   if (response.status !== 200) {
     throw new Error(`staff login failed ${response.status} ${JSON.stringify(response.body)}`);

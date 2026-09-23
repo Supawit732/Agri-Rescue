@@ -5,23 +5,35 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
 import { C } from '../src/theme';
-import type { UserRole } from '../src/api/types';
+import type { AppMode, User } from '../src/api/types';
 
 export const unstable_settings = {
   initialRouteName: 'index',
 };
 
-const roleHome: Record<UserRole, string> = {
-  farmer: '/farmer',
-  buyer: '/buyer',
-  driver: '/driver',
-  coordinator: '/coordinator',
-};
-
 const publicRoutes = new Set(['login', 'register']);
 
+function homeFor(user: User, mode: AppMode): string {
+  if (mode === 'sell' && user.can_sell) {
+    return '/farmer';
+  }
+  if (mode === 'buy' && user.can_buy) {
+    return '/buyer';
+  }
+  if (user.can_sell) {
+    return '/farmer';
+  }
+  if (user.can_buy) {
+    return '/buyer';
+  }
+  if (user.is_admin) {
+    return '/impact';
+  }
+  return '/login';
+}
+
 function AuthGate(): React.ReactElement {
-  const { ready, user } = useAuth();
+  const { ready, user, mode, setMode } = useAuth();
   const segments = useSegments();
   const router = useRouter();
 
@@ -37,17 +49,40 @@ function AuthGate(): React.ReactElement {
       }
       return;
     }
-    const home = roleHome[user.role];
-    // Keep the user inside their role area (and off the auth/index screens).
-    if (onPublic || current === 'index' || `/${current}` === '/index') {
+
+    // Hide driver/coordinator from navigation; keep screens for later phases.
+    if (current === 'driver' || current === 'coordinator') {
+      router.replace(homeFor(user, mode) as never);
+      return;
+    }
+
+    const home = homeFor(user, mode);
+    const routeName = String(current);
+    if (onPublic || routeName === 'index' || routeName === '') {
       router.replace(home as never);
       return;
     }
-    const allowed = new Set([home.slice(1), 'impact']);
+
+    if (current === 'farmer' && !user.can_sell) {
+      if (user.can_buy) {
+        setMode('buy');
+      }
+      router.replace(homeFor(user, 'buy') as never);
+      return;
+    }
+    if (current === 'buyer' && !user.can_buy) {
+      if (user.can_sell) {
+        setMode('sell');
+      }
+      router.replace(homeFor(user, 'sell') as never);
+      return;
+    }
+
+    const allowed = new Set(['farmer', 'buyer', 'impact', 'profile']);
     if (!allowed.has(current)) {
       router.replace(home as never);
     }
-  }, [ready, user, segments, router]);
+  }, [ready, user, mode, segments, router, setMode]);
 
   if (!ready) {
     return (
@@ -64,6 +99,7 @@ function AuthGate(): React.ReactElement {
       <Stack.Screen name="register" />
       <Stack.Screen name="farmer" />
       <Stack.Screen name="buyer" />
+      <Stack.Screen name="profile" />
       <Stack.Screen name="driver" />
       <Stack.Screen name="coordinator" />
       <Stack.Screen name="impact" />

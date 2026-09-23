@@ -110,6 +110,10 @@ describe('batches and delivery', () => {
       lat: 13.8,
       lng: 100.8,
     });
+    const coordinator = await loginStaff(app, 'coordinator', 'ผู้ประสานรอบ');
+    await request(app)
+      .post(`/api/auth/admin/approve-charity/${charity.user.id}`)
+      .set(bearer(coordinator.token));
     const paidOrder = await request(app)
       .post('/api/orders')
       .set(bearer(shop.token))
@@ -122,7 +126,6 @@ describe('batches and delivery', () => {
     expect(giftOrder.status).toBe(201);
     expect(giftOrder.body.order.agreed_price_per_kg).toBe(0);
 
-    const coordinator = await loginStaff(app, 'coordinator', 'ผู้ประสานรอบ');
     const driver = await loginStaff(app, 'driver', 'คนขับรอบ');
     const otherDriver = await loginStaff(app, 'driver', 'คนขับคนอื่น');
     const created = await request(app)

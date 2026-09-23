@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { confirmStop, unlockStop } from '../delivery/confirmStop';
 import { asyncHandler } from '../http/asyncHandler';
-import { requireAuth, requireRole } from '../middleware/auth';
+import { requireAuth, requireCapability, requireRole } from '../middleware/auth';
 
 export const stopsRouter = Router();
 
@@ -26,7 +26,7 @@ stopsRouter.post(
 stopsRouter.post(
   '/:id/unlock',
   requireAuth,
-  requireRole('coordinator'),
+  requireCapability('admin'),
   asyncHandler(async (req, res) => {
     const stopId = z.coerce.number().int().positive().parse(req.params.id);
     res.json(await unlockStop(stopId));

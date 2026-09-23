@@ -16,10 +16,12 @@ const buyerTypes: { key: BuyerType; label: string }[] = [
 
 export default function RegisterScreen(): React.ReactElement {
   const { register } = useAuth();
-  const [role, setRole] = useState<'farmer' | 'buyer'>('farmer');
+  const [canSell, setCanSell] = useState(true);
+  const [canBuy, setCanBuy] = useState(false);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [lineId, setLineId] = useState('');
   const [buyerType, setBuyerType] = useState<BuyerType>('vendor');
   const [coords, setCoords] = useState<LatLng | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -29,11 +31,16 @@ export default function RegisterScreen(): React.ReactElement {
     name.trim().length > 0 &&
     phone.trim().length > 0 &&
     password.length >= 8 &&
-    coords !== null;
+    coords !== null &&
+    (canSell || canBuy);
 
   const onSubmit = async (): Promise<void> => {
     if (coords === null) {
       setError('กรุณาเลือกตำแหน่งก่อนสมัคร');
+      return;
+    }
+    if (!canSell && !canBuy) {
+      setError('เลือกอย่างน้อยหนึ่งบทบาท: ขาย หรือ ซื้อ');
       return;
     }
     setError(null);
@@ -43,8 +50,10 @@ export default function RegisterScreen(): React.ReactElement {
         name: name.trim(),
         phone: phone.trim(),
         password,
-        role,
-        buyer_type: role === 'buyer' ? buyerType : null,
+        can_sell: canSell,
+        can_buy: canBuy,
+        buyer_type: canBuy ? buyerType : null,
+        line_id: lineId.trim() === '' ? null : lineId.trim(),
         lat: coords.lat,
         lng: coords.lng,
       });
@@ -62,10 +71,11 @@ export default function RegisterScreen(): React.ReactElement {
           <Text style={styles.brand}>สมัครสมาชิก</Text>
           <SectionTitle>บทบาท</SectionTitle>
           <View style={styles.row}>
-            <Chip label="เกษตรกร" selected={role === 'farmer'} onPress={() => setRole('farmer')} />
-            <Chip label="ผู้ซื้อ" selected={role === 'buyer'} onPress={() => setRole('buyer')} />
+            <Chip label="ขาย" selected={canSell} onPress={() => setCanSell((v) => !v)} />
+            <Chip label="ซื้อ" selected={canBuy} onPress={() => setCanBuy((v) => !v)} />
           </View>
-          {role === 'buyer' ? (
+          <Text style={styles.hint}>เลือกได้ทั้งคู่ แล้วสลับโหมดในแอปได้ภายหลัง</Text>
+          {canBuy ? (
             <>
               <SectionTitle>ประเภทผู้ซื้อ</SectionTitle>
               <View style={styles.row}>
@@ -78,6 +88,9 @@ export default function RegisterScreen(): React.ReactElement {
                   />
                 ))}
               </View>
+              {buyerType === 'charity' ? (
+                <Text style={styles.hint}>ประเภทสงเคราะห์ต้องรอผู้ดูแลอนุมัติก่อนรับบริจาค</Text>
+              ) : null}
             </>
           ) : null}
           <Field label="ชื่อ" value={name} onChangeText={setName} placeholder="ชื่อ-สกุล" />
@@ -89,6 +102,13 @@ export default function RegisterScreen(): React.ReactElement {
             placeholder="เช่น 0899999999"
           />
           <Field label="รหัสผ่าน (อย่างน้อย 8 ตัว)" value={password} onChangeText={setPassword} secureTextEntry />
+          <Field
+            label="LINE ID (ไม่บังคับ)"
+            value={lineId}
+            onChangeText={setLineId}
+            placeholder="เช่น agrirescue"
+            autoCapitalize="none"
+          />
           <LocationPicker value={coords} onChange={setCoords} label="ตำแหน่ง" />
           {error !== null ? <Text style={styles.error}>{error}</Text> : null}
           <PrimaryButton
@@ -112,6 +132,7 @@ export default function RegisterScreen(): React.ReactElement {
 const styles = StyleSheet.create({
   brand: { fontSize: 26, fontWeight: '800', color: C.leaf, marginTop: 12, marginBottom: 12 },
   row: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 8 },
+  hint: { color: C.mute, marginBottom: 8 },
   error: { color: C.chili, marginBottom: 8 },
   footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 20 },
   footerText: { color: C.mute },

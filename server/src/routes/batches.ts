@@ -5,7 +5,7 @@ import { pool } from '../db/pool';
 import { createBatch, loadBatch } from '../delivery/createBatch';
 import { asyncHandler } from '../http/asyncHandler';
 import { HttpError } from '../http/errors';
-import { requireAuth, requireRole } from '../middleware/auth';
+import { requireAuth, requireCapability } from '../middleware/auth';
 
 export const batchesRouter = Router();
 
@@ -13,11 +13,19 @@ const createSchema = z.object({
   driver_id: z.number().int().positive('กรุณาระบุคนขับ'),
 });
 
+function requireDriverOrAdmin(req: import('express').Request, _res: import('express').Response, next: import('express').NextFunction): void {
+  if (req.auth?.role === 'driver' || req.auth?.is_admin === true) {
+    next();
+    return;
+  }
+  next(new HttpError(403, 'FORBIDDEN', 'ไม่มีสิทธิ์เข้าถึง'));
+}
+
 batchesRouter.use(requireAuth);
 
 batchesRouter.post(
   '/',
-  requireRole('coordinator'),
+  requireCapability('admin'),
   asyncHandler(async (req, res) => {
     const body = createSchema.parse(req.body);
     const created = await createBatch(body.driver_id);
@@ -27,7 +35,7 @@ batchesRouter.post(
 
 batchesRouter.get(
   '/',
-  requireRole('driver', 'coordinator'),
+  requireDriverOrAdmin,
   asyncHandler(async (req, res) => {
     const auth = req.auth;
     if (auth === undefined) {
@@ -56,7 +64,7 @@ batchesRouter.get(
 
 batchesRouter.get(
   '/drivers',
-  requireRole('coordinator'),
+  requireCapability('admin'),
   asyncHandler(async (_req, res) => {
     const [rows] = await pool.query<RowDataPacket[]>(
       "SELECT id, name, phone FROM users WHERE role = 'driver' ORDER BY name, id",
@@ -69,7 +77,7 @@ batchesRouter.get(
 
 batchesRouter.get(
   '/:id',
-  requireRole('driver', 'coordinator'),
+  requireDriverOrAdmin,
   asyncHandler(async (req, res) => {
     const batchId = z.coerce.number().int().positive().parse(req.params.id);
     const connection = await pool.getConnection();

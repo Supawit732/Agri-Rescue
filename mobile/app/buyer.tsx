@@ -21,16 +21,31 @@ import { C, urgency } from '../src/theme';
 import type { MarketLot, Order } from '../src/api/types';
 
 export default function BuyerScreen(): React.ReactElement {
-  const { api, logout } = useAuth();
+  const { api, logout, user, mode, setMode } = useAuth();
   const router = useRouter();
   const [tab, setTab] = useState<'market' | 'orders'>('market');
   const [refreshKey, setRefreshKey] = useState(0);
 
   const bumpRefresh = useCallback(() => setRefreshKey((value) => value + 1), []);
 
+  const switchMode = (next: 'sell' | 'buy'): void => {
+    setMode(next);
+    if (next === 'sell') {
+      router.replace('/farmer');
+    }
+  };
+
   return (
     <Screen>
-      <TopBar title="ผู้ซื้อ" onImpact={() => router.push('/impact')} onLogout={logout} />
+      <TopBar
+        title="โหมดซื้อ"
+        onImpact={() => router.push('/impact')}
+        onProfile={() => router.push('/profile')}
+        onLogout={logout}
+        mode={mode}
+        onModeChange={switchMode}
+        showModeToggle={user?.can_sell === true && user.can_buy === true}
+      />
       <Segmented
         options={[
           { key: 'market', label: 'ตลาดด่วน' },

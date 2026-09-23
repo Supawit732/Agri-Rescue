@@ -102,3 +102,11 @@ Jest โหลด `server/.env.test` ก่อน แล้วรีเซ็ต
 ## D017 — ข้อความ 401 ของ mobile client
 
 `mobile/src/api/client.ts` บังคับ logout และข้อความ «เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่» **เฉพาะเมื่อส่ง Bearer token ไปแล้วได้ 401** (เซสชันจริงหมดอายุ) ถ้าเรียกโดยไม่มี token (เช่น `POST /api/auth/login` ที่เบอร์/รหัสผิด ซึ่งเซิร์ฟเวอร์ตอบ 401 พร้อม «เบอร์โทรหรือรหัสผ่านไม่ถูกต้อง») ให้ parse body แล้วแสดงข้อความจากเซิร์ฟเวอร์ตามปกติ ไม่มี unit test ฝั่ง mobile ใน repo นี้ จึงบันทึกพฤติกรรมไว้ที่นี่
+
+## D018 — Phase 6.1 บัญชีหลายบทบาท
+
+Migration `004_multi_role.sql` เพิ่ม `users.can_sell` / `can_buy` / `is_admin` / `line_id` และตาราง `buyer_profiles(user_id, buyer_type, charity_approved)` แล้วย้าย `users.buyer_type` ออก คอลัมน์ `users.role` **ยังเก็บไว้** เพื่อให้เส้นทางคนขับ/รอบวิ่ง (`WHERE role = 'driver'`) และการล็อก OTP ทำงานต่อได้โดยไม่ต้องมี `can_drive`
+
+JWT เก็บ `sub`, `role`, `can_sell`, `can_buy`, `is_admin` (อายุ 7 วันเหมือนเดิม) middleware ใหม่คือ `requireCapability('sell' | 'buy' | 'admin')` ใช้กับ plots/lots/market/orders และงานผู้ดูแล (สร้างรอบ, ปลด OTP, อนุมัติ charity) `requireRole('driver')` เหลือเฉพาะยืนยันจุดของคนขับ
+
+สมัครด้วย `can_sell` / `can_buy` (อย่างน้อยหนึ่งอย่าง) ประเภทสงเคราะห์ตั้ง `charity_approved = 0` จนกว่า `POST /api/auth/admin/approve-charity/:userId` ผู้ใช้เปิดบทบาทอีกฝั่งได้ที่ `PATCH /api/auth/profile` แอปเก็บโหมดขาย/ซื้อใน storage แล้วสลับที่ TopBar หน้าคนขับ/ผู้ประสานยังอยู่ใน repo แต่ AuthGate ไม่ส่งผู้ใช้ไปหน้าเหล่านั้น

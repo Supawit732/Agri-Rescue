@@ -8,7 +8,7 @@ import { assertLotTransition, type LotStatus } from '../domain/lotStateMachine';
 import { urgentPricePerKg, type ProduceGrade } from '../domain/pricing';
 import { asyncHandler } from '../http/asyncHandler';
 import { HttpError } from '../http/errors';
-import { requireAuth, requireRole } from '../middleware/auth';
+import { requireAuth, requireCapability } from '../middleware/auth';
 
 export const ordersRouter = Router();
 
@@ -25,11 +25,13 @@ interface LotLock extends RowDataPacket {
   expires_at: Date;
   base_shelf_days: number;
   market_price_per_kg: number;
+  farmer_id: number;
 }
 
 interface BuyerRow extends RowDataPacket {
   id: number;
   buyer_type: 'vendor' | 'shop' | 'charity' | null;
+  charity_approved: number | boolean | null;
 }
 
 interface OrderRow extends RowDataPacket {
@@ -44,7 +46,7 @@ interface OrderRow extends RowDataPacket {
   created_at: Date;
 }
 
-ordersRouter.use(requireAuth, requireRole('buyer'));
+ordersRouter.use(requireAuth, requireCapability('buy'));
 
 ordersRouter.post(
   '/',
@@ -57,9 +59,10 @@ ordersRouter.post(
       const buyer = await lockBuyer(connection, buyerId);
       const [lots] = await connection.query<LotLock[]>(
         `SELECT h.id, h.status, h.grade, h.allow_donation, h.expires_at,
-                c.base_shelf_days, c.market_price_per_kg
+                c.base_shelf_days, c.market_price_per_kg, p.farmer_id
          FROM harvest_lots h
          JOIN crops c ON c.id = h.crop_id
+         JOIN plots p ON p.id = h.plot_id
          WHERE h.id = ?
          FOR UPDATE`,
         [body.lot_id],
@@ -67,6 +70,9 @@ ordersRouter.post(
       const lot = lots[0];
       if (lot === undefined) {
         throw new HttpError(404, 'NOT_FOUND', 'ไม่พบล็อต');
+      }
+      if (Number(lot.farmer_id) === buyerId) {
+        throw new HttpError(403, 'FORBIDDEN', 'จองล็อตของตัวเองไม่ได้');
       }
       if (new Date(lot.expires_at).getTime() <= Date.now()) {
         throw new HttpError(409, 'LOT_EXPIRED', 'ล็อตนี้หมดอายุแล้ว');
@@ -77,8 +83,8 @@ ordersRouter.post(
       const donation = body.donation;
       let agreedPrice = 0;
       if (donation) {
-        if (buyer.buyer_type !== 'charity') {
-          throw new HttpError(403, 'FORBIDDEN', 'บริจาคได้เฉพาะผู้ซื้อประเภทสงเคราะห์');
+        if (buyer.buyer_type !== 'charity' || Number(buyer.charity_approved) !== 1) {
+          throw new HttpError(403, 'FORBIDDEN', 'บริจาคได้เฉพาะผู้ซื้อประเภทสงเคราะห์ที่ได้รับการอนุมัติ');
         }
         if (Number(lot.allow_donation) !== 1) {
           throw new HttpError(403, 'FORBIDDEN', 'ล็อตนี้ไม่เปิดรับบริจาค');
@@ -199,8 +205,12 @@ ordersRouter.delete(
 
 async function lockBuyer(connection: PoolConnection, buyerId: number): Promise<BuyerRow> {
   const [rows] = await connection.query<BuyerRow[]>(
-    'SELECT id, buyer_type FROM users WHERE id = ? AND role = ? FOR UPDATE',
-    [buyerId, 'buyer'],
+    `SELECT u.id, bp.buyer_type, bp.charity_approved
+     FROM users u
+     LEFT JOIN buyer_profiles bp ON bp.user_id = u.id
+     WHERE u.id = ? AND u.can_buy = 1
+     FOR UPDATE`,
+    [buyerId],
   );
   const buyer = rows[0];
   if (buyer === undefined) {
