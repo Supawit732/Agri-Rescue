@@ -4,6 +4,17 @@ export type Grade = 'normal' | 'substandard';
 export type AppMode = 'sell' | 'buy';
 export type DonorTier = 'volunteer' | 'trusted_volunteer' | 'verified_org';
 export type DonationAudience = 'verified_org_only' | 'all_donors';
+export type OrgStatus = 'none' | 'draft' | 'pending' | 'approved' | 'rejected' | 'needs_more_info';
+export type ApplicationKind = 'individual' | 'organization';
+export type OrgType =
+  | 'foundation'
+  | 'association'
+  | 'shelter'
+  | 'community_kitchen'
+  | 'community_enterprise'
+  | 'other';
+export type DocCategory = 'registration_cert' | 'community_cert' | 'site_photo' | 'other';
+export type RecipientGroup = 'elderly' | 'children' | 'community' | 'temple' | 'other';
 export type SaleMode = 'sell' | 'donate' | 'sell_then_donate';
 
 export interface User {
@@ -21,9 +32,18 @@ export interface User {
   distribution_mode: 'self_use' | 'redistribute' | null;
   donation_suspended: boolean;
   trusted_proof_count: number;
-  org_status: 'none' | 'pending' | 'approved' | 'rejected' | 'needs_more_info';
+  org_status: OrgStatus;
   org_reject_reason: string | null;
   org_name: string | null;
+  application_kind: ApplicationKind | null;
+  draft_step: number | null;
+  contact_email: string | null;
+  purpose_th: string | null;
+  recipient_groups: string[];
+  requested_fields: string[];
+  donor_terms_version: string | null;
+  donor_terms_accepted_at: string | null;
+  org_type: string | null;
   donation_weekly_cap_kg: number | null;
   donation_remaining_kg: number | null;
   line_id: string | null;
@@ -41,27 +61,78 @@ export interface OrgApplicationDoc {
   original_name: string;
   mime: string;
   size_bytes: number;
+  doc_category?: DocCategory | string;
   created_at: string;
+}
+
+export interface OrgReviewLog {
+  id: number;
+  admin_id: number;
+  action: string;
+  reason: string | null;
+  checklist?: Record<string, unknown> | null;
+  requested_fields?: string[];
+  created_at: string;
+  application_kind?: ApplicationKind | null;
+}
+
+export interface MyDonorApplication {
+  user: User;
+  documents: OrgApplicationDoc[];
+  documents_by_category: Record<string, OrgApplicationDoc[]>;
+  review_logs: OrgReviewLog[];
+  admin_messages: OrgReviewLog[];
+  sections: {
+    kind: string | null;
+    individual: Record<string, unknown> | null;
+    organization: Record<string, unknown> | null;
+    contact: Record<string, unknown>;
+    beneficiaries: Record<string, unknown>;
+  } | null;
+}
+
+export interface OrgChecklist {
+  name_matches_docs: boolean;
+  location_matches_photos: boolean;
+  docs_not_expired: boolean;
 }
 
 export interface OrgApplication {
   user_id: number;
   name: string;
   phone: string;
-  org_name: string;
-  org_type: string;
-  contact_name: string;
-  contact_title: string;
-  contact_phone: string;
-  org_lat: number;
-  org_lng: number;
-  beneficiary_count: number;
-  distribution_mode: string;
+  application_kind?: ApplicationKind | null;
+  org_name: string | null;
+  org_type: string | null;
+  contact_name: string | null;
+  contact_title: string | null;
+  contact_phone: string | null;
+  contact_email?: string | null;
+  org_lat: number | null;
+  org_lng: number | null;
+  beneficiary_count: number | null;
+  distribution_mode: string | null;
   org_status?: string;
   org_reject_reason?: string | null;
+  requested_fields?: string[];
+  donor_terms_version?: string | null;
   created_at: string;
+  sections?: {
+    kind: string | null;
+    individual: Record<string, unknown> | null;
+    organization: Record<string, unknown> | null;
+    contact: Record<string, unknown>;
+    beneficiaries: Record<string, unknown>;
+  };
   documents: OrgApplicationDoc[];
-  review_logs?: { id: number; admin_id: number; action: string; reason: string | null; created_at: string }[];
+  documents_by_category?: Record<string, OrgApplicationDoc[]>;
+  checklist?: OrgChecklist | Record<string, unknown> | null;
+  review_logs?: OrgReviewLog[];
+}
+
+export interface DonorTermsMeta {
+  version: string;
+  title: string;
 }
 
 export interface Crop {

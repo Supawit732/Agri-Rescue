@@ -73,7 +73,9 @@ function donationEligibility(
   user: User | null,
   lot: MarketLot,
 ): { canDonate: boolean; badge: string | null; reason: string | null } {
-  if (!lot.allow_donation) {
+  const acceptsDonation =
+    lot.sale_mode === 'donate' || (lot.sale_mode === 'sell_then_donate' && lot.donation_opened);
+  if (!acceptsDonation) {
     return { canDonate: false, badge: null, reason: null };
   }
   if (user === null) {

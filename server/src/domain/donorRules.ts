@@ -1,6 +1,6 @@
 export type DonorTier = 'volunteer' | 'trusted_volunteer' | 'verified_org';
 export type DonationAudience = 'verified_org_only' | 'all_donors';
-export type OrgStatus = 'none' | 'pending' | 'approved' | 'rejected' | 'needs_more_info';
+export type OrgStatus = 'none' | 'draft' | 'pending' | 'approved' | 'rejected' | 'needs_more_info';
 
 /** Config for Phase 6.1b — mirrored in docs/DECISIONS.md D019 */
 export const DONOR_CONFIG = {
@@ -33,13 +33,18 @@ export function weeklyCapKg(tier: DonorTier, beneficiaryCount: number | null): n
   return Math.max(0, count * DONOR_CONFIG.verifiedOrgKgPerBeneficiary);
 }
 
-/** Active donation tier — pending/rejected/needs_more_info orgs have no donate rights. */
+/** Active donation tier — draft/pending/rejected/needs_more_info orgs have no donate rights. */
 export function activeDonorTier(input: {
   donor_tier: DonorTier | null;
   org_status: OrgStatus | string | null | undefined;
 }): DonorTier | null {
   const status = input.org_status ?? 'none';
-  if (status === 'pending' || status === 'rejected' || status === 'needs_more_info') {
+  if (
+    status === 'draft' ||
+    status === 'pending' ||
+    status === 'rejected' ||
+    status === 'needs_more_info'
+  ) {
     return null;
   }
   if (input.donor_tier === 'verified_org' && status !== 'approved') {
@@ -59,6 +64,7 @@ export type DonationBlockReason =
   | 'lot_closed'
   | 'not_registered'
   | 'pending_org'
+  | 'draft_org'
   | 'needs_more_info'
   | 'rejected_org'
   | 'suspended'
@@ -73,6 +79,8 @@ export function donationBlockMessage(reason: DonationBlockReason, remainingKg?: 
       return 'ต้องเป็นผู้รับบริจาคที่ลงทะเบียนแล้ว';
     case 'pending_org':
       return 'รอการอนุมัติองค์กร';
+    case 'draft_org':
+      return 'กรุณากรอกคำขอรับบริจาคให้ครบก่อน';
     case 'needs_more_info':
       return 'ต้องส่งเอกสารเพิ่มก่อนขอรับบริจาค';
     case 'rejected_org':
@@ -103,6 +111,9 @@ export function evaluateDonationRequest(input: {
     return { ok: false, reason: 'suspended', message: donationBlockMessage('suspended') };
   }
   const orgStatus = (input.org_status ?? 'none') as OrgStatus;
+  if (orgStatus === 'draft') {
+    return { ok: false, reason: 'draft_org', message: donationBlockMessage('draft_org') };
+  }
   if (orgStatus === 'pending') {
     return { ok: false, reason: 'pending_org', message: donationBlockMessage('pending_org') };
   }

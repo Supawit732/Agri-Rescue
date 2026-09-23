@@ -362,7 +362,9 @@ lotsRouter.patch(
 
       if (body.weight_kg !== undefined) {
         if (body.weight_kg > Number(lot.weight_kg) + 1e-9) {
-          throw new HttpError(400, 'VALIDATION', 'น้ำหนักลดได้เท่านั้น');
+          throw new HttpError(400, 'VALIDATION', 'น้ำหนักลดได้เท่านั้น', {
+            weight_kg: 'น้ำหนักลดได้เท่านั้น — ห้ามเพิ่มน้ำหนักหลังลงประกาศ',
+          });
         }
         noteChange('weight_kg', lot.weight_kg, body.weight_kg);
         updates.weight_kg = body.weight_kg;
@@ -429,7 +431,10 @@ lotsRouter.patch(
             ? (await resolveMarketPrice(Number(lot.crop_id))).price_per_kg
             : Number(lot.market_price_snapshot);
         if (nextStart === null || nextFloor === null) {
-          throw new HttpError(400, 'VALIDATION', 'กรุณาระบุราคาเริ่มและราคาต่ำสุด');
+          throw new HttpError(400, 'VALIDATION', 'กรุณาระบุราคาเริ่มและราคาต่ำสุด', {
+            start_price_per_kg: 'กรุณาระบุราคาเริ่ม',
+            floor_price_per_kg: 'กรุณาระบุราคาต่ำสุด',
+          });
         }
         assertValidPrices(marketPrice, nextStart, nextFloor);
         if (body.start_price_per_kg !== undefined || body.sale_mode !== undefined) {
@@ -454,10 +459,14 @@ lotsRouter.patch(
         const newRipe = body.ripeness;
         if (newRipe < oldRipe) {
           if (body.confirm_ripeness_photo !== true) {
-            throw new HttpError(400, 'VALIDATION', 'ลดระดับความสุกต้องยืนยันด้วยรูปที่ประเมินแล้ว');
+            throw new HttpError(400, 'VALIDATION', 'ลดระดับความสุกต้องยืนยันด้วยรูปที่ประเมินแล้ว', {
+              ripeness: 'ลดความสุกต้องถ่าย/อัปโหลดรูปใหม่แล้วให้ AI ประเมินก่อน',
+            });
           }
           if (body.ai_ripeness === undefined || body.ai_ripeness !== newRipe) {
-            throw new HttpError(400, 'VALIDATION', 'ค่าความสุกต้องตรงกับผลการประเมินจากรูป');
+            throw new HttpError(400, 'VALIDATION', 'ค่าความสุกต้องตรงกับผลการประเมินจากรูป', {
+              ripeness: 'ค่าความสุกต้องตรงกับผลการประเมินจากรูปใหม่',
+            });
           }
           const weather = await fetchWeather(Number(lot.plot_lat), Number(lot.plot_lng));
           const shelfHours = predictShelfHours(
@@ -525,7 +534,11 @@ function resolveCreatePrices(input: {
       (input.start !== undefined && input.start !== null && input.start > 0) ||
       (input.floor !== undefined && input.floor !== null && input.floor > 0)
     ) {
-      throw new HttpError(400, 'VALIDATION', 'โหมดบริจาคต้องไม่มีราคาซื้อ');
+      throw new HttpError(400, 'VALIDATION', 'โหมดบริจาคต้องไม่มีราคาซื้อ', {
+        sale_mode: 'โหมดบริจาคต้องไม่มีราคาซื้อ',
+        start_price_per_kg: 'โหมดบริจาคต้องเว้นราคาเริ่ม',
+        floor_price_per_kg: 'โหมดบริจาคต้องเว้นราคาต่ำสุด',
+      });
     }
     return { start: null, floor: null };
   }
@@ -543,7 +556,16 @@ function assertValidPrices(marketPricePerKg: number, start: number, floor: numbe
     floorPricePerKg: floor,
   });
   if (!result.ok) {
-    throw new HttpError(400, result.error.toUpperCase(), result.message);
+    const fields: Record<string, string> = {};
+    if (result.error === 'start_above_market') {
+      fields.start_price_per_kg = result.message;
+    } else if (result.error === 'floor_above_start') {
+      fields.floor_price_per_kg = result.message;
+    } else {
+      fields.floor_price_per_kg = result.message;
+      fields.sale_mode = 'ราคาต่ำเกินไป — ลองโหมดบริจาค';
+    }
+    throw new HttpError(400, result.error.toUpperCase(), result.message, fields);
   }
 }
 

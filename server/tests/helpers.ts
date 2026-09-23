@@ -16,6 +16,12 @@ export interface PublicUser {
   is_admin: boolean;
   buyer_type: 'vendor' | 'shop' | 'charity' | null;
   charity_approved: boolean;
+  org_status?: string;
+  application_kind?: string | null;
+  draft_step?: number | null;
+  donor_tier?: string | null;
+  requested_fields?: string[];
+  donor_terms_version?: string | null;
   line_id: string | null;
   lat: number | null;
   lng: number | null;

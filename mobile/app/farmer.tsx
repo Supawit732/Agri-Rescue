@@ -5,6 +5,7 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { ApiError } from '../src/api/client';
 import { AiPhotoInput } from '../src/components/AiPhotoInput';
+import { ChipGroup } from '../src/components/form';
 import {
   Badge,
   Body,
@@ -266,6 +267,7 @@ function NewLotForm({
   const [estimateError, setEstimateError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [assessing, setAssessing] = useState(false);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [aiResult, setAiResult] = useState<
@@ -505,6 +507,11 @@ function NewLotForm({
 
   const onChangeSaleMode = (next: SaleMode): void => {
     setSaleMode(next);
+    setFieldErrors((prev) => {
+      const cleared = { ...prev };
+      delete cleared.sale_mode;
+      return cleared;
+    });
     if (modeHasPrice(next) && !pricesSeeded && estimate !== null) {
       setStartPrice(String(estimate.suggested_start_price_per_kg));
       setFloorPrice(String(estimate.suggested_floor_price_per_kg));
@@ -514,16 +521,25 @@ function NewLotForm({
 
   const onSubmit = async (): Promise<void> => {
     setSubmitError(null);
+    setFieldErrors({});
+    const nextErrors: Record<string, string> = {};
     if (plot === undefined || cropId === 0) {
-      setSubmitError('กรุณาเลือกแปลงและพืช');
-      return;
+      nextErrors.crop_id = 'กรุณาเลือกแปลงและพืช';
     }
     if (!(weightNum > 0)) {
-      setSubmitError('กรุณากรอกน้ำหนักให้ถูกต้อง');
-      return;
+      nextErrors.weight_kg = 'กรุณากรอกน้ำหนักให้ถูกต้อง (มากกว่า 0)';
     }
-    if (modeHasPrice(saleMode) && (!(startNum > 0) || !(floorNum > 0))) {
-      setSubmitError('กรุณากรอกราคาเริ่มและราคาต่ำสุด');
+    if (modeHasPrice(saleMode)) {
+      if (!(startNum > 0)) {
+        nextErrors.start_price_per_kg = 'กรุณากรอกราคาเริ่ม';
+      }
+      if (!(floorNum > 0)) {
+        nextErrors.floor_price_per_kg = 'กรุณากรอกราคาต่ำสุด';
+      }
+    }
+    if (Object.keys(nextErrors).length > 0) {
+      setFieldErrors(nextErrors);
+      setSubmitError('กรุณาแก้ช่องที่ผิด');
       return;
     }
     setSubmitting(true);
@@ -533,6 +549,7 @@ function NewLotForm({
         : { start_price_per_kg: null, floor_price_per_kg: null };
       const audience = modeHasDonation(saleMode) ? donationAudience : undefined;
       if (isEditing && editingLot !== null) {
+        const loweringRipeness = ripeness < editingLot.ripeness;
         await api.patchLot(editingLot.id, {
           weight_kg: weightNum,
           grade,
@@ -541,6 +558,7 @@ function NewLotForm({
           donation_audience: audience,
           ...priceFields,
           ...(aiResult !== null ? { ai_ripeness: aiResult.ripeness } : {}),
+          ...(loweringRipeness ? { confirm_ripeness_photo: aiResult !== null } : {}),
         });
       } else {
         await api.createLot({
@@ -559,7 +577,14 @@ function NewLotForm({
       }
       onCreated();
     } catch (err) {
-      setSubmitError(err instanceof ApiError ? err.message : isEditing ? 'แก้ไขล็อตไม่สำเร็จ' : 'ลงประกาศไม่สำเร็จ');
+      if (err instanceof ApiError) {
+        if (err.fields !== undefined) {
+          setFieldErrors(err.fields);
+        }
+        setSubmitError(err.message);
+      } else {
+        setSubmitError(isEditing ? 'แก้ไขล็อตไม่สำเร็จ' : 'ลงประกาศไม่สำเร็จ');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -610,22 +635,55 @@ function NewLotForm({
       <Field
         label="น้ำหนัก (กก.)"
         value={weight}
-        onChangeText={setWeight}
+        onChangeText={(text) => {
+          setWeight(text);
+          const n = Number(text);
+          setFieldErrors((prev) => {
+            const next = { ...prev };
+            if (!(n > 0)) {
+              next.weight_kg = 'กรุณากรอกน้ำหนักให้ถูกต้อง (มากกว่า 0)';
+            } else {
+              delete next.weight_kg;
+            }
+            return next;
+          });
+        }}
+        onBlur={() => {
+          const n = Number(weight);
+          setFieldErrors((prev) => {
+            const next = { ...prev };
+            if (!(n > 0)) {
+              next.weight_kg = 'กรุณากรอกน้ำหนักให้ถูกต้อง (มากกว่า 0)';
+            } else {
+              delete next.weight_kg;
+            }
+            return next;
+          });
+        }}
+        error={fieldErrors.weight_kg}
         keyboardType="numeric"
         placeholder="เช่น 50"
       />
+      {fieldErrors.crop_id !== undefined ? (
+        <Text style={styles.previewError}>{fieldErrors.crop_id}</Text>
+      ) : null}
 
-      <SectionTitle>ความสุก</SectionTitle>
-      <View style={styles.row}>
-        {RIPENESS_LABELS.map((label, index) => (
-          <Chip
-            key={label}
-            label={label}
-            selected={ripeness === index}
-            onPress={() => applyRipeness(index, false)}
-          />
-        ))}
-      </View>
+      <ChipGroup
+        label="ความสุก"
+        name="ripeness"
+        options={RIPENESS_LABELS.map((label, index) => ({ key: String(index), label }))}
+        value={String(ripeness)}
+        onChange={(next) => {
+          const value = Number(Array.isArray(next) ? next[0] : next);
+          applyRipeness(value, false);
+          setFieldErrors((prev) => {
+            const cleared = { ...prev };
+            delete cleared.ripeness;
+            return cleared;
+          });
+        }}
+        error={fieldErrors.ripeness}
+      />
       <AiPhotoInput
         previewUri={photoPreview}
         assessing={assessing}
@@ -665,17 +723,17 @@ function NewLotForm({
         ))}
       </View>
 
-      <SectionTitle>โหมดขาย</SectionTitle>
-      <View style={styles.row}>
-        {SALE_MODE_OPTIONS.map((option) => (
-          <Chip
-            key={option.key}
-            label={option.label}
-            selected={saleMode === option.key}
-            onPress={() => onChangeSaleMode(option.key)}
-          />
-        ))}
-      </View>
+      <ChipGroup
+        label="โหมดขาย"
+        name="sale_mode"
+        options={SALE_MODE_OPTIONS}
+        value={saleMode}
+        onChange={(next) => {
+          const value = (Array.isArray(next) ? next[0] : next) as SaleMode;
+          onChangeSaleMode(value);
+        }}
+        error={fieldErrors.sale_mode}
+      />
 
       {modeHasDonation(saleMode) ? (
         <>
@@ -717,7 +775,25 @@ function NewLotForm({
             onChangeText={(text) => {
               setStartPrice(text);
               setPricesSeeded(true);
+              setFieldErrors((prev) => {
+                const cleared = { ...prev };
+                delete cleared.start_price_per_kg;
+                return cleared;
+              });
             }}
+            onBlur={() => {
+              const n = Number(startPrice);
+              setFieldErrors((prev) => {
+                const next = { ...prev };
+                if (!(n > 0)) {
+                  next.start_price_per_kg = 'กรุณากรอกราคาเริ่ม';
+                } else {
+                  delete next.start_price_per_kg;
+                }
+                return next;
+              });
+            }}
+            error={fieldErrors.start_price_per_kg}
             keyboardType="numeric"
             placeholder="แนะนำจากตลาด"
           />
@@ -727,7 +803,25 @@ function NewLotForm({
             onChangeText={(text) => {
               setFloorPrice(text);
               setPricesSeeded(true);
+              setFieldErrors((prev) => {
+                const cleared = { ...prev };
+                delete cleared.floor_price_per_kg;
+                return cleared;
+              });
             }}
+            onBlur={() => {
+              const n = Number(floorPrice);
+              setFieldErrors((prev) => {
+                const next = { ...prev };
+                if (!(n > 0)) {
+                  next.floor_price_per_kg = 'กรุณากรอกราคาต่ำสุด';
+                } else {
+                  delete next.floor_price_per_kg;
+                }
+                return next;
+              });
+            }}
+            error={fieldErrors.floor_price_per_kg}
             keyboardType="numeric"
             placeholder="แนะนำจากราคาเริ่ม"
           />

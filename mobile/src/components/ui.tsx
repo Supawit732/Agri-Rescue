@@ -195,11 +195,29 @@ export function SecondaryButton({
   );
 }
 
-export function Field({ label, ...rest }: { label: string } & TextInputProps): React.ReactElement {
+export function Field({
+  label,
+  error,
+  ...rest
+}: { label: string; error?: string | null } & TextInputProps): React.ReactElement {
+  const hasError = error !== null && error !== undefined && error !== '';
   return (
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
-      <TextInput style={styles.input} placeholderTextColor={C.mute} {...rest} />
+      <TextInput
+        style={[styles.input, hasError ? styles.inputError : null]}
+        placeholderTextColor={C.mute}
+        accessibilityState={hasError ? { selected: false } : undefined}
+        {...rest}
+      />
+      {hasError ? (
+        <View style={styles.fieldErrorRow}>
+          <View style={styles.fieldErrorIcon}>
+            <Text style={styles.fieldErrorIconText}>!</Text>
+          </View>
+          <Text style={styles.fieldErrorText}>{error}</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -285,8 +303,18 @@ export function DataState<T>({
   return <>{children(data)}</>;
 }
 
-export function Body({ children }: { children: React.ReactNode }): React.ReactElement {
-  return <ScrollView contentContainerStyle={styles.body}>{children}</ScrollView>;
+export function Body({
+  children,
+  scrollRef,
+}: {
+  children: React.ReactNode;
+  scrollRef?: React.RefObject<ScrollView | null>;
+}): React.ReactElement {
+  return (
+    <ScrollView ref={scrollRef} contentContainerStyle={styles.body}>
+      {children}
+    </ScrollView>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -379,6 +407,19 @@ const styles = StyleSheet.create({
     color: C.ink,
     fontSize: 16,
   },
+  inputError: { borderColor: C.chili, borderWidth: 1.5 },
+  fieldErrorRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 4 },
+  fieldErrorIcon: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: C.chili,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  fieldErrorIconText: { color: C.white, fontSize: 11, fontWeight: '800' },
+  fieldErrorText: { color: C.chili, flex: 1, fontSize: 13 },
   badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, alignSelf: 'flex-start' },
   badgeText: { fontWeight: '700', fontSize: 13 },
   circle: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },

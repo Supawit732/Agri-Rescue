@@ -1,6 +1,7 @@
-import { Link } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
+import { DonorIntroModal, type DonorIntroChoice } from '../components/DonorIntroModal';
 import { ApiError } from '../src/api/client';
 import { LocationPicker, type LatLng } from '../src/components/LocationPicker';
 import { Body, Chip, Field, PrimaryButton, Screen, SectionTitle } from '../src/components/ui';
@@ -11,11 +12,12 @@ import type { BuyerType } from '../src/api/types';
 const buyerTypes: { key: BuyerType; label: string }[] = [
   { key: 'vendor', label: 'รถเร่' },
   { key: 'shop', label: 'ร้านค้า' },
-  { key: 'charity', label: 'สงเคราะห์' },
+  { key: 'charity', label: 'รับบริจาค' },
 ];
 
 export default function RegisterScreen(): React.ReactElement {
   const { register } = useAuth();
+  const router = useRouter();
   const [canSell, setCanSell] = useState(true);
   const [canBuy, setCanBuy] = useState(false);
   const [name, setName] = useState('');
@@ -26,6 +28,8 @@ export default function RegisterScreen(): React.ReactElement {
   const [coords, setCoords] = useState<LatLng | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [introVisible, setIntroVisible] = useState(false);
+  const [donorIntent, setDonorIntent] = useState<'now' | 'later' | null>(null);
 
   const canSubmit =
     name.trim().length > 0 &&
@@ -33,6 +37,28 @@ export default function RegisterScreen(): React.ReactElement {
     password.length >= 8 &&
     coords !== null &&
     (canSell || canBuy);
+
+  const selectBuyerType = (key: BuyerType): void => {
+    if (key === 'charity') {
+      setIntroVisible(true);
+      return;
+    }
+    setBuyerType(key);
+    setDonorIntent(null);
+  };
+
+  const onIntroChoice = (choice: DonorIntroChoice): void => {
+    setIntroVisible(false);
+    if (choice === 'cancel') {
+      if (buyerType === 'charity') {
+        setBuyerType('vendor');
+      }
+      setDonorIntent(null);
+      return;
+    }
+    setBuyerType('charity');
+    setDonorIntent(choice);
+  };
 
   const onSubmit = async (): Promise<void> => {
     if (coords === null) {
@@ -57,6 +83,9 @@ export default function RegisterScreen(): React.ReactElement {
         lat: coords.lat,
         lng: coords.lng,
       });
+      if (canBuy && buyerType === 'charity' && donorIntent === 'now') {
+        router.replace('/donor-apply');
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'สมัครสมาชิกไม่สำเร็จ');
     } finally {
@@ -66,6 +95,7 @@ export default function RegisterScreen(): React.ReactElement {
 
   return (
     <Screen>
+      <DonorIntroModal visible={introVisible} onChoice={onIntroChoice} />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <Body>
           <Text style={styles.brand}>สมัครสมาชิก</Text>
@@ -84,12 +114,16 @@ export default function RegisterScreen(): React.ReactElement {
                     key={entry.key}
                     label={entry.label}
                     selected={buyerType === entry.key}
-                    onPress={() => setBuyerType(entry.key)}
+                    onPress={() => selectBuyerType(entry.key)}
                   />
                 ))}
               </View>
               {buyerType === 'charity' ? (
-                <Text style={styles.hint}>ประเภทสงเคราะห์ต้องรอผู้ดูแลอนุมัติก่อนรับบริจาค</Text>
+                <Text style={styles.hint}>
+                  {donorIntent === 'later'
+                    ? 'จะบันทึกเป็นร่าง — กรอกคำขอรับบริจาคทีหลังจากโปรไฟล์'
+                    : 'หลังสมัครจะไปกรอกคำขอรับบริจาค'}
+                </Text>
               ) : null}
             </>
           ) : null}
@@ -111,17 +145,12 @@ export default function RegisterScreen(): React.ReactElement {
           />
           <LocationPicker value={coords} onChange={setCoords} label="ตำแหน่ง" />
           {error !== null ? <Text style={styles.error}>{error}</Text> : null}
-          <PrimaryButton
-            label="สมัครสมาชิก"
-            onPress={onSubmit}
-            loading={submitting}
-            disabled={!canSubmit}
-          />
+          <PrimaryButton label="สมัครสมาชิก" onPress={onSubmit} loading={submitting} disabled={!canSubmit} />
           <View style={styles.footer}>
             <Text style={styles.footerText}>มีบัญชีแล้ว? </Text>
-            <Link href="/login" style={styles.link}>
+            <Text style={styles.link} onPress={() => router.push('/login')}>
               เข้าสู่ระบบ
-            </Link>
+            </Text>
           </View>
         </Body>
       </KeyboardAvoidingView>

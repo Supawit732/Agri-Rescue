@@ -216,7 +216,9 @@ adminDitRouter.post(
         ? null
         : String(crop.dit_product_code);
     if (productCode === null || productCode === '') {
-      throw new HttpError(400, 'BAD_REQUEST', 'ยังไม่มีรหัสสินค้า DIT สำหรับใส่ตัวแปลง');
+      throw new HttpError(400, 'BAD_REQUEST', 'ยังไม่มีรหัสสินค้า DIT สำหรับใส่ตัวแปลง', {
+        unit_to_kg: 'ยังไม่มีรหัสสินค้า — จับคู่ก่อนแล้วค่อยใส่ตัวแปลง',
+      });
     }
     await pool.query(`UPDATE crops SET dit_unit_to_kg = ?, dit_price_status = NULL WHERE id = ?`, [
       body.unit_to_kg,

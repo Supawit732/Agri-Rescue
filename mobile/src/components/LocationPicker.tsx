@@ -17,10 +17,13 @@ export function LocationPicker({
   value,
   onChange,
   label = 'ตำแหน่ง',
+  error: externalError = null,
 }: {
   value: LatLng | null;
   onChange: (coords: LatLng | null) => void;
   label?: string;
+  /** Parent form validation error (shown with icon; not color-only). */
+  error?: string | null;
 }): React.ReactElement {
   const [mapsLink, setMapsLink] = useState('');
   const [placeName, setPlaceName] = useState<string | null>(null);
@@ -209,7 +212,22 @@ export function LocationPicker({
         </View>
       ) : null}
 
-      {error !== null ? <Text style={styles.error}>{error}</Text> : null}
+      {error !== null ? (
+        <View style={styles.errorRow}>
+          <View style={styles.errorIcon}>
+            <Text style={styles.errorIconText}>!</Text>
+          </View>
+          <Text style={styles.error}>{error}</Text>
+        </View>
+      ) : null}
+      {externalError !== null && externalError !== '' ? (
+        <View style={[styles.errorRow, error !== null ? { marginTop: 4 } : null]}>
+          <View style={styles.errorIcon}>
+            <Text style={styles.errorIconText}>!</Text>
+          </View>
+          <Text style={styles.error}>{externalError}</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -236,5 +254,16 @@ const styles = StyleSheet.create({
   manualToggleText: { color: C.leaf, fontWeight: '700', fontSize: 14 },
   manualRow: { marginTop: 4, gap: 0 },
   half: {},
-  error: { color: C.chili, marginTop: 8 },
+  errorRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 8 },
+  errorIcon: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: C.chili,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  errorIconText: { color: C.white, fontSize: 11, fontWeight: '800' },
+  error: { color: C.chili, flex: 1, fontSize: 13 },
 });

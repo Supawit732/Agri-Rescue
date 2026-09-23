@@ -80,6 +80,15 @@ interface UserRow extends RowDataPacket {
   org_status: OrgStatus | null;
   org_reject_reason: string | null;
   org_name: string | null;
+  application_kind: 'individual' | 'organization' | null;
+  draft_step: number | null;
+  contact_email: string | null;
+  purpose_th: string | null;
+  recipient_groups_json: string | null;
+  requested_fields_json: string | null;
+  donor_terms_version: string | null;
+  donor_terms_accepted_at: string | Date | null;
+  org_type: string | null;
   password_hash?: string;
 }
 
@@ -101,11 +110,35 @@ export interface PublicUser {
   org_status: OrgStatus;
   org_reject_reason: string | null;
   org_name: string | null;
+  application_kind: 'individual' | 'organization' | null;
+  draft_step: number | null;
+  contact_email: string | null;
+  purpose_th: string | null;
+  recipient_groups: string[];
+  requested_fields: string[];
+  donor_terms_version: string | null;
+  donor_terms_accepted_at: string | null;
+  org_type: string | null;
   donation_weekly_cap_kg: number | null;
   donation_remaining_kg: number | null;
   line_id: string | null;
   lat: number | null;
   lng: number | null;
+}
+
+function parseJsonStringArray(raw: unknown): string[] {
+  if (raw === null || raw === undefined || raw === '') {
+    return [];
+  }
+  if (Array.isArray(raw)) {
+    return raw.map(String);
+  }
+  try {
+    const parsed = JSON.parse(String(raw)) as unknown;
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
 }
 
 function asBool(value: number | boolean | null | undefined): boolean {
@@ -118,6 +151,7 @@ export function toPublicUser(row: UserRow): PublicUser {
   const active = activeDonorTier({ donor_tier: donorTier, org_status: orgStatus });
   const capKg =
     active === null ? null : weeklyCapKg(active, row.beneficiary_count === null || row.beneficiary_count === undefined ? null : Number(row.beneficiary_count));
+  const termsAt = row.donor_terms_accepted_at;
   return {
     id: Number(row.id),
     name: row.name,
@@ -136,6 +170,16 @@ export function toPublicUser(row: UserRow): PublicUser {
     org_status: orgStatus,
     org_reject_reason: row.org_reject_reason ?? null,
     org_name: row.org_name ?? null,
+    application_kind: row.application_kind ?? null,
+    draft_step: row.draft_step === null || row.draft_step === undefined ? null : Number(row.draft_step),
+    contact_email: row.contact_email ?? null,
+    purpose_th: row.purpose_th ?? null,
+    recipient_groups: parseJsonStringArray(row.recipient_groups_json),
+    requested_fields: parseJsonStringArray(row.requested_fields_json),
+    donor_terms_version: row.donor_terms_version ?? null,
+    donor_terms_accepted_at:
+      termsAt === null || termsAt === undefined ? null : new Date(termsAt as string).toISOString(),
+    org_type: row.org_type ?? null,
     donation_weekly_cap_kg: capKg,
     donation_remaining_kg: capKg,
     line_id: row.line_id,
@@ -148,7 +192,10 @@ const USER_SELECT = `SELECT u.id, u.name, u.phone, u.role, u.can_sell, u.can_buy
                             u.line_id, u.lat, u.lng,
                             bp.buyer_type, bp.charity_approved, bp.donor_tier, bp.beneficiary_count,
                             bp.distribution_mode, bp.donation_suspended, bp.trusted_proof_count,
-                            bp.org_status, bp.org_reject_reason, bp.org_name
+                            bp.org_status, bp.org_reject_reason, bp.org_name,
+                            bp.application_kind, bp.draft_step, bp.contact_email, bp.purpose_th,
+                            bp.recipient_groups_json, bp.requested_fields_json,
+                            bp.donor_terms_version, bp.donor_terms_accepted_at, bp.org_type
                      FROM users u
                      LEFT JOIN buyer_profiles bp ON bp.user_id = u.id`;
 
@@ -226,16 +273,14 @@ authRouter.post(
         const isCharity = body.buyer_type === 'charity';
         await connection.query(
           `INSERT INTO buyer_profiles (
-             user_id, buyer_type, charity_approved, donor_tier, org_status, org_name, distribution_mode, beneficiary_count
-           ) VALUES (?, ?, ?, NULL, ?, ?, ?, ?)`,
+             user_id, buyer_type, charity_approved, donor_tier, org_status, draft_step
+           ) VALUES (?, ?, ?, NULL, ?, ?)`,
           [
             result.insertId,
             body.buyer_type,
             charityApproved,
-            isCharity ? 'pending' : 'none',
-            isCharity ? 'องค์กรรอเอกสาร' : null,
-            isCharity ? 'redistribute' : null,
-            isCharity ? 100 : null,
+            isCharity ? 'draft' : 'none',
+            isCharity ? 0 : null,
           ],
         );
       }
@@ -263,7 +308,10 @@ authRouter.post(
               u.line_id, u.lat, u.lng, u.password_hash,
               bp.buyer_type, bp.charity_approved, bp.donor_tier, bp.beneficiary_count,
               bp.distribution_mode, bp.donation_suspended, bp.trusted_proof_count,
-              bp.org_status, bp.org_reject_reason, bp.org_name
+              bp.org_status, bp.org_reject_reason, bp.org_name,
+              bp.application_kind, bp.draft_step, bp.contact_email, bp.purpose_th,
+              bp.recipient_groups_json, bp.requested_fields_json,
+              bp.donor_terms_version, bp.donor_terms_accepted_at, bp.org_type
        FROM users u
        LEFT JOIN buyer_profiles bp ON bp.user_id = u.id
        WHERE u.phone = ?`,
@@ -323,9 +371,11 @@ authRouter.patch(
             throw new HttpError(400, 'VALIDATION', 'กรุณาระบุประเภทผู้ซื้อ');
           }
           const approved = body.buyer_type === 'charity' ? 0 : 1;
+          const isCharity = body.buyer_type === 'charity';
           await connection.query(
-            `INSERT INTO buyer_profiles (user_id, buyer_type, charity_approved) VALUES (?, ?, ?)`,
-            [userId, body.buyer_type, approved],
+            `INSERT INTO buyer_profiles (user_id, buyer_type, charity_approved, org_status, draft_step)
+             VALUES (?, ?, ?, ?, ?)`,
+            [userId, body.buyer_type, approved, isCharity ? 'draft' : 'none', isCharity ? 0 : null],
           );
         } else if (body.buyer_type !== undefined && body.buyer_type !== current.buyer_type) {
           throw new HttpError(400, 'VALIDATION', 'เปลี่ยนประเภทผู้ซื้อไม่ได้ กรุณาติดต่อผู้ดูแล');

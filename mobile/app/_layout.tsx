@@ -11,7 +11,7 @@ export const unstable_settings = {
   initialRouteName: 'index',
 };
 
-const publicRoutes = new Set(['login', 'register']);
+const publicRoutes = new Set(['login', 'register', 'terms']);
 
 function homeFor(user: User, mode: AppMode): string {
   if (user.is_admin && !user.can_sell && !user.can_buy) {
@@ -62,6 +62,10 @@ function AuthGate(): React.ReactElement {
     const home = homeFor(user, mode);
     const routeName = String(current);
     if (onPublic || routeName === 'index' || routeName === '') {
+      // Logged-in users may still open terms
+      if (routeName === 'terms') {
+        return;
+      }
       router.replace(home as never);
       return;
     }
@@ -86,7 +90,7 @@ function AuthGate(): React.ReactElement {
       return;
     }
 
-    const allowed = new Set(['farmer', 'buyer', 'impact', 'profile', 'admin']);
+    const allowed = new Set(['farmer', 'buyer', 'impact', 'profile', 'admin', 'donor-apply', 'terms']);
     if (!allowed.has(current)) {
       router.replace(home as never);
     }
@@ -109,6 +113,8 @@ function AuthGate(): React.ReactElement {
       <Stack.Screen name="buyer" />
       <Stack.Screen name="profile" />
       <Stack.Screen name="admin" />
+      <Stack.Screen name="donor-apply" />
+      <Stack.Screen name="terms/donor" />
       <Stack.Screen name="driver" />
       <Stack.Screen name="coordinator" />
       <Stack.Screen name="impact" />

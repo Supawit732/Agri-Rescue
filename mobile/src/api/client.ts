@@ -3,12 +3,26 @@ import { API_BASE_URL } from './config';
 export class ApiError extends Error {
   code: string;
   status: number;
+  fields?: Record<string, string>;
+  details?: Record<string, unknown>;
 
-  constructor(status: number, code: string, message: string) {
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    fields?: Record<string, string>,
+    details?: Record<string, unknown>,
+  ) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.code = code;
+    if (fields !== undefined) {
+      this.fields = fields;
+    }
+    if (details !== undefined) {
+      this.details = details;
+    }
   }
 }
 
@@ -67,10 +81,19 @@ export async function apiRequest<T>({ method = 'GET', path, token, body }: Reque
   }
 
   if (!response.ok) {
-    const errorBody = payload as { error?: { code?: string; message?: string } } | null;
+    const errorBody = payload as {
+      error?: {
+        code?: string;
+        message?: string;
+        fields?: Record<string, string>;
+        details?: Record<string, unknown>;
+      };
+    } | null;
     const code = errorBody?.error?.code ?? 'ERROR';
     const message = errorBody?.error?.message ?? 'เกิดข้อผิดพลาด กรุณาลองใหม่';
-    throw new ApiError(response.status, code, message);
+    const fields = errorBody?.error?.fields;
+    const details = errorBody?.error?.details;
+    throw new ApiError(response.status, code, message, fields, details);
   }
 
   return payload as T;

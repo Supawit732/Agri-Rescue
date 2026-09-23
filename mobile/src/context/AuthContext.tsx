@@ -14,14 +14,17 @@ import type {
   DitSuggestion,
   DitSyncJob,
   DonationAudience,
+  DonorTermsMeta,
   Driver,
   EstimateResponse,
   Grade,
   ImpactSummary,
   MarketLot,
+  MyDonorApplication,
   MyLot,
   Order,
   OrgApplication,
+  OrgChecklist,
   Plot,
   SaleMode,
   Stop,
@@ -103,12 +106,18 @@ interface Api {
     extras?: { distribution_place?: string; distribution_at?: string },
   ) => Promise<{ order: Order }>;
   becomeVolunteer: () => Promise<AuthResponse>;
+  getDonorTerms: () => Promise<DonorTermsMeta>;
+  getMyDonorApplication: () => Promise<MyDonorApplication>;
+  saveDonorDraft: (input: Record<string, unknown>) => Promise<AuthResponse>;
   applyOrg: (input: Record<string, unknown>) => Promise<AuthResponse>;
+  withdrawDonorApplication: (reason?: string) => Promise<AuthResponse>;
+  switchDonorApplicationKind: (application_kind: 'individual' | 'organization') => Promise<AuthResponse>;
   listOrgApplications: () => Promise<OrgApplication[]>;
   approveOrg: (userId: number) => Promise<User>;
   rejectOrg: (userId: number, reason: string) => Promise<User>;
-  requestMoreOrgInfo: (userId: number, reason: string) => Promise<User>;
-  addOrgDocuments: (documents: { filename: string; mime: string; base64: string }[]) => Promise<AuthResponse>;
+  requestMoreOrgInfo: (userId: number, reason: string, requested_fields?: string[]) => Promise<User>;
+  saveOrgChecklist: (userId: number, checklist: OrgChecklist) => Promise<{ ok: boolean; checklist: OrgChecklist }>;
+  addOrgDocuments: (documents: { filename: string; mime: string; base64: string; doc_category?: string }[]) => Promise<AuthResponse>;
   resubmitOrg: () => Promise<AuthResponse>;
   unlockDonor: (userId: number) => Promise<User>;
   listDitCrops: () => Promise<DitCropsResponse>;
@@ -307,8 +316,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
         setUser(res.user);
         return { token: token ?? '', user: res.user };
       },
+      getDonorTerms: () => apiRequest<DonorTermsMeta>({ method: 'GET', path: '/api/donors/terms' }),
+      getMyDonorApplication: () => authed<MyDonorApplication>('GET', '/api/donors/org-applications/mine'),
+      saveDonorDraft: async (input) => {
+        const res = await authed<{ user: User }>('POST', '/api/donors/org-applications/draft', input);
+        setUser(res.user);
+        return { token: token ?? '', user: res.user };
+      },
       applyOrg: async (input) => {
         const res = await authed<{ user: User }>('POST', '/api/donors/org-applications', input);
+        setUser(res.user);
+        return { token: token ?? '', user: res.user };
+      },
+      withdrawDonorApplication: async (reason) => {
+        const res = await authed<{ user: User }>('POST', '/api/donors/org-applications/withdraw', {
+          ...(reason !== undefined ? { reason } : {}),
+        });
+        setUser(res.user);
+        return { token: token ?? '', user: res.user };
+      },
+      switchDonorApplicationKind: async (application_kind) => {
+        const res = await authed<{ user: User }>('POST', '/api/donors/org-applications/switch-kind', {
+          application_kind,
+        });
         setUser(res.user);
         return { token: token ?? '', user: res.user };
       },
@@ -318,10 +348,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
         authed<{ user: User }>('POST', `/api/donors/admin/org-applications/${userId}/approve`).then((r) => r.user),
       rejectOrg: (userId, reason) =>
         authed<{ user: User }>('POST', `/api/donors/admin/org-applications/${userId}/reject`, { reason }).then((r) => r.user),
-      requestMoreOrgInfo: (userId, reason) =>
-        authed<{ user: User }>('POST', `/api/donors/admin/org-applications/${userId}/needs-more-info`, { reason }).then(
-          (r) => r.user,
-        ),
+      requestMoreOrgInfo: (userId, reason, requested_fields) =>
+        authed<{ user: User }>('POST', `/api/donors/admin/org-applications/${userId}/needs-more-info`, {
+          reason,
+          ...(requested_fields !== undefined ? { requested_fields } : {}),
+        }).then((r) => r.user),
+      saveOrgChecklist: (userId, checklist) =>
+        authed<{ ok: boolean; checklist: OrgChecklist }>('POST', `/api/donors/admin/org-applications/${userId}/checklist`, {
+          checklist,
+        }),
       addOrgDocuments: async (documents) => {
         const res = await authed<{ user: User }>('POST', '/api/donors/org-applications/documents', { documents });
         setUser(res.user);

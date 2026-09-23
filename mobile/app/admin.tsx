@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { ApiError } from '../src/api/client';
+import { API_BASE_URL } from '../src/api/config';
 import {
   Body,
   Card,
@@ -15,10 +16,42 @@ import {
 } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
 import { useApiData } from '../src/hooks/useApiData';
+import {
+  labelApplicationKind,
+  labelDistributionMode,
+  labelOrgStatus,
+  labelOrgType,
+} from '../src/donorLabels';
 import { C } from '../src/theme';
-import type { DitCrop, DitProductSearchHit, DitSyncJob, OrgApplication } from '../src/api/types';
+import type {
+  DitCrop,
+  DitProductSearchHit,
+  DitSyncJob,
+  OrgApplication,
+  OrgChecklist,
+} from '../src/api/types';
+import { loadToken } from '../src/api/storage';
 
 const QUICK_REASONS = ['ขอหนังสือรับรองฉบับล่าสุด', 'เอกสารไม่ชัด', 'ชื่อองค์กรไม่ตรงกับเอกสาร'] as const;
+
+const REQUESTABLE_FIELDS: { key: string; label: string }[] = [
+  { key: 'org_name', label: 'ชื่อองค์กร' },
+  { key: 'org_type', label: 'ประเภทองค์กร' },
+  { key: 'registered_address', label: 'ที่อยู่ตามทะเบียน' },
+  { key: 'contact_name', label: 'ชื่อผู้ติดต่อ' },
+  { key: 'contact_phone', label: 'เบอร์โทร' },
+  { key: 'contact_email', label: 'อีเมล' },
+  { key: 'beneficiary_count', label: 'จำนวนผู้รับ' },
+  { key: 'documents', label: 'เอกสาร' },
+  { key: 'purpose_th', label: 'วัตถุประสงค์' },
+];
+
+const DOC_LABELS: Record<string, string> = {
+  registration_cert: 'หนังสือรับรองจดทะเบียน',
+  community_cert: 'หนังสือรับรองชุมชน',
+  site_photo: 'รูปสถานที่',
+  other: 'อื่น ๆ',
+};
 
 /** "บาท/หวี" → "หวี" for conversion labels. */
 function unitBaseFromDit(unit: string | null): string {
@@ -56,10 +89,34 @@ function OrgApplicationsPanel(): React.ReactElement {
   const [actingId, setActingId] = useState<number | null>(null);
   const [reason, setReason] = useState('');
   const [actionMode, setActionMode] = useState<{ userId: number; kind: 'reject' | 'more' } | null>(null);
+  const [requestedFields, setRequestedFields] = useState<string[]>([]);
+  const [checklists, setChecklists] = useState<Record<number, OrgChecklist>>({});
   const [error, setError] = useState<string | null>(null);
 
   const { data, loading, error: loadError, reload } = useApiData(() => api.listOrgApplications(), [api, refreshKey]);
   const bump = useCallback(() => setRefreshKey((v) => v + 1), []);
+
+  const openDoc = async (docId: number): Promise<void> => {
+    const token = await loadToken();
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/donors/admin/org-docs/${docId}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        setError('เปิดเอกสารไม่สำเร็จ');
+        return;
+      }
+      if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+        const blob = await res.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        await Linking.openURL(objectUrl);
+        return;
+      }
+      setError('เปิดเอกสารได้บนเว็บ — ดาวน์โหลดผ่าน API /api/donors/admin/org-docs/' + docId);
+    } catch {
+      setError('เปิดเอกสารไม่สำเร็จ');
+    }
+  };
 
   const approve = async (userId: number): Promise<void> => {
     setActingId(userId);
@@ -69,6 +126,24 @@ function OrgApplicationsPanel(): React.ReactElement {
       bump();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'อนุมัติไม่สำเร็จ');
+    } finally {
+      setActingId(null);
+    }
+  };
+
+  const saveChecklist = async (userId: number): Promise<void> => {
+    const checklist = checklists[userId] ?? {
+      name_matches_docs: false,
+      location_matches_photos: false,
+      docs_not_expired: false,
+    };
+    setActingId(userId);
+    setError(null);
+    try {
+      await api.saveOrgChecklist(userId, checklist);
+      bump();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'บันทึก checklist ไม่สำเร็จ');
     } finally {
       setActingId(null);
     }
@@ -88,16 +163,28 @@ function OrgApplicationsPanel(): React.ReactElement {
       if (actionMode.kind === 'reject') {
         await api.rejectOrg(actionMode.userId, reason.trim());
       } else {
-        await api.requestMoreOrgInfo(actionMode.userId, reason.trim());
+        await api.requestMoreOrgInfo(actionMode.userId, reason.trim(), requestedFields);
       }
       setActionMode(null);
       setReason('');
+      setRequestedFields([]);
       bump();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'บันทึกไม่สำเร็จ');
     } finally {
       setActingId(null);
     }
+  };
+
+  const toggleCheck = (userId: number, key: keyof OrgChecklist): void => {
+    setChecklists((prev) => {
+      const current = prev[userId] ?? {
+        name_matches_docs: false,
+        location_matches_photos: false,
+        docs_not_expired: false,
+      };
+      return { ...prev, [userId]: { ...current, [key]: !current[key] } };
+    });
   };
 
   return (
@@ -114,103 +201,200 @@ function OrgApplicationsPanel(): React.ReactElement {
       >
         {(apps: OrgApplication[]) => (
           <>
-            {apps.map((entry) => (
-              <Card key={entry.user_id}>
-                <Text style={styles.name}>{entry.org_name}</Text>
-                <Text style={styles.meta}>
-                  สถานะ {entry.org_status ?? 'pending'} · {entry.org_type} · ผู้รับ {entry.beneficiary_count} คน
-                </Text>
-                <Text style={styles.meta}>
-                  ผู้ติดต่อ {entry.contact_name} ({entry.contact_title}) {entry.contact_phone}
-                </Text>
-                <Text style={styles.meta}>
-                  ผู้สมัคร {entry.name} · {entry.phone}
-                </Text>
-                <Text style={styles.meta}>เอกสาร {entry.documents.length} ไฟล์</Text>
-                {entry.documents.map((doc) => (
-                  <Text key={doc.id} style={styles.doc}>
-                    · {doc.original_name} ({Math.round(doc.size_bytes / 1024)} KB)
+            {apps.map((entry) => {
+              const checklist = checklists[entry.user_id] ??
+                (entry.checklist as OrgChecklist | null) ?? {
+                  name_matches_docs: false,
+                  location_matches_photos: false,
+                  docs_not_expired: false,
+                };
+              const byCat = entry.documents_by_category ?? {};
+              return (
+                <Card key={entry.user_id}>
+                  <Text style={styles.name}>{entry.org_name ?? entry.contact_name ?? entry.name}</Text>
+                  <Text style={styles.meta}>
+                    สถานะ {labelOrgStatus(entry.org_status ?? 'pending')} ·{' '}
+                    {labelApplicationKind(entry.application_kind ?? null)} · {labelOrgType(entry.org_type)}
                   </Text>
-                ))}
-                {(entry.review_logs ?? []).length > 0 ? (
-                  <>
-                    <Text style={styles.historyTitle}>ประวัติการตัดสิน</Text>
-                    {(entry.review_logs ?? []).map((log) => (
-                      <Text key={log.id} style={styles.meta}>
-                        · {log.action}
-                        {log.reason ? `: ${log.reason}` : ''} ({new Date(log.created_at).toLocaleString('th-TH')})
-                      </Text>
-                    ))}
-                  </>
-                ) : null}
-                {actionMode?.userId === entry.user_id ? (
-                  <>
-                    <Field
-                      label={actionMode.kind === 'reject' ? 'เหตุผลที่ปฏิเสธ' : 'เหตุผลที่ขอเอกสารเพิ่ม'}
-                      value={reason}
-                      onChangeText={setReason}
+                  <Text style={styles.meta}>
+                    ผู้สมัคร {entry.name} · {entry.phone}
+                  </Text>
+
+                  <Text style={styles.section}>หมวดองค์กร / บุคคล</Text>
+                  {entry.sections?.organization ? (
+                    <Text style={styles.meta}>
+                      ชื่อ {String(entry.sections.organization.org_name ?? '-')} · จดทะเบียน{' '}
+                      {entry.sections.organization.registered === true
+                        ? 'ใช่'
+                        : entry.sections.organization.registered === false
+                          ? 'ไม่'
+                          : '-'}
+                    </Text>
+                  ) : null}
+                  {entry.sections?.individual ? (
+                    <Text style={styles.meta}>
+                      บุคคล {String(entry.sections.individual.contact_name ?? '-')} · วัตถุประสงค์{' '}
+                      {String(entry.sections.individual.purpose_th ?? '-')}
+                    </Text>
+                  ) : null}
+
+                  <Text style={styles.section}>ผู้ติดต่อ</Text>
+                  <Text style={styles.meta}>
+                    {entry.contact_name} ({entry.contact_title ?? '-'}) {entry.contact_phone}
+                    {entry.contact_email ? ` · ${entry.contact_email}` : ''}
+                  </Text>
+
+                  <Text style={styles.section}>ผู้รับประโยชน์</Text>
+                  <Text style={styles.meta}>
+                    จำนวน {entry.beneficiary_count ?? '-'} · รูปแบบ{' '}
+                    {labelDistributionMode(entry.distribution_mode)}
+                  </Text>
+
+                  <Text style={styles.section}>เอกสารตามประเภท</Text>
+                  {Object.keys(DOC_LABELS).map((cat) => {
+                    const docs = byCat[cat] ?? entry.documents.filter((d) => (d.doc_category ?? 'other') === cat);
+                    if (docs.length === 0) {
+                      return null;
+                    }
+                    return (
+                      <View key={cat}>
+                        <Text style={styles.meta}>{DOC_LABELS[cat]}</Text>
+                        {docs.map((doc) => (
+                          <Pressable key={doc.id} onPress={() => void openDoc(doc.id)}>
+                            <Text style={styles.docLink}>
+                              · {doc.original_name} ({Math.round(doc.size_bytes / 1024)} KB) — เปิด
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    );
+                  })}
+
+                  <Text style={styles.section}>Checklist การตรวจ</Text>
+                  {(
+                    [
+                      ['name_matches_docs', 'ชื่อตรงเอกสาร'],
+                      ['location_matches_photos', 'ที่ตั้งตรงรูปสถานที่'],
+                      ['docs_not_expired', 'เอกสารยังไม่หมดอายุ'],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <Chip
+                      key={key}
+                      label={label}
+                      selected={checklist[key]}
+                      onPress={() => toggleCheck(entry.user_id, key)}
                     />
-                    <View style={styles.row}>
-                      {QUICK_REASONS.map((item) => (
-                        <Chip key={item} label={item} selected={reason === item} onPress={() => setReason(item)} />
+                  ))}
+                  <View style={styles.slotWide}>
+                    <SecondaryButton
+                      label="บันทึก checklist"
+                      onPress={() => void saveChecklist(entry.user_id)}
+                      disabled={actingId !== null}
+                    />
+                  </View>
+
+                  {(entry.review_logs ?? []).length > 0 ? (
+                    <>
+                      <Text style={styles.historyTitle}>ประวัติการตัดสิน</Text>
+                      {(entry.review_logs ?? []).map((log) => (
+                        <Text key={log.id} style={styles.meta}>
+                          · {log.action}
+                          {log.reason ? `: ${log.reason}` : ''} ({new Date(log.created_at).toLocaleString('th-TH')})
+                        </Text>
                       ))}
-                    </View>
+                    </>
+                  ) : null}
+
+                  {actionMode?.userId === entry.user_id ? (
+                    <>
+                      <Field
+                        label={actionMode.kind === 'reject' ? 'เหตุผลที่ปฏิเสธ' : 'เหตุผลที่ขอเอกสารเพิ่ม'}
+                        value={reason}
+                        onChangeText={setReason}
+                      />
+                      <View style={styles.row}>
+                        {QUICK_REASONS.map((item) => (
+                          <Chip key={item} label={item} selected={reason === item} onPress={() => setReason(item)} />
+                        ))}
+                      </View>
+                      {actionMode.kind === 'more' ? (
+                        <>
+                          <Text style={styles.section}>ช่องที่ต้องแก้</Text>
+                          <View style={styles.row}>
+                            {REQUESTABLE_FIELDS.map((f) => (
+                              <Chip
+                                key={f.key}
+                                label={f.label}
+                                selected={requestedFields.includes(f.key)}
+                                onPress={() => {
+                                  setRequestedFields((prev) =>
+                                    prev.includes(f.key) ? prev.filter((x) => x !== f.key) : [...prev, f.key],
+                                  );
+                                }}
+                              />
+                            ))}
+                          </View>
+                        </>
+                      ) : null}
+                      <View style={styles.actions}>
+                        <View style={styles.slot}>
+                          <PrimaryButton
+                            label="ยืนยัน"
+                            tone={actionMode.kind === 'reject' ? 'chili' : 'turmeric'}
+                            onPress={() => void submitReasoned()}
+                            loading={actingId === entry.user_id}
+                          />
+                        </View>
+                        <View style={styles.slot}>
+                          <SecondaryButton
+                            label="ยกเลิก"
+                            onPress={() => {
+                              setActionMode(null);
+                              setReason('');
+                              setRequestedFields([]);
+                            }}
+                          />
+                        </View>
+                      </View>
+                    </>
+                  ) : (
                     <View style={styles.actions}>
+                      {entry.org_status !== 'needs_more_info' ? (
+                        <View style={styles.slot}>
+                          <PrimaryButton
+                            label="อนุมัติ"
+                            onPress={() => void approve(entry.user_id)}
+                            loading={actingId === entry.user_id}
+                            disabled={actingId !== null}
+                          />
+                        </View>
+                      ) : null}
                       <View style={styles.slot}>
-                        <PrimaryButton
-                          label="ยืนยัน"
-                          tone={actionMode.kind === 'reject' ? 'chili' : 'turmeric'}
-                          onPress={() => void submitReasoned()}
-                          loading={actingId === entry.user_id}
+                        <SecondaryButton
+                          label="ขอข้อมูลเพิ่ม"
+                          onPress={() => {
+                            setActionMode({ userId: entry.user_id, kind: 'more' });
+                            setReason('');
+                            setRequestedFields([]);
+                          }}
+                          disabled={actingId !== null || entry.org_status === 'needs_more_info'}
                         />
                       </View>
                       <View style={styles.slot}>
                         <SecondaryButton
-                          label="ยกเลิก"
+                          label="ปฏิเสธ"
                           onPress={() => {
-                            setActionMode(null);
+                            setActionMode({ userId: entry.user_id, kind: 'reject' });
                             setReason('');
                           }}
-                        />
-                      </View>
-                    </View>
-                  </>
-                ) : (
-                  <View style={styles.actions}>
-                    {entry.org_status !== 'needs_more_info' ? (
-                      <View style={styles.slot}>
-                        <PrimaryButton
-                          label="อนุมัติ"
-                          onPress={() => void approve(entry.user_id)}
-                          loading={actingId === entry.user_id}
                           disabled={actingId !== null}
                         />
                       </View>
-                    ) : null}
-                    <View style={styles.slot}>
-                      <SecondaryButton
-                        label="ขอเอกสารเพิ่ม"
-                        onPress={() => {
-                          setActionMode({ userId: entry.user_id, kind: 'more' });
-                          setReason('');
-                        }}
-                        disabled={actingId !== null || entry.org_status === 'needs_more_info'}
-                      />
                     </View>
-                    <View style={styles.slot}>
-                      <SecondaryButton
-                        label="ปฏิเสธ"
-                        onPress={() => {
-                          setActionMode({ userId: entry.user_id, kind: 'reject' });
-                          setReason('');
-                        }}
-                        disabled={actingId !== null}
-                      />
-                    </View>
-                  </View>
-                )}
-              </Card>
-            ))}
+                  )}
+                </Card>
+              );
+            })}
           </>
         )}
       </DataState>
@@ -224,6 +408,7 @@ function DitMappingPanel(): React.ReactElement {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [advancedOpenId, setAdvancedOpenId] = useState<number | null>(null);
   const [unitDrafts, setUnitDrafts] = useState<Record<number, string>>({});
+  const [unitErrors, setUnitErrors] = useState<Record<number, string | null>>({});
   const [searchQueries, setSearchQueries] = useState<Record<number, string>>({});
   const [searchHits, setSearchHits] = useState<Record<number, DitProductSearchHit[]>>({});
   const [busyKey, setBusyKey] = useState<string | null>(null);
@@ -291,6 +476,10 @@ function DitMappingPanel(): React.ReactElement {
     return crop.dit_unit_to_kg !== null ? String(crop.dit_unit_to_kg) : '';
   };
 
+  const setUnitError = (cropId: number, message: string | null): void => {
+    setUnitErrors((prev) => ({ ...prev, [cropId]: message }));
+  };
+
   const confirmProduct = async (
     crop: DitCrop,
     product: { product_code: string; product_name: string; unit: string },
@@ -299,15 +488,16 @@ function DitMappingPanel(): React.ReactElement {
     const unitRaw = unitDraftFor(crop).trim();
     const unit_to_kg = unitRaw === '' ? undefined : Number(unitRaw);
     if (needsFactor && (unit_to_kg === undefined || !(unit_to_kg > 0))) {
-      setError(`หน่วยของ ${product.product_name} เป็น ${product.unit} — กรุณาระบุตัวแปลงเป็น กก.`);
+      setUnitError(crop.id, `หน่วยของ ${product.product_name} เป็น ${product.unit} — กรุณาระบุตัวแปลงเป็น กก.`);
       return;
     }
     if (unit_to_kg !== undefined && !(unit_to_kg > 0)) {
-      setError('ตัวแปลงหน่วยต้องเป็นจำนวนบวก');
+      setUnitError(crop.id, 'ตัวแปลงหน่วยต้องเป็นจำนวนบวก');
       return;
     }
     setBusyKey(`map-${crop.id}-${product.product_code}`);
     setError(null);
+    setUnitError(crop.id, null);
     setBanner(null);
     try {
       await api.mapDitCrop(crop.id, {
@@ -373,16 +563,17 @@ function DitMappingPanel(): React.ReactElement {
     }
     const unitRaw = unitDraftFor(crop).trim();
     if (unitRaw === '') {
-      setError('ระบุตัวแปลงเป็นจำนวนกก. ต่อ 1 หน่วยต้นทาง');
+      setUnitError(crop.id, 'ระบุตัวแปลงเป็นจำนวนกก. ต่อ 1 หน่วยต้นทาง');
       return;
     }
     const unit_to_kg = Number(unitRaw);
     if (!(unit_to_kg > 0)) {
-      setError('ตัวแปลงหน่วยต้องเป็นจำนวนบวก');
+      setUnitError(crop.id, 'ตัวแปลงหน่วยต้องเป็นจำนวนบวก');
       return;
     }
     setBusyKey(`unit-${crop.id}`);
     setError(null);
+    setUnitError(crop.id, null);
     setBanner(null);
     try {
       await api.setDitUnitFactor(crop.id, { unit_to_kg });
@@ -391,7 +582,16 @@ function DitMappingPanel(): React.ReactElement {
       bump();
       reload();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'บันทึกตัวแปลงไม่สำเร็จ');
+      if (err instanceof ApiError) {
+        const fieldMsg = err.fields?.unit_to_kg;
+        if (fieldMsg !== undefined) {
+          setUnitError(crop.id, fieldMsg);
+        } else {
+          setError(err.message);
+        }
+      } else {
+        setError('บันทึกตัวแปลงไม่สำเร็จ');
+      }
     } finally {
       setBusyKey(null);
     }
@@ -511,13 +711,17 @@ function DitMappingPanel(): React.ReactElement {
                                 : 'ตัวแปลงเป็น กก. (ถ้าหน่วยไม่ใช่ กก.)'
                             }
                             value={unitDraftFor(crop)}
-                            onChangeText={(text) => setUnitDrafts((prev) => ({ ...prev, [crop.id]: text }))}
+                            onChangeText={(text) => {
+                              setUnitDrafts((prev) => ({ ...prev, [crop.id]: text }));
+                              setUnitError(crop.id, null);
+                            }}
                             keyboardType="numeric"
                             placeholder={
                               crop.dit_unit !== null && !crop.dit_unit.includes('กก')
                                 ? `เช่น 0.5 ถ้า 1 ${unitBaseFromDit(crop.dit_unit)} = 0.5 กก.`
                                 : 'เว้นว่างถ้าเป็นบาท/กก.'
                             }
+                            error={unitErrors[crop.id] ?? null}
                           />
                           <View style={styles.actions}>
                             <View style={styles.slot}>
@@ -617,13 +821,15 @@ const styles = StyleSheet.create({
   name: { fontSize: 16, fontWeight: '700', color: C.ink },
   meta: { color: C.mute, marginTop: 2, marginBottom: 2 },
   metaPad: { color: C.mute, marginHorizontal: 16, marginBottom: 4 },
+  section: { marginTop: 10, fontWeight: '700', color: C.ink },
   historyTitle: { marginTop: 8, fontWeight: '700', color: C.ink },
-  doc: { color: C.ink, marginTop: 2 },
+  docLink: { color: C.leaf, marginTop: 2, textDecorationLine: 'underline' },
   error: { color: C.chili, marginBottom: 8 },
   banner: { color: C.leaf, marginBottom: 8, fontWeight: '600' },
-  row: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 8, marginBottom: 4 },
+  row: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 8, marginBottom: 4, gap: 6 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
   slot: { flexGrow: 1, flexBasis: '30%', minWidth: 100 },
+  slotWide: { marginTop: 8 },
   suggestionBox: {
     marginTop: 8,
     paddingTop: 8,
