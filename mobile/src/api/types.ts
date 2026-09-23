@@ -54,6 +54,9 @@ export interface MyLot {
   expires_at: string;
   status: string;
   created_at: string;
+  crop_name_th: string;
+  plot_name: string;
+  price_per_kg: number;
 }
 
 export interface MarketLot {

@@ -351,11 +351,17 @@ function MyLots({
             return (
               <Card key={lot.id}>
                 <View style={styles.lotHeader}>
-                  <Text style={styles.lotTitle}>ล็อต #{lot.id}</Text>
+                  <Text style={styles.lotTitle}>
+                    {lot.crop_name_th} {lot.weight_kg} กก.
+                  </Text>
                   <Badge text={STATUS_LABELS[lot.status] ?? lot.status} fg={C.leaf} bg={C.leafSoft} />
                 </View>
-                <Text style={styles.lotLine}>น้ำหนัก {lot.weight_kg} กก. · {lot.grade === 'substandard' ? 'ตกเกรด' : 'ปกติ'}</Text>
-                <Text style={styles.lotLine}>ความสุก: {RIPENESS_LABELS[lot.ripeness] ?? lot.ripeness}</Text>
+                <Text style={styles.lotMeta}>ล็อต #{lot.id}</Text>
+                <Text style={styles.lotLine}>แปลง {lot.plot_name}</Text>
+                <Text style={styles.lotLine}>ราคาด่วน {lot.price_per_kg} บาท/กก.</Text>
+                <Text style={styles.lotLine}>
+                  {lot.grade === 'substandard' ? 'ตกเกรด' : 'ปกติ'} · ความสุก {RIPENESS_LABELS[lot.ripeness] ?? lot.ripeness}
+                </Text>
                 <Badge text={lot.status === 'open' ? formatCountdown(hours) : tone.label} fg={tone.fg} bg={tone.bg} />
               </Card>
             );
@@ -368,7 +374,7 @@ function MyLots({
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap' },
-  plotName: { color: C.ink, fontSize: 16, fontWeight: '600', marginBottom: 12 },
+  plotName: { color: C.ink, fontSize: 16, fontWeight: '400', marginBottom: 12 },
   addPlotHint: { color: C.mute, marginBottom: 12 },
   checkboxRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 12 },
   checkbox: {
@@ -389,7 +395,8 @@ const styles = StyleSheet.create({
   previewTotal: { fontSize: 15, color: C.ink, marginTop: 2 },
   previewMuted: { color: C.mute, marginTop: 4 },
   previewError: { color: C.chili, marginBottom: 8 },
-  lotHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  lotTitle: { fontSize: 16, fontWeight: '700', color: C.ink },
+  lotHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  lotTitle: { fontSize: 16, fontWeight: '700', color: C.ink, flex: 1, marginRight: 8 },
+  lotMeta: { color: C.mute, fontSize: 12, marginBottom: 6 },
   lotLine: { color: C.ink, marginBottom: 4 },
 });

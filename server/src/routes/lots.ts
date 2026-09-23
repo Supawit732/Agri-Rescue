@@ -187,15 +187,62 @@ async function findOwnedPlot(plotId: number, farmerId: number): Promise<RowDataP
   return plot;
 }
 
-async function listMine(farmerId: number): Promise<RowDataPacket[]> {
-  const [rows] = await pool.query<RowDataPacket[]>(
+interface MineLotRow extends RowDataPacket {
+  id: number;
+  plot_id: number;
+  crop_id: number;
+  weight_kg: number;
+  grade: ProduceGrade;
+  ripeness: number;
+  photo_url: string | null;
+  allow_donation: number;
+  predicted_shelf_hours: number;
+  expires_at: Date;
+  status: string;
+  created_at: Date;
+  crop_name_th: string;
+  plot_name: string;
+  base_shelf_days: number;
+  market_price_per_kg: number;
+}
+
+async function listMine(farmerId: number): Promise<object[]> {
+  const [rows] = await pool.query<MineLotRow[]>(
     `SELECT h.id, h.plot_id, h.crop_id, h.weight_kg, h.grade, h.ripeness, h.photo_url,
-            h.allow_donation, h.predicted_shelf_hours, h.expires_at, h.status, h.created_at
+            h.allow_donation, h.predicted_shelf_hours, h.expires_at, h.status, h.created_at,
+            c.name_th AS crop_name_th, c.base_shelf_days, c.market_price_per_kg,
+            p.name AS plot_name
      FROM harvest_lots h
      JOIN plots p ON p.id = h.plot_id
+     JOIN crops c ON c.id = h.crop_id
      WHERE p.farmer_id = ?
      ORDER BY h.id`,
     [farmerId],
   );
-  return rows;
+  const now = Date.now();
+  return rows.map((row) => {
+    const hoursLeft = (new Date(row.expires_at).getTime() - now) / (60 * 60 * 1000);
+    return {
+      id: Number(row.id),
+      plot_id: Number(row.plot_id),
+      crop_id: Number(row.crop_id),
+      weight_kg: Number(row.weight_kg),
+      grade: row.grade,
+      ripeness: Number(row.ripeness),
+      photo_url: row.photo_url,
+      allow_donation: Number(row.allow_donation) === 1,
+      predicted_shelf_hours: Number(row.predicted_shelf_hours),
+      expires_at: new Date(row.expires_at).toISOString(),
+      status: row.status,
+      created_at: new Date(row.created_at).toISOString(),
+      crop_name_th: row.crop_name_th,
+      plot_name: row.plot_name,
+      price_per_kg: urgentPricePerKg({
+        marketPricePerKg: Number(row.market_price_per_kg),
+        baseShelfHours: Number(row.base_shelf_days) * 24,
+        hoursLeft,
+        grade: row.grade,
+      }),
+    };
+  });
 }

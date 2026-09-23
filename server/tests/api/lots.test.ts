@@ -67,6 +67,14 @@ describe('lots and plots', () => {
     const mine = await request(app).get('/api/lots/mine').set(bearer(owner.token));
     expect(mine.status).toBe(200);
     expect(mine.body.lots).toHaveLength(1);
+    expect(mine.body.lots[0]).toMatchObject({
+      crop_name_th: 'มะม่วง',
+      plot_name: 'แปลงมะม่วง',
+      weight_kg: 12,
+      grade: 'substandard',
+    });
+    expect(typeof mine.body.lots[0].price_per_kg).toBe('number');
+    expect(mine.body.lots[0].price_per_kg).toBeGreaterThan(0);
 
     const hidden = await request(app).get('/api/lots').set(bearer(other.token));
     expect(hidden.body.lots).toHaveLength(0);
