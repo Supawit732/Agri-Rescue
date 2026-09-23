@@ -1,6 +1,7 @@
 import { PLAN_WEATHER_FALLBACK } from '../db/seedData';
 
 export const WEATHER_TIMEOUT_MS = 3000;
+export const WEATHER_CACHE_TTL_MS = 60 * 60 * 1000;
 export const FORECAST_HOURS = 72;
 export const DAYTIME_START_HOUR = 10;
 export const DAYTIME_END_HOUR = 17;
@@ -12,6 +13,22 @@ export interface WeatherReading {
   humidity: number;
   fallback: boolean;
   basis: typeof WEATHER_BASIS;
+}
+
+interface CacheEntry {
+  reading: WeatherReading;
+  expiresAt: number;
+}
+
+const weatherCache = new Map<string, CacheEntry>();
+
+/** Round plot coordinates to 2 decimal places for the in-memory forecast cache key. */
+export function weatherCacheKey(lat: number, lng: number): string {
+  return `${lat.toFixed(2)},${lng.toFixed(2)}`;
+}
+
+export function clearWeatherCache(): void {
+  weatherCache.clear();
 }
 
 interface HourlyPayload {
@@ -79,7 +96,23 @@ function asStringArray(value: unknown, label: string): string[] {
   return value as string[];
 }
 
-export async function fetchWeather(lat: number, lng: number): Promise<WeatherReading> {
+export async function fetchWeather(lat: number, lng: number, now = Date.now()): Promise<WeatherReading> {
+  const key = weatherCacheKey(lat, lng);
+  const cached = weatherCache.get(key);
+  if (cached !== undefined && cached.expiresAt > now) {
+    return cached.reading;
+  }
+
+  const reading = await fetchWeatherUncached(lat, lng);
+  if (!reading.fallback) {
+    weatherCache.set(key, { reading, expiresAt: now + WEATHER_CACHE_TTL_MS });
+  } else {
+    weatherCache.delete(key);
+  }
+  return reading;
+}
+
+async function fetchWeatherUncached(lat: number, lng: number): Promise<WeatherReading> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), WEATHER_TIMEOUT_MS);
   try {
