@@ -1,12 +1,20 @@
 # กระบวนการธุรกิจ (Business Flow)
 
-อ้างอิง flow จริงจาก `orders.ts`, `lots.ts`, `createBatch.ts`, `confirmStop.ts`, `expireLots.ts`, `openMeteo.ts`, `impactSummary.ts`
+อ้างอิง flow จริงจาก `orders.ts`, `lots.ts`, `ai/vision.ts`, `createBatch.ts`, `confirmStop.ts`, `expireLots.ts`, `openMeteo.ts`, `impactSummary.ts`
 
 ## Flowchart ภาพรวม
 
 ```mermaid
 flowchart TD
-  start([เริ่ม]) --> estimate[เกษตรกรประเมิน shelf-life และราคา]
+  start([เริ่ม]) --> photo{เกษตรกรถ่ายรูปให้ AI?}
+  photo -->|ใช่| assess[POST lots assess-photo]
+  assess --> subject{subject_match?}
+  subject -->|ไม่| pickRipe[เลือกความสุกเอง]
+  subject -->|ใช่| aiRipe[เติม chip ความสุกจาก AI]
+  aiRipe --> editRipe{เกษตรกรแก้ chip?}
+  editRipe -->|ใช่หรือไม่| estimate
+  photo -->|ไม่| pickRipe --> estimate
+  estimate[เกษตรกรประเมิน shelf-life และราคา]
   estimate --> weather{อากาศจาก Open-Meteo สำเร็จ?}
   weather -->|ใช่ weather_source live| createLot[ลงล็อต status open]
   weather -->|ไม่ weather_source fallback| createLot
@@ -44,11 +52,13 @@ flowchart TD
 ```mermaid
 flowchart TB
   subgraph Farmer["เกษตรกร farmer"]
-    F1[เลือกพืช แปลง ความสุก เกรด]
-    F2[เรียก POST lots estimate]
-    F3[ดู preview อากาศและราคา]
-    F4[POST lots ลงประกาศ]
-    F1 --> F2 --> F3 --> F4
+    F0[เลือกพืชและแปลง]
+    F1[ถ่ายหรือเลือกรูปให้ AI ประเมิน]
+    F2[ตรวจหรือแก้ chip ความสุก]
+    F3[เรียก POST lots estimate]
+    F4[ดู preview อากาศและราคา]
+    F5[POST lots ลงประกาศ]
+    F0 --> F1 --> F2 --> F3 --> F4 --> F5
   end
 
   subgraph Buyer["ผู้ซื้อ buyer"]
@@ -84,7 +94,7 @@ flowchart TB
     D6 -->|ไม่และ OTP ถูก| D8
   end
 
-  F4 --> B1
+  F5 --> B1
   B2 --> C2
   B5 -.->|ล็อตกลับ open| B1
   C2 --> D1
@@ -97,7 +107,9 @@ flowchart TB
 
 | ทางแยก | พฤติกรรมจริง | ไฟล์ |
 |---|---|---|
-| อากาศ fallback | เรียก Open-Meteo ไม่สำเร็จภายใน 3 วินาที → ใช้ 32°C / ความชื้น 75% และ `weather_source = fallback` ใน estimate | `openMeteo.ts`, `lots.ts` |
+| AI ประเมินความสุก | `POST /lots/assess-photo`; ถ้า `subject_match` เป็น false ไม่ใช้ค่าความสุก; confidence ต่ำกว่า 0.6 ตั้ง `low_confidence` | `vision.ts`, `lots.ts`, `farmer.tsx` |
+| อากาศ fallback / พยากรณ์ | เฉลี่ยกลางวัน 10–17 จากพยากรณ์ 72 ชม.; ไม่สำเร็จภายใน 3 วินาที → 32°C / 75% และ `weather_source = fallback` | `openMeteo.ts`, `lots.ts` |
+| ความชื้นสูงกว่า 85% | คูณอายุที่คำนวณได้ด้วย 0.9 | `shelfLife.ts` |
 | ล็อตหมดอายุ | เฉพาะสถานะ `open` ที่ `expires_at <= now` ถูกตั้งเป็น `expired` ทุก 10 นาที; ล็อต `reserved` ไม่ถูก expire | `expireLots.ts` |
 | ยกเลิกการจอง | ได้เมื่อออเดอร์ยัง `reserved` และ `batch_id` เป็น null; ออเดอร์ → `cancelled`, ล็อต → `open` | `orders.ts` |
 | จองซ้อน | `SELECT ... FOR UPDATE` บนล็อต; ถ้าไม่ใช่ `open` ตอบ 409 `LOT_NOT_OPEN` | `orders.ts` |

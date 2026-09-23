@@ -60,11 +60,14 @@
 |---|---|---|---|---|---|
 | id | INT AUTO_INCREMENT | ไม่ | PK | รหัสการประเมิน | 1 |
 | lot_id | INT | ไม่ | INDEX | อ้าง harvest_lots.id | 1 |
-| method | ENUM('rule','model') | ไม่ | | วิธีประเมิน — การสร้างล็อตใช้ `rule` | rule |
-| ripeness | TINYINT | ไม่ | | ความสุกตอนประเมิน | 2 |
-| temp_c | DECIMAL(5,2) | ไม่ | | อุณหภูมิที่ใช้คำนวณ | 34.00 |
-| humidity | DECIMAL(5,2) | ไม่ | | ความชื้นสัมพัทธ์ | 78.00 |
+| method | ENUM('rule','model') | ไม่ | | `model` เมื่อใช้ค่า AI ไม่แก้; ไม่เช่นนั้น `rule` | model |
+| ripeness | TINYINT | ไม่ | | ความสุกที่ลงประกาศจริง (0–4) | 2 |
+| temp_c | DECIMAL(5,2) | ไม่ | | อุณหภูมิที่ใช้คำนวณ (เฉลี่ยกลางวันหรือ fallback) | 34.00 |
+| humidity | DECIMAL(5,2) | ไม่ | | ความชื้นที่ใช้คำนวณ | 78.00 |
 | predicted_shelf_hours | INT | ไม่ | | ผลลัพธ์ชั่วโมง | 61 |
+| ai_ripeness | TINYINT | ได้ | | ความสุกที่โมเดลเสนอ (migration 003) | 3 |
+| ai_confidence | DECIMAL(4,3) | ได้ | | ความมั่นใจ 0–1 จากโมเดล | 0.880 |
+| ai_model | VARCHAR(128) | ได้ | | ชื่อโมเดลที่ประเมิน | mimo-v2.6-flash |
 | created_at | DATETIME | ไม่ | | เวลาบันทึก | 2026-09-22 02:00:00 |
 
 ## batches
