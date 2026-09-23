@@ -174,5 +174,6 @@ JWT เก็บ `sub`, `role`, `can_sell`, `can_buy`, `is_admin` (อายุ 
 | การจอง | `/lots/:id` → `/lots/:id/confirm` → `/lots/:id/success`; คำสั่งซื้อ `/orders/:id` |
 | `available_as` | response ที่ไม่ใช่เจ้าของล็อต: `['buy']` / `['donate']` / `['buy','donate']` ตามสถานะปัจจุบัน; ห้ามคืน `sale_mode` ดิบ; `sell_then_donate` ก่อนเปิดบริจาค = เหมือนขาย (`['buy']` เท่านั้น) |
 | พื้นที่รับของ | ยังไม่มีตำบล/อำเภอใน `plots` — แสดง `plot_name` + ระยะทาง; พิกัดเฉพาะเจ้าของออเดอร์/เจ้าของล็อต |
+| OTP ผู้ขาย | ยืนยันรับด้วย OTP+น้ำหนักจริงยังเป็น driver `stops/confirm` — UI ผู้ขายเป็น stub จน 6.4 |
 | ปุ่ม UI | `paddingHorizontal ≥ 20`, `minWidth ≥ 160`; หน้าว่าง/ชวน login/สำเร็จ ใช้ `CtaStack` ให้ปุ่มกว้างเท่ากันเรียงแนวตั้ง; ข้อความปุ่มมี `textAlign: center` + padding กันชนขอบ |
 | ตกแต่งภาพ | เลื่อนไปขั้น **6.12** (หลัง 6.10) |
