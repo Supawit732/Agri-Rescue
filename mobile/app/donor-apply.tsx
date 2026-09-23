@@ -12,7 +12,7 @@ import {
   useFieldErrors,
   useFieldScroll,
 } from '../src/components/form';
-import { Body, PrimaryButton, Screen, SecondaryButton, TopBar } from '../src/components/ui';
+import { Body, PrimaryButton, Screen, SecondaryButton, StackHeader } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
 import {
   labelApplicationKind,
@@ -105,7 +105,7 @@ function StatusBanner({
 }
 
 export default function DonorApplyScreen(): React.ReactElement {
-  const { user, api, logout, refreshUser } = useAuth();
+  const { user, api, refreshUser } = useAuth();
   const router = useRouter();
   const { errors, setErrors, setFieldError, clearField, applyServerFields, firstErrorName } = useFieldErrors();
   const { scrollRef, registerY, scrollToField } = useFieldScroll();
@@ -593,7 +593,7 @@ export default function DonorApplyScreen(): React.ReactElement {
 
   return (
     <Screen>
-      <TopBar title="สมัครรับบริจาค" onLogout={logout} />
+      <StackHeader title="สมัครรับบริจาค" onBack={() => router.replace('/(tabs)/account')} />
       <Body scrollRef={scrollRef}>
         <ProgressBar step={step} total={totalSteps} />
         {user !== null ? (

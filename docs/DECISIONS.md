@@ -161,3 +161,19 @@ JWT เก็บ `sub`, `role`, `can_sell`, `can_buy`, `is_admin` (อายุ 
 | สถานะจอง | `open` / `partially_reserved` / `fully_reserved` (migrate `reserved` เดิม → `fully_reserved`) |
 | เศษท้าย | ถ้าคงเหลือ &lt; `min_order_kg` ต้องจองทั้งเศษ (ข้ามขั้นต่ำ/step) |
 | แก้ migration ที่ชนเลข | ตาม Conventions: ห้ามเปลี่ยนไฟล์ที่อยู่บน main แล้ว; ตอนรวม 6.1c+6.1d เลข 6.1c เป็น 008–010 หลัง `007_donor_formal_apply` |
+
+## D022 — Phase 6.1f โครงนำทาง
+
+| รายการ | ค่า |
+|---|---|
+| แท็บหลัก | ตลาด / ขาย / คำสั่งซื้อ / แจ้งเตือน / บัญชี (`expo-router` Tabs) |
+| ไอคอน | `@expo/vector-icons` (Ionicons) |
+| Side nav breakpoint | ความกว้าง ≥ **900px** ใช้เมนูซ้าย; แคบกว่าใช้ bottom tabs; ไม่ใช้ hamburger |
+| AuthGate | ไม่ login เข้า `(tabs)/*` ได้; ไม่บังคับ redirect ตามโหมดขาย/ซื้อ; หน้าที่ต้องสิทธิ์ใช้ `LoginPrompt` + `/login?returnTo=` |
+| เลิก mode toggle | ไม่แสดงสลับโหมดบน TopBar ของแท็บ (capabilities จัดการที่บัญชี/โปรไฟล์) |
+| การจอง | `/lots/:id` → `/lots/:id/confirm` → `/lots/:id/success`; คำสั่งซื้อ `/orders/:id` |
+| `available_as` | response ที่ไม่ใช่เจ้าของล็อต: `['buy']` / `['donate']` / `['buy','donate']` ตามสถานะปัจจุบัน; ห้ามคืน `sale_mode` ดิบ; `sell_then_donate` ก่อนเปิดบริจาค = เหมือนขาย (`['buy']` เท่านั้น) |
+| พื้นที่รับของ | ยังไม่มีตำบล/อำเภอใน `plots` — แสดง `plot_name` + ระยะทาง; พิกัดเฉพาะเจ้าของออเดอร์/เจ้าของล็อต |
+| OTP ผู้ขาย | ยืนยันรับด้วย OTP+น้ำหนักจริงยังเป็น driver `stops/confirm` — UI ผู้ขายเป็น stub จน 6.4 |
+| ปุ่ม UI | `paddingHorizontal ≥ 20`, `minWidth ≥ 160`; หน้าว่าง/ชวน login/สำเร็จ ใช้ `CtaStack` ให้ปุ่มกว้างเท่ากันเรียงแนวตั้ง; ข้อความปุ่มมี `textAlign: center` + padding กันชนขอบ |
+| ตกแต่งภาพ | เลื่อนไปขั้น **6.12** (หลัง 6.10) |

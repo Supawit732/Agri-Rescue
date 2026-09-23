@@ -169,6 +169,22 @@ export function lotAcceptsDonation(saleMode: string, donationOpened: boolean | n
   return false;
 }
 
+/** Buyer-facing booking options — never exposes raw sell_then_donate. */
+export type AvailableAs = 'buy' | 'donate';
+
+export function availableAs(saleMode: string, donationOpened: boolean | number): AvailableAs[] {
+  if (saleMode === 'donate') {
+    return ['donate'];
+  }
+  if (saleMode === 'sell_then_donate' && (donationOpened === true || donationOpened === 1)) {
+    return ['buy', 'donate'];
+  }
+  if (saleMode === 'sell_then_donate') {
+    return ['buy'];
+  }
+  return ['buy']; // sell default
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }

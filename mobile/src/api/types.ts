@@ -199,12 +199,13 @@ export type AssessPhotoResponse =
     };
 
 export interface MyLotBooking {
-  id: number;
+  order_id: number;
   quantity_kg: number;
   is_donation: boolean;
   status: string;
   agreed_price_per_kg: number;
   buyer_name?: string;
+  created_at?: string;
 }
 
 export interface MyLot {
@@ -247,19 +248,24 @@ export interface MarketLot {
   order_step_kg?: number;
   grade: Grade;
   ripeness: number;
-  sale_mode: SaleMode;
-  donation_opened: boolean;
+  /** Present on owner responses; masked for buyers — prefer available_as. */
+  sale_mode?: SaleMode;
+  available_as?: Array<'buy' | 'donate'>;
+  donation_opened?: boolean;
   allow_donation: boolean;
   donation_audience?: DonationAudience;
   expires_at: string;
   hours_left: number;
-  distance_km: number;
+  distance_km: number | null;
   price_per_kg: number | null;
   market_price_label?: string | null;
   start_price_per_kg?: number | null;
   floor_price_per_kg?: number | null;
   lat: number;
   lng: number;
+  plot_name?: string;
+  area_rai?: number;
+  photo_url?: string | null;
 }
 
 export interface DitCropRefPrice {
@@ -340,11 +346,23 @@ export interface Order {
   lot_id: number;
   quantity_kg?: number;
   agreed_price_per_kg: number;
+  total?: number;
   is_donation: boolean;
   status: string;
   batch_id: number | null;
   drop_otp: string;
   created_at: string;
+  crop_name_th?: string;
+  grade?: Grade;
+  ripeness?: number;
+  photo_url?: string | null;
+  plot_name?: string;
+  plot_lat?: number | null;
+  plot_lng?: number | null;
+  lat?: number | null;
+  lng?: number | null;
+  expires_at?: string;
+  distance_km?: number | null;
 }
 
 export interface Driver {

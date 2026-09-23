@@ -5,38 +5,16 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
 import { C } from '../src/theme';
-import type { AppMode, User } from '../src/api/types';
 
 export const unstable_settings = {
   initialRouteName: 'index',
 };
 
-const publicRoutes = new Set(['login', 'register', 'terms']);
-
-function homeFor(user: User, mode: AppMode): string {
-  if (user.is_admin && !user.can_sell && !user.can_buy) {
-    return '/admin';
-  }
-  if (mode === 'sell' && user.can_sell) {
-    return '/farmer';
-  }
-  if (mode === 'buy' && user.can_buy) {
-    return '/buyer';
-  }
-  if (user.can_sell) {
-    return '/farmer';
-  }
-  if (user.can_buy) {
-    return '/buyer';
-  }
-  if (user.is_admin) {
-    return '/admin';
-  }
-  return '/login';
-}
+/** Routes reachable without login (tabs invite internally). */
+const openRoots = new Set(['index', '(tabs)', 'login', 'register', 'terms', 'lots']);
 
 function AuthGate(): React.ReactElement {
-  const { ready, user, mode, setMode } = useAuth();
+  const { ready, user } = useAuth();
   const segments = useSegments();
   const router = useRouter();
 
@@ -44,57 +22,41 @@ function AuthGate(): React.ReactElement {
     if (!ready) {
       return;
     }
-    const current = segments[0] ?? 'index';
-    const onPublic = publicRoutes.has(current);
-    if (user === null) {
-      if (!onPublic) {
-        router.replace('/login');
-      }
-      return;
-    }
+    const root = String(segments[0] ?? 'index');
 
     // Hide driver/coordinator from navigation; keep screens for later phases.
-    if (current === 'driver' || current === 'coordinator') {
-      router.replace(homeFor(user, mode) as never);
+    if (root === 'driver' || root === 'coordinator') {
+      router.replace('/(tabs)' as never);
       return;
     }
 
-    const home = homeFor(user, mode);
-    const routeName = String(current);
-    if (onPublic || routeName === 'index' || routeName === '') {
-      // Logged-in users may still open terms
-      if (routeName === 'terms') {
-        return;
+    if (user === null) {
+      if (!openRoots.has(root)) {
+        const returnTo = `/${segments.join('/')}`;
+        router.replace({ pathname: '/login', params: { returnTo } } as never);
       }
-      router.replace(home as never);
       return;
     }
 
-    if (current === 'admin' && !user.is_admin) {
-      router.replace(home as never);
+    // Authenticated: do not force sell/buy mode homes.
+    if (root === 'login' || root === 'register' || root === 'index' || root === '') {
+      router.replace('/(tabs)' as never);
       return;
     }
 
-    if (current === 'farmer' && !user.can_sell) {
-      if (user.can_buy) {
-        setMode('buy');
-      }
-      router.replace(homeFor(user, 'buy') as never);
-      return;
-    }
-    if (current === 'buyer' && !user.can_buy) {
-      if (user.can_sell) {
-        setMode('sell');
-      }
-      router.replace(homeFor(user, 'sell') as never);
+    if (root === 'admin' && !user.is_admin) {
+      router.replace('/(tabs)/account' as never);
       return;
     }
 
-    const allowed = new Set(['farmer', 'buyer', 'impact', 'profile', 'admin', 'donor-apply', 'terms']);
-    if (!allowed.has(current)) {
-      router.replace(home as never);
+    if (root === 'farmer') {
+      router.replace('/(tabs)/sell' as never);
+      return;
     }
-  }, [ready, user, mode, segments, router, setMode]);
+    if (root === 'buyer') {
+      router.replace('/(tabs)' as never);
+    }
+  }, [ready, user, segments, router]);
 
   if (!ready) {
     return (
@@ -107,6 +69,7 @@ function AuthGate(): React.ReactElement {
   return (
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.bg } }}>
       <Stack.Screen name="index" />
+      <Stack.Screen name="(tabs)" />
       <Stack.Screen name="login" />
       <Stack.Screen name="register" />
       <Stack.Screen name="farmer" />
@@ -115,6 +78,11 @@ function AuthGate(): React.ReactElement {
       <Stack.Screen name="admin" />
       <Stack.Screen name="donor-apply" />
       <Stack.Screen name="terms/donor" />
+      <Stack.Screen name="lots/[id]/index" />
+      <Stack.Screen name="lots/[id]/confirm" />
+      <Stack.Screen name="lots/[id]/success" />
+      <Stack.Screen name="orders/[id]" />
+      <Stack.Screen name="sell/success" />
       <Stack.Screen name="driver" />
       <Stack.Screen name="coordinator" />
       <Stack.Screen name="impact" />

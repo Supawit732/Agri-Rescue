@@ -4,7 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { DonorIntroModal, type DonorIntroChoice } from '../components/DonorIntroModal';
 import { ApiError } from '../src/api/client';
-import { Body, Chip, Field, PrimaryButton, Screen, SectionTitle, SecondaryButton, TopBar } from '../src/components/ui';
+import { Body, Chip, Field, PrimaryButton, Screen, SectionTitle, SecondaryButton, StackHeader } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
 import {
   labelApplicationKind,
@@ -34,7 +34,7 @@ export default function ProfileScreen(): React.ReactElement {
   if (user === null) {
     return (
       <Screen>
-        <TopBar title="โปรไฟล์" onLogout={logout} />
+        <StackHeader title="โปรไฟล์" onBack={() => router.replace('/(tabs)/account')} />
         <Body>
           <Text style={styles.muted}>กรุณาเข้าสู่ระบบ</Text>
         </Body>
@@ -120,7 +120,7 @@ export default function ProfileScreen(): React.ReactElement {
       await api.updateProfile({ can_sell: true });
       setMessage('เปิดโหมดขายแล้ว');
       setMode('sell');
-      router.replace('/farmer');
+      router.replace('/(tabs)/sell');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'อัปเดตไม่สำเร็จ');
     } finally {
@@ -144,7 +144,7 @@ export default function ProfileScreen(): React.ReactElement {
       });
       setMessage('เปิดโหมดซื้อแล้ว');
       setMode('buy');
-      router.replace('/buyer');
+      router.replace('/(tabs)');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'อัปเดตไม่สำเร็จ');
     } finally {
@@ -169,7 +169,7 @@ export default function ProfileScreen(): React.ReactElement {
   return (
     <Screen>
       <DonorIntroModal visible={introVisible} onChoice={onIntroChoice} />
-      <TopBar title="โปรไฟล์" onLogout={logout} />
+      <StackHeader title="โปรไฟล์" onBack={() => router.replace('/(tabs)/account')} />
       <Body>
         <Text style={styles.name}>{user.name}</Text>
         <Text style={styles.muted}>{user.phone}</Text>

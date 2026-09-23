@@ -12,8 +12,9 @@ import {
   Screen,
   SecondaryButton,
   Segmented,
-  TopBar,
+  StackHeader,
 } from '../src/components/ui';
+import { useRouter } from 'expo-router';
 import { useAuth } from '../src/context/AuthContext';
 import { useApiData } from '../src/hooks/useApiData';
 import {
@@ -63,12 +64,13 @@ function unitBaseFromDit(unit: string | null): string {
 }
 
 export default function AdminScreen(): React.ReactElement {
-  const { logout, user } = useAuth();
+  const { user } = useAuth();
+  const router = useRouter();
   const [tab, setTab] = useState<'orgs' | 'dit'>('orgs');
 
   return (
     <Screen>
-      <TopBar title="ผู้ดูแล" onLogout={logout} />
+      <StackHeader title="ผู้ดูแล" onBack={() => router.replace('/(tabs)/account')} />
       <Segmented
         options={[
           { key: 'orgs', label: 'คำขอองค์กร' },

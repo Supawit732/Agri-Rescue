@@ -10,14 +10,126 @@ import {
   type TextInputProps,
   View,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { C } from '../theme';
 
-export function Screen({ children }: { children: React.ReactNode }): React.ReactElement {
+export function Screen({
+  children,
+  fullWidth,
+}: {
+  children: React.ReactNode;
+  fullWidth?: boolean;
+}): React.ReactElement {
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
-      <View style={styles.screenInner}>{children}</View>
+      <View style={[styles.screenInner, fullWidth === true ? styles.screenInnerWide : null]}>{children}</View>
     </SafeAreaView>
+  );
+}
+
+export function StackHeader({
+  title,
+  onBack,
+}: {
+  title: string;
+  onBack?: () => void;
+}): React.ReactElement {
+  const router = useRouter();
+  const goBack = (): void => {
+    if (onBack !== undefined) {
+      onBack();
+      return;
+    }
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace('/(tabs)');
+  };
+  return (
+    <View style={styles.stackHeader}>
+      <Pressable accessibilityRole="button" onPress={goBack} style={styles.backBtn} hitSlop={8}>
+        <Text style={styles.backBtnText}>‹ กลับ</Text>
+      </Pressable>
+      <Text style={styles.stackTitle} numberOfLines={1}>
+        {title}
+      </Text>
+      <View style={styles.backBtnSpacer} />
+    </View>
+  );
+}
+
+export function SubScreen({
+  title,
+  children,
+  onBack,
+}: {
+  title: string;
+  children: React.ReactNode;
+  onBack?: () => void;
+}): React.ReactElement {
+  return (
+    <Screen>
+      <StackHeader title={title} onBack={onBack} />
+      {children}
+    </Screen>
+  );
+}
+
+/** Stack of equal-width primary CTAs (empty / login invite / success). */
+export function CtaStack({ children }: { children: React.ReactNode }): React.ReactElement {
+  return <View style={styles.ctaStack}>{children}</View>;
+}
+
+export function LoginPrompt({
+  title,
+  message,
+  returnTo,
+  primaryLabel,
+}: {
+  title: string;
+  message: string;
+  returnTo: string;
+  primaryLabel?: string;
+}): React.ReactElement {
+  const router = useRouter();
+  return (
+    <View style={styles.centerState}>
+      <Text style={styles.promptTitle}>{title}</Text>
+      <Text style={styles.stateText}>{message}</Text>
+      <CtaStack>
+        <PrimaryButton
+          label={primaryLabel ?? 'เข้าสู่ระบบ'}
+          block
+          onPress={() =>
+            router.push({ pathname: '/login', params: { returnTo } })
+          }
+        />
+        <SecondaryButton label="สมัครสมาชิก" block onPress={() => router.push('/register')} />
+      </CtaStack>
+    </View>
+  );
+}
+
+export function EmptyState({
+  message,
+  ctaLabel,
+  onCta,
+}: {
+  message: string;
+  ctaLabel?: string;
+  onCta?: () => void;
+}): React.ReactElement {
+  return (
+    <View style={styles.centerState}>
+      <Text style={styles.stateText}>{message}</Text>
+      {ctaLabel !== undefined && onCta !== undefined ? (
+        <CtaStack>
+          <PrimaryButton label={ctaLabel} block onPress={onCta} />
+        </CtaStack>
+      ) : null}
+    </View>
   );
 }
 
@@ -149,12 +261,15 @@ export function PrimaryButton({
   disabled,
   loading,
   tone,
+  block,
 }: {
   label: string;
   onPress: () => void;
   disabled?: boolean;
   loading?: boolean;
   tone?: 'leaf' | 'turmeric' | 'chili';
+  /** Stretch to parent width (use inside CtaStack). */
+  block?: boolean;
 }): React.ReactElement {
   const bg = tone === 'turmeric' ? C.turmeric : tone === 'chili' ? C.chili : C.leaf;
   const isDisabled = disabled === true || loading === true;
@@ -163,12 +278,18 @@ export function PrimaryButton({
       accessibilityRole="button"
       onPress={onPress}
       disabled={isDisabled}
-      style={[styles.button, { backgroundColor: isDisabled ? C.disabled : bg }]}
+      style={[
+        styles.button,
+        block === true ? styles.buttonBlock : null,
+        { backgroundColor: isDisabled ? C.disabled : bg },
+      ]}
     >
       {loading === true ? (
         <ActivityIndicator color={C.white} />
       ) : (
-        <Text style={styles.buttonText}>{label}</Text>
+        <Text style={styles.buttonText} numberOfLines={2}>
+          {label}
+        </Text>
       )}
     </Pressable>
   );
@@ -178,19 +299,27 @@ export function SecondaryButton({
   label,
   onPress,
   disabled,
+  block,
 }: {
   label: string;
   onPress: () => void;
   disabled?: boolean;
+  block?: boolean;
 }): React.ReactElement {
   return (
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
       disabled={disabled === true}
-      style={[styles.secondaryButton, disabled === true ? { opacity: 0.5 } : null]}
+      style={[
+        styles.secondaryButton,
+        block === true ? styles.buttonBlock : null,
+        disabled === true ? { opacity: 0.5 } : null,
+      ]}
     >
-      <Text style={styles.secondaryButtonText}>{label}</Text>
+      <Text style={styles.secondaryButtonText} numberOfLines={2}>
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -281,7 +410,9 @@ export function DataState<T>({
     return (
       <View style={styles.centerState}>
         <Text style={styles.errorText}>{error}</Text>
-        <PrimaryButton label="ลองใหม่" onPress={onRetry} />
+        <CtaStack>
+          <PrimaryButton label="ลองใหม่" block onPress={onRetry} />
+        </CtaStack>
       </View>
     );
   }
@@ -296,7 +427,9 @@ export function DataState<T>({
     return (
       <View style={styles.centerState}>
         <Text style={styles.stateText}>{emptyText ?? 'ยังไม่มีข้อมูล'}</Text>
-        <SecondaryButton label="รีเฟรช" onPress={onRetry} />
+        <CtaStack>
+          <SecondaryButton label="รีเฟรช" block onPress={onRetry} />
+        </CtaStack>
       </View>
     );
   }
@@ -327,6 +460,29 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     ...(Platform.OS === 'web' ? { maxWidth: 480 } : {}),
+  },
+  screenInnerWide: {
+    maxWidth: undefined,
+  },
+  stackHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: C.leaf,
+    gap: 8,
+  },
+  backBtn: { paddingHorizontal: 8, paddingVertical: 6, minWidth: 64 },
+  backBtnSpacer: { minWidth: 64 },
+  backBtnText: { color: C.white, fontWeight: '700', fontSize: 16 },
+  stackTitle: { flex: 1, color: C.white, fontSize: 17, fontWeight: '700', textAlign: 'center' },
+  promptTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: C.ink,
+    textAlign: 'center',
+    paddingHorizontal: 8,
   },
   topBar: {
     flexDirection: 'row',
@@ -384,17 +540,51 @@ const styles = StyleSheet.create({
   segmentActive: { backgroundColor: C.white },
   segmentText: { color: C.mute, fontWeight: '600' },
   segmentTextActive: { color: C.leaf },
-  button: { borderRadius: 12, paddingVertical: 14, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
-  buttonText: { color: C.white, fontWeight: '700', fontSize: 16 },
+  button: {
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    minWidth: 160,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+  },
+  buttonBlock: {
+    alignSelf: 'stretch',
+    width: '100%',
+  },
+  buttonText: {
+    color: C.white,
+    fontWeight: '700',
+    fontSize: 16,
+    textAlign: 'center',
+    paddingHorizontal: 4,
+  },
   secondaryButton: {
     borderRadius: 12,
     paddingVertical: 12,
+    paddingHorizontal: 20,
+    minWidth: 160,
     alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
     borderColor: C.leaf,
     marginTop: 8,
   },
-  secondaryButtonText: { color: C.leaf, fontWeight: '700', fontSize: 15 },
+  secondaryButtonText: {
+    color: C.leaf,
+    fontWeight: '700',
+    fontSize: 15,
+    textAlign: 'center',
+    paddingHorizontal: 4,
+  },
+  ctaStack: {
+    width: '100%',
+    maxWidth: 320,
+    alignSelf: 'center',
+    gap: 10,
+    marginTop: 4,
+  },
   field: { marginBottom: 12 },
   fieldLabel: { color: C.ink, fontWeight: '600', marginBottom: 6 },
   input: {
@@ -428,8 +618,27 @@ const styles = StyleSheet.create({
   bigStatValue: { fontSize: 34, fontWeight: '800', color: C.leaf },
   bigStatUnit: { fontSize: 16, fontWeight: '700', color: C.mute },
   bigStatLabel: { fontSize: 14, color: C.mute, marginTop: 4 },
-  centerState: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 12 },
-  stateText: { color: C.mute, fontSize: 15, textAlign: 'center' },
-  errorText: { color: C.chili, fontSize: 15, textAlign: 'center', marginBottom: 4 },
+  centerState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 24,
+    gap: 12,
+  },
+  stateText: {
+    color: C.mute,
+    fontSize: 15,
+    textAlign: 'center',
+    paddingHorizontal: 8,
+    lineHeight: 22,
+  },
+  errorText: {
+    color: C.chili,
+    fontSize: 15,
+    textAlign: 'center',
+    marginBottom: 4,
+    paddingHorizontal: 8,
+  },
   body: { padding: 16, paddingBottom: 40 },
 });

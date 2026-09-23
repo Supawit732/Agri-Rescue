@@ -106,12 +106,14 @@ interface Api {
   ) => Promise<unknown>;
   getMyLots: () => Promise<MyLot[]>;
   getMarket: (lat: number, lng: number, radiusKm: number) => Promise<MarketLot[]>;
+  getMarketLot: (id: number, lat?: number, lng?: number) => Promise<MarketLot>;
   createOrder: (
     lotId: number,
     donation: boolean,
     quantityKg: number,
     extras?: { distribution_place?: string; distribution_at?: string },
   ) => Promise<{ order: Order }>;
+  getOrder: (id: number) => Promise<Order>;
   becomeVolunteer: () => Promise<AuthResponse>;
   getDonorTerms: () => Promise<DonorTermsMeta>;
   getMyDonorApplication: () => Promise<MyDonorApplication>;
@@ -316,6 +318,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
       getMyLots: () => authed<{ lots: MyLot[] }>('GET', '/api/lots/mine').then((r) => r.lots),
       getMarket: (lat, lng, radiusKm) =>
         authed<{ lots: MarketLot[] }>('GET', `/api/market?lat=${lat}&lng=${lng}&radius_km=${radiusKm}`).then((r) => r.lots),
+      getMarketLot: (id, lat, lng) => {
+        const qs =
+          lat !== undefined && lng !== undefined ? `?lat=${lat}&lng=${lng}` : '';
+        return authed<{ lot: MarketLot }>('GET', `/api/market/lots/${id}${qs}`).then((r) => r.lot);
+      },
       createOrder: (lotId, donation, quantityKg, extras) =>
         authed<{ order: Order }>('POST', '/api/orders', {
           lot_id: lotId,
@@ -323,6 +330,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
           quantity_kg: quantityKg,
           ...extras,
         }),
+      getOrder: (id) => authed<{ order: Order }>('GET', `/api/orders/${id}`).then((r) => r.order),
       becomeVolunteer: async () => {
         const res = await authed<{ user: User }>('POST', '/api/donors/volunteer', {});
         setUser(res.user);

@@ -1,19 +1,21 @@
-import { Link } from 'expo-router';
+import { Link, useLocalSearchParams, useRouter } from 'expo-router';
 import { useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ApiError } from '../src/api/client';
 import { FormField, useFieldErrors, useFieldScroll } from '../src/components/form';
-import { Body, PrimaryButton, Screen } from '../src/components/ui';
+import { PrimaryButton, Screen, StackHeader } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
 import { C } from '../src/theme';
 
 export default function LoginScreen(): React.ReactElement {
   const { login } = useAuth();
+  const router = useRouter();
+  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const { errors, setErrors, setFieldError, applyServerFields, firstErrorName } = useFieldErrors();
+  const { errors, setErrors, setFieldError, applyServerFields } = useFieldErrors();
   const { scrollRef, registerY, scrollToField } = useFieldScroll();
   const touched = useRef<Record<string, boolean>>({});
 
@@ -55,6 +57,11 @@ export default function LoginScreen(): React.ReactElement {
     setSubmitting(true);
     try {
       await login(phone.trim(), password);
+      const target =
+        typeof returnTo === 'string' && returnTo.length > 0 && returnTo.startsWith('/')
+          ? returnTo
+          : '/(tabs)';
+      router.replace(target as never);
     } catch (err) {
       if (err instanceof ApiError) {
         applyServerFields(err.fields);
@@ -73,6 +80,7 @@ export default function LoginScreen(): React.ReactElement {
 
   return (
     <Screen>
+      <StackHeader title="เข้าสู่ระบบ" onBack={() => router.replace('/(tabs)')} />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView ref={scrollRef} contentContainerStyle={styles.body}>
           <Text style={styles.brand}>Agri-Rescue</Text>

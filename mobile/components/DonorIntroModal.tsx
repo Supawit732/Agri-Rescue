@@ -1,7 +1,7 @@
 import { Link } from 'expo-router';
 import { Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { C } from '../src/theme';
-import { PrimaryButton, SecondaryButton } from '../src/components/ui';
+import { PrimaryButton, SecondaryButton, CtaStack } from '../src/components/ui';
 
 export type DonorIntroChoice = 'now' | 'later' | 'cancel';
 
@@ -45,9 +45,11 @@ export function DonorIntroModal({
           </ScrollView>
 
           <View style={styles.actions}>
-            <PrimaryButton label="เข้าใจแล้ว กรอกเลย" onPress={() => onChoice('now')} />
-            <SecondaryButton label="ไว้กรอกทีหลัง" onPress={() => onChoice('later')} />
-            <SecondaryButton label="ยกเลิก" onPress={() => onChoice('cancel')} />
+            <CtaStack>
+              <PrimaryButton label="เข้าใจแล้ว กรอกเลย" block onPress={() => onChoice('now')} />
+              <SecondaryButton label="ไว้กรอกทีหลัง" block onPress={() => onChoice('later')} />
+              <SecondaryButton label="ยกเลิก" block onPress={() => onChoice('cancel')} />
+            </CtaStack>
           </View>
         </View>
       </View>
