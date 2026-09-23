@@ -250,6 +250,10 @@ function NewLotForm({
   const [donationAudience, setDonationAudience] = useState<DonationAudience>(
     editingLot?.donation_audience ?? 'verified_org_only',
   );
+  const [splitAllowed, setSplitAllowed] = useState(editingLot?.split_allowed !== false);
+  const [minOrderKg, setMinOrderKg] = useState(
+    editingLot?.min_order_kg !== undefined ? String(editingLot.min_order_kg) : '1',
+  );
   const [startPrice, setStartPrice] = useState(
     editingLot?.start_price_per_kg !== null && editingLot?.start_price_per_kg !== undefined
       ? String(editingLot.start_price_per_kg)
@@ -289,6 +293,8 @@ function NewLotForm({
     setGrade(editingLot.grade);
     setSaleMode(editingLot.sale_mode);
     setDonationAudience(editingLot.donation_audience ?? 'verified_org_only');
+    setSplitAllowed(editingLot.split_allowed !== false);
+    setMinOrderKg(editingLot.min_order_kg !== undefined ? String(editingLot.min_order_kg) : '1');
     setStartPrice(
       editingLot.start_price_per_kg !== null && editingLot.start_price_per_kg !== undefined
         ? String(editingLot.start_price_per_kg)
@@ -366,6 +372,7 @@ function NewLotForm({
   }, [api, cropId, plotId, ripeness, grade, plot, saleMode, hasCustomPrices, startNum, floorNum, pricesSeeded]);
 
   const weightNum = Number(weight);
+  const minOrderNum = Number(minOrderKg);
   const displayPrice =
     estimate !== null && modeHasPrice(saleMode) ? estimate.price_per_kg : null;
   const totalPrice = displayPrice !== null && weightNum > 0 ? Math.round(displayPrice * weightNum) : null;
@@ -529,6 +536,9 @@ function NewLotForm({
     if (!(weightNum > 0)) {
       nextErrors.weight_kg = 'กรุณากรอกน้ำหนักให้ถูกต้อง (มากกว่า 0)';
     }
+    if (!(minOrderNum > 0)) {
+      nextErrors.min_order_kg = 'ขั้นต่ำต่อคำสั่งซื้อต้องมากกว่า 0';
+    }
     if (modeHasPrice(saleMode)) {
       if (!(startNum > 0)) {
         nextErrors.start_price_per_kg = 'กรุณากรอกราคาเริ่ม';
@@ -548,6 +558,10 @@ function NewLotForm({
         ? { start_price_per_kg: startNum, floor_price_per_kg: floorNum }
         : { start_price_per_kg: null, floor_price_per_kg: null };
       const audience = modeHasDonation(saleMode) ? donationAudience : undefined;
+      const splitFields = {
+        split_allowed: splitAllowed,
+        min_order_kg: minOrderNum,
+      };
       if (isEditing && editingLot !== null) {
         const loweringRipeness = ripeness < editingLot.ripeness;
         await api.patchLot(editingLot.id, {
@@ -557,6 +571,7 @@ function NewLotForm({
           sale_mode: saleMode,
           donation_audience: audience,
           ...priceFields,
+          ...splitFields,
           ...(aiResult !== null ? { ai_ripeness: aiResult.ripeness } : {}),
           ...(loweringRipeness ? { confirm_ripeness_photo: aiResult !== null } : {}),
         });
@@ -570,6 +585,7 @@ function NewLotForm({
           sale_mode: saleMode,
           donation_audience: audience,
           ...priceFields,
+          ...splitFields,
           ai_ripeness: aiResult?.ripeness ?? null,
           ai_confidence: aiResult?.confidence ?? null,
           ai_model: aiResult?.model ?? null,
@@ -664,6 +680,33 @@ function NewLotForm({
         keyboardType="numeric"
         placeholder="เช่น 50"
       />
+      <SectionTitle>การแบ่งขาย</SectionTitle>
+      <View style={styles.row}>
+        <Chip label="แบ่งขายได้" selected={splitAllowed} onPress={() => setSplitAllowed(true)} />
+        <Chip label="ขายยกล็อตเท่านั้น" selected={!splitAllowed} onPress={() => setSplitAllowed(false)} />
+      </View>
+      {splitAllowed ? (
+        <Field
+          label="ขั้นต่ำต่อคำสั่งซื้อ (กก.)"
+          value={minOrderKg}
+          onChangeText={(text) => {
+            setMinOrderKg(text);
+            const n = Number(text);
+            setFieldErrors((prev) => {
+              const next = { ...prev };
+              if (!(n > 0)) {
+                next.min_order_kg = 'ขั้นต่ำต่อคำสั่งซื้อต้องมากกว่า 0';
+              } else {
+                delete next.min_order_kg;
+              }
+              return next;
+            });
+          }}
+          error={fieldErrors.min_order_kg}
+          keyboardType="numeric"
+          placeholder="1"
+        />
+      ) : null}
       {fieldErrors.crop_id !== undefined ? (
         <Text style={styles.previewError}>{fieldErrors.crop_id}</Text>
       ) : null}
@@ -907,12 +950,13 @@ function MyLots({
           {lots.map((lot: MyLot) => {
             const hours = hoursLeftFrom(lot.expires_at, now);
             const tone = urgency(hours);
-            const canEdit = lot.status === 'open';
+            const canEdit = lot.status === 'open' || lot.status === 'partially_reserved';
+            const remaining = lot.remaining_kg ?? lot.weight_kg;
             return (
               <Card key={lot.id}>
                 <View style={styles.lotHeader}>
                   <Text style={styles.lotTitle}>
-                    {lot.crop_name_th} {lot.weight_kg} กก.
+                    {lot.crop_name_th} เหลือ {remaining} / {lot.weight_kg} กก.
                   </Text>
                   <Badge text={STATUS_LABELS[lot.status] ?? lot.status} fg={C.leaf} bg={C.leafSoft} />
                 </View>
@@ -921,6 +965,11 @@ function MyLots({
                     text={SALE_MODE_BADGE[lot.sale_mode] ?? lot.sale_mode}
                     fg={lot.sale_mode === 'donate' ? C.turmeric : C.leaf}
                     bg={lot.sale_mode === 'donate' ? C.turmericSoft : C.leafSoft}
+                  />
+                  <Badge
+                    text={lot.split_allowed === false ? 'ยกล็อต' : 'แบ่งขายได้'}
+                    fg={C.mute}
+                    bg={C.leafSoft}
                   />
                   {lot.sale_mode === 'sell_then_donate' && lot.donation_opened ? (
                     <Badge text="เปิดบริจาคแล้ว" fg={C.turmeric} bg={C.turmericSoft} />
@@ -936,6 +985,19 @@ function MyLots({
                 <Text style={styles.lotLine}>
                   {lot.grade === 'substandard' ? 'ตกเกรด' : 'ปกติ'} · ความสุก {RIPENESS_LABELS[lot.ripeness] ?? lot.ripeness}
                 </Text>
+                {lot.bookings !== undefined && lot.bookings.length > 0 ? (
+                  <View style={styles.bookingsBox}>
+                    <Text style={styles.bookingsTitle}>ผู้จอง ({lot.bookings.length})</Text>
+                    {lot.bookings.map((booking) => (
+                      <Text key={booking.id} style={styles.lotLine}>
+                        #{booking.id}
+                        {booking.buyer_name !== undefined ? ` ${booking.buyer_name}` : ''} · {booking.quantity_kg}{' '}
+                        กก. · {booking.is_donation ? 'บริจาค' : `${booking.agreed_price_per_kg} บาท/กก.`} ·{' '}
+                        {STATUS_LABELS[booking.status] ?? booking.status}
+                      </Text>
+                    ))}
+                  </View>
+                ) : null}
                 <Badge text={lot.status === 'open' ? formatCountdown(hours) : tone.label} fg={tone.fg} bg={tone.bg} />
                 {canEdit ? (
                   <View style={styles.editBtn}>
@@ -971,5 +1033,7 @@ const styles = StyleSheet.create({
   lotTitle: { fontSize: 16, fontWeight: '700', color: C.ink, flex: 1, marginRight: 8 },
   lotMeta: { color: C.mute, fontSize: 12, marginBottom: 6 },
   lotLine: { color: C.ink, marginBottom: 4 },
+  bookingsBox: { backgroundColor: C.leafSoft, borderRadius: 12, padding: 10, marginVertical: 8 },
+  bookingsTitle: { fontWeight: '700', color: C.ink, marginBottom: 4 },
   editBtn: { marginTop: 10 },
 });

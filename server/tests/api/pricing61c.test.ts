@@ -44,7 +44,7 @@ describe('lots patch and pricing 6.1c', () => {
     const booked = await request(app)
       .post('/api/orders')
       .set(bearer(buyer.token))
-      .send({ lot_id: lotId, donation: false });
+      .send({ lot_id: lotId, donation: false, quantity_kg: 18 });
     expect(booked.status).toBe(201);
 
     const afterBook = await request(app)
@@ -95,7 +95,7 @@ describe('lots patch and pricing 6.1c', () => {
     const paid = await request(app)
       .post('/api/orders')
       .set(bearer(buyer.token))
-      .send({ lot_id: created.body.lot.id, donation: false });
+      .send({ lot_id: created.body.lot.id, donation: false, quantity_kg: 8 });
     expect(paid.status).toBe(403);
   });
 });

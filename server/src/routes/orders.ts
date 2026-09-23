@@ -3,9 +3,14 @@ import { randomInt } from 'crypto';
 import type { ResultSetHeader, RowDataPacket } from 'mysql2';
 import { z } from 'zod';
 import { pool } from '../db/pool';
-import { assertLotTransition, type LotStatus } from '../domain/lotStateMachine';
+import type { LotStatus } from '../domain/lotStateMachine';
 import type { ProduceGrade } from '../domain/pricing';
 import type { DonationAudience } from '../domain/donorRules';
+import {
+  isBookableLotStatus,
+  remainingLotKg,
+  validateOrderQuantity,
+} from '../domain/lotInventory';
 import { lotAcceptsDonation, lotPricePerKg } from '../domain/sellerPricing';
 import {
   assertMayRequestDonation,
@@ -15,12 +20,14 @@ import {
 import { asyncHandler } from '../http/asyncHandler';
 import { HttpError } from '../http/errors';
 import { requireAuth, requireCapability } from '../middleware/auth';
+import { sumReservedQuantityKg, syncLotBookableStatus } from '../orders/lotInventoryService';
 
 export const ordersRouter = Router();
 
 const createSchema = z.object({
   lot_id: z.number().int().positive(),
   donation: z.boolean(),
+  quantity_kg: z.number().positive('กรุณาระบุจำนวนกิโลกรัม'),
   distribution_place: z.string().trim().min(1).max(512).optional(),
   distribution_at: z.string().datetime().optional(),
 });
@@ -36,6 +43,9 @@ interface LotLock extends RowDataPacket {
   sale_mode: string;
   donation_opened: number;
   weight_kg: number;
+  split_allowed: number;
+  min_order_kg: number;
+  order_step_kg: number;
   expires_at: Date;
   base_shelf_days: number;
   farmer_id: number;
@@ -45,6 +55,7 @@ interface OrderRow extends RowDataPacket {
   id: number;
   lot_id: number;
   buyer_id: number;
+  quantity_kg: number;
   agreed_price_per_kg: number;
   is_donation: number;
   status: string;
@@ -75,7 +86,8 @@ ordersRouter.post(
       const [lots] = await connection.query<LotLock[]>(
         `SELECT h.id, h.status, h.grade, h.allow_donation, h.donation_audience,
                 h.start_price_per_kg, h.floor_price_per_kg, h.sale_mode, h.donation_opened,
-                h.weight_kg, h.expires_at, c.base_shelf_days, p.farmer_id
+                h.weight_kg, h.split_allowed, h.min_order_kg, h.order_step_kg,
+                h.expires_at, c.base_shelf_days, p.farmer_id
          FROM harvest_lots h
          JOIN crops c ON c.id = h.crop_id
          JOIN plots p ON p.id = h.plot_id
@@ -93,8 +105,25 @@ ordersRouter.post(
       if (new Date(lot.expires_at).getTime() <= Date.now()) {
         throw new HttpError(409, 'LOT_EXPIRED', 'ล็อตนี้หมดอายุแล้ว');
       }
-      if (lot.status !== 'open') {
-        throw new HttpError(409, 'LOT_NOT_OPEN', 'ล็อตนี้ถูกจองแล้ว');
+      if (!isBookableLotStatus(lot.status)) {
+        throw new HttpError(409, 'LOT_NOT_OPEN', 'ล็อตนี้จองเพิ่มไม่ได้แล้ว', undefined, {
+          lot_status: lot.status,
+        });
+      }
+      const weightKg = Number(lot.weight_kg);
+      const reservedSum = await sumReservedQuantityKg(connection, lot.id);
+      const remaining = remainingLotKg(weightKg, reservedSum);
+      const qtyCheck = validateOrderQuantity({
+        quantityKg: body.quantity_kg,
+        remainingKg: remaining,
+        minOrderKg: Number(lot.min_order_kg),
+        orderStepKg: Number(lot.order_step_kg),
+        splitAllowed: Number(lot.split_allowed) === 1,
+      });
+      if (!qtyCheck.ok) {
+        throw new HttpError(400, qtyCheck.error.toUpperCase(), qtyCheck.message, {
+          quantity_kg: qtyCheck.message,
+        });
       }
       const saleMode = String(lot.sale_mode);
       const acceptsDonation = lotAcceptsDonation(saleMode, lot.donation_opened);
@@ -113,7 +142,7 @@ ordersRouter.post(
         assertMayRequestDonation({
           profile,
           audience: lot.donation_audience,
-          lotWeightKg: Number(lot.weight_kg),
+          lotWeightKg: body.quantity_kg,
           usedKg,
           allowDonation: acceptsDonation,
           distributionPlace,
@@ -134,20 +163,29 @@ ordersRouter.post(
           hoursLeft,
         });
       }
-      assertLotTransition(lot.status, 'reserved');
-      await connection.query('UPDATE harvest_lots SET status = ? WHERE id = ?', ['reserved', lot.id]);
       const dropOtp = String(randomInt(0, 10000)).padStart(4, '0');
       const [result] = await connection.query<ResultSetHeader>(
         `INSERT INTO orders
-           (lot_id, buyer_id, agreed_price_per_kg, is_donation, status, batch_id, drop_otp, distribution_place, distribution_at)
-         VALUES (?, ?, ?, ?, 'reserved', NULL, ?, ?, ?)`,
-        [lot.id, buyerId, agreedPrice, donation ? 1 : 0, dropOtp, distributionPlace, distributionAt],
+           (lot_id, buyer_id, quantity_kg, agreed_price_per_kg, is_donation, status, batch_id, drop_otp, distribution_place, distribution_at)
+         VALUES (?, ?, ?, ?, ?, 'reserved', NULL, ?, ?, ?)`,
+        [
+          lot.id,
+          buyerId,
+          body.quantity_kg,
+          agreedPrice,
+          donation ? 1 : 0,
+          dropOtp,
+          distributionPlace,
+          distributionAt,
+        ],
       );
+      const lotStatus = await syncLotBookableStatus(connection, lot.id, weightKg, lot.status);
       await connection.commit();
       res.status(201).json({
         order: {
           id: result.insertId,
           lot_id: lot.id,
+          quantity_kg: body.quantity_kg,
           agreed_price_per_kg: agreedPrice,
           is_donation: donation,
           status: 'reserved',
@@ -156,6 +194,8 @@ ordersRouter.post(
           distribution_place: distributionPlace,
           distribution_at: distributionAt?.toISOString() ?? null,
         },
+        lot_status: lotStatus,
+        remaining_kg: remainingLotKg(weightKg, reservedSum + body.quantity_kg),
       });
     } catch (error) {
       await connection.rollback();
@@ -170,7 +210,7 @@ ordersRouter.get(
   '/mine',
   asyncHandler(async (req, res) => {
     const [rows] = await pool.query<OrderRow[]>(
-      `SELECT id, lot_id, buyer_id, agreed_price_per_kg, is_donation, status, batch_id, drop_otp,
+      `SELECT id, lot_id, buyer_id, quantity_kg, agreed_price_per_kg, is_donation, status, batch_id, drop_otp,
               distribution_place, distribution_at, created_at
        FROM orders
        WHERE buyer_id = ?
@@ -181,6 +221,7 @@ ordersRouter.get(
       orders: rows.map((row) => ({
         id: Number(row.id),
         lot_id: Number(row.lot_id),
+        quantity_kg: Number(row.quantity_kg),
         agreed_price_per_kg: Number(row.agreed_price_per_kg),
         is_donation: Number(row.is_donation) === 1,
         status: row.status,
@@ -203,7 +244,7 @@ ordersRouter.delete(
     try {
       await connection.beginTransaction();
       const [orders] = await connection.query<OrderRow[]>(
-        `SELECT id, lot_id, buyer_id, status, batch_id
+        `SELECT id, lot_id, buyer_id, quantity_kg, status, batch_id
          FROM orders
          WHERE id = ?
          FOR UPDATE`,
@@ -223,18 +264,22 @@ ordersRouter.delete(
         throw new HttpError(409, 'CONFLICT', 'คำสั่งซื้อนี้ยกเลิกไม่ได้');
       }
       const [lots] = await connection.query<LotLock[]>(
-        'SELECT id, status FROM harvest_lots WHERE id = ? FOR UPDATE',
+        'SELECT id, status, weight_kg FROM harvest_lots WHERE id = ? FOR UPDATE',
         [order.lot_id],
       );
       const lot = lots[0];
       if (lot === undefined) {
         throw new HttpError(404, 'NOT_FOUND', 'ไม่พบล็อต');
       }
-      assertLotTransition(lot.status, 'open');
       await connection.query('UPDATE orders SET status = ? WHERE id = ?', ['cancelled', order.id]);
-      await connection.query('UPDATE harvest_lots SET status = ? WHERE id = ?', ['open', lot.id]);
+      const lotStatus = await syncLotBookableStatus(
+        connection,
+        lot.id,
+        Number(lot.weight_kg),
+        lot.status,
+      );
       await connection.commit();
-      res.json({ status: 'cancelled', lot_status: 'open' });
+      res.json({ status: 'cancelled', lot_status: lotStatus });
     } catch (error) {
       await connection.rollback();
       throw error;

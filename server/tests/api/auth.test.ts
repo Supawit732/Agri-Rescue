@@ -96,7 +96,7 @@ describe('auth', () => {
     const ownBook = await request(app)
       .post('/api/orders')
       .set(bearer(seller.token))
-      .send({ lot_id: ownLot, donation: false });
+      .send({ lot_id: ownLot, donation: false, quantity_kg: 10 });
     expect(ownBook.status).toBe(403);
     expect(ownBook.body.error.code).toBe('FORBIDDEN');
 
@@ -111,7 +111,7 @@ describe('auth', () => {
     const bookOther = await request(app)
       .post('/api/orders')
       .set(bearer(seller.token))
-      .send({ lot_id: otherLot, donation: false });
+      .send({ lot_id: otherLot, donation: false, quantity_kg: 10 });
     expect(bookOther.status).toBe(201);
 
     const enableBuy = await registerUser(app, { role: 'farmer', name: 'เปิดซื้อทีหลัง' });

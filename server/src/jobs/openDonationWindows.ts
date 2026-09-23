@@ -12,7 +12,7 @@ export async function openSellThenDonateLots(now = new Date()): Promise<number> 
   const [result] = await pool.query<ResultSetHeader>(
     `UPDATE harvest_lots
      SET donation_opened = 1, allow_donation = 1
-     WHERE status = 'open'
+     WHERE status IN ('open', 'partially_reserved')
        AND sale_mode = 'sell_then_donate'
        AND donation_opened = 0
        AND expires_at <= ?

@@ -17,7 +17,11 @@ export async function expireOpenLots(now = new Date()): Promise<number> {
   try {
     await connection.beginTransaction();
     const [lots] = await connection.query<OpenLot[]>(
-      `SELECT id, status FROM harvest_lots WHERE status = 'open' AND expires_at <= ? FOR UPDATE`,
+      `SELECT id, status FROM harvest_lots
+       WHERE status IN ('open', 'partially_reserved')
+         AND expires_at <= ?
+         AND id NOT IN (SELECT lot_id FROM orders WHERE status IN ('reserved', 'picked'))
+       FOR UPDATE`,
       [now],
     );
     for (const lot of lots) {
