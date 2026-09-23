@@ -207,7 +207,7 @@ export function Field({
       <TextInput
         style={[styles.input, hasError ? styles.inputError : null]}
         placeholderTextColor={C.mute}
-        accessibilityState={{ invalid: hasError }}
+        accessibilityState={hasError ? { selected: false } : undefined}
         {...rest}
       />
       {hasError ? (

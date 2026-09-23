@@ -65,7 +65,7 @@ export function FormField({
       <TextInput
         style={[styles.input, hasError ? styles.inputError : null, style]}
         placeholderTextColor={C.mute}
-        accessibilityState={{ invalid: hasError }}
+        accessibilityState={hasError ? { selected: false } : undefined}
         onBlur={(event) => {
           onBlurField?.(name);
           onBlur?.(event);

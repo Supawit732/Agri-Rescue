@@ -17,8 +17,15 @@ describe('sellerPricing', () => {
   it('detects kg units and converts only with explicit factor', () => {
     expect(isKgUnit('บาท/กก.')).toBe(true);
     expect(isKgUnit('บาท/หวี')).toBe(false);
+    expect(isKgUnit(null)).toBe(false);
+    expect(isKgUnit(undefined)).toBe(false);
     expect(unitBaseLabel('บาท/หวี')).toBe('หวี');
     expect(unitBaseLabel('บาท/กก.')).toBe('กก.');
+    expect(unitBaseLabel(null)).toBe('');
+    expect(unitBaseLabel(undefined)).toBe('');
+    expect(unitBaseLabel('   ')).toBe('');
+    expect(unitBaseLabel('หวี')).toBe('หวี');
+    expect(unitBaseLabel('บาท/')).toBe('บาท/');
     expect(toBahtPerKg({ unitPrice: 40, unit: 'บาท/กก.', ditUnitToKg: null })).toBe(40);
     expect(toBahtPerKg({ unitPrice: 65, unit: 'บาท/หวี', ditUnitToKg: null })).toBeNull();
     expect(toBahtPerKg({ unitPrice: 65, unit: 'บาท/หวี', ditUnitToKg: 0.5 })).toBe(32.5);
