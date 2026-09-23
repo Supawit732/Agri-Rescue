@@ -1,9 +1,10 @@
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { ApiError } from '../src/api/client';
+import { AiPhotoInput } from '../src/components/AiPhotoInput';
 import {
   Badge,
   Body,
@@ -13,7 +14,6 @@ import {
   Field,
   PrimaryButton,
   Screen,
-  SecondaryButton,
   SectionTitle,
   Segmented,
   TopBar,
@@ -303,6 +303,13 @@ function NewLotForm({
     }
   };
 
+  const clearPhoto = (): void => {
+    setPhotoPreview(null);
+    setAiResult(null);
+    setAiEdited(false);
+    setAiMessage(null);
+  };
+
   const pickPhoto = (): void => {
     Alert.alert('ประเมินความสุกจากภาพ', 'เลือกแหล่งรูป', [
       {
@@ -411,14 +418,30 @@ function NewLotForm({
       />
 
       <SectionTitle>ความสุก</SectionTitle>
-      <SecondaryButton
-        label={assessing ? 'กำลังประเมินจากภาพ…' : 'ถ่ายรูปให้ AI ประเมิน'}
-        onPress={pickPhoto}
-        disabled={assessing || cropId === 0}
+      <View style={styles.row}>
+        {RIPENESS_LABELS.map((label, index) => (
+          <Chip
+            key={label}
+            label={label}
+            selected={ripeness === index}
+            onPress={() => applyRipeness(index, false)}
+          />
+        ))}
+      </View>
+      <AiPhotoInput
+        previewUri={photoPreview}
+        assessing={assessing}
+        disabled={cropId === 0}
+        onPickNative={pickPhoto}
+        onChangePress={pickPhoto}
+        onClear={clearPhoto}
+        onInvalid={(message) => {
+          setAiMessage(message);
+        }}
+        onImageReady={(image) => {
+          void runAssessment(image.uri, image.width, image.height);
+        }}
       />
-      {photoPreview !== null ? (
-        <Image source={{ uri: photoPreview }} style={styles.photoPreview} accessibilityLabel="รูปผลผลิต" />
-      ) : null}
       {aiMessage !== null ? <Text style={styles.aiWarn}>{aiMessage}</Text> : null}
       {aiResult !== null ? (
         <Card>
@@ -436,16 +459,6 @@ function NewLotForm({
           <Text style={styles.aiLine}>{aiResult.note_th}</Text>
         </Card>
       ) : null}
-      <View style={styles.row}>
-        {RIPENESS_LABELS.map((label, index) => (
-          <Chip
-            key={label}
-            label={label}
-            selected={ripeness === index}
-            onPress={() => applyRipeness(index, false)}
-          />
-        ))}
-      </View>
 
       <SectionTitle>เกรด</SectionTitle>
       <View style={styles.row}>
@@ -554,7 +567,6 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap' },
   plotName: { color: C.ink, fontSize: 16, fontWeight: '400', marginBottom: 12 },
   addPlotHint: { color: C.mute, marginBottom: 12 },
-  photoPreview: { width: '100%', height: 180, borderRadius: 12, marginVertical: 8, backgroundColor: C.line },
   aiWarn: { color: C.turmeric, marginBottom: 8, marginTop: 4 },
   aiLine: { color: C.ink, marginTop: 6 },
   checkboxRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 12 },
