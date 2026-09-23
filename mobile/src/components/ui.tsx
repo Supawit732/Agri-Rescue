@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,7 +16,7 @@ import { C } from '../theme';
 export function Screen({ children }: { children: React.ReactNode }): React.ReactElement {
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
-      {children}
+      <View style={styles.screenInner}>{children}</View>
     </SafeAreaView>
   );
 }
@@ -256,7 +257,16 @@ export function Body({ children }: { children: React.ReactNode }): React.ReactEl
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: C.bg },
+  screen: {
+    flex: 1,
+    backgroundColor: C.bg,
+    ...(Platform.OS === 'web' ? { alignItems: 'center' as const } : {}),
+  },
+  screenInner: {
+    flex: 1,
+    width: '100%',
+    ...(Platform.OS === 'web' ? { maxWidth: 480 } : {}),
+  },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',

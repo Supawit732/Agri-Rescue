@@ -90,7 +90,7 @@ function NewLotForm({
   const [plotId, setPlotId] = useState<number>(plots[0]?.id ?? 0);
   const [weight, setWeight] = useState('');
   const [ripeness, setRipeness] = useState(2);
-  const [grade, setGrade] = useState<Grade>('normal');
+  const [grade, setGrade] = useState<Grade>('substandard');
   const [donation, setDonation] = useState(false);
   const [estimate, setEstimate] = useState<EstimateResponse | null>(null);
   const [estimateError, setEstimateError] = useState<string | null>(null);
@@ -174,16 +174,16 @@ function NewLotForm({
         ))}
       </View>
 
-      {plots.length > 1 ? (
-        <>
-          <SectionTitle>แปลง</SectionTitle>
-          <View style={styles.row}>
-            {plots.map((entry) => (
-              <Chip key={entry.id} label={entry.name} selected={entry.id === plotId} onPress={() => setPlotId(entry.id)} />
-            ))}
-          </View>
-        </>
-      ) : null}
+      <SectionTitle>แปลง</SectionTitle>
+      {plots.length === 1 ? (
+        <Text style={styles.plotName}>{plots[0]?.name}</Text>
+      ) : (
+        <View style={styles.row}>
+          {plots.map((entry) => (
+            <Chip key={entry.id} label={entry.name} selected={entry.id === plotId} onPress={() => setPlotId(entry.id)} />
+          ))}
+        </View>
+      )}
 
       <Field
         label="น้ำหนัก (กก.)"
@@ -233,15 +233,23 @@ function NewLotForm({
             <Text style={styles.previewTotal}>
               {totalPrice !== null ? `ราคารวม ${totalPrice} บาท` : 'กรอกน้ำหนักเพื่อดูราคารวม'}
             </Text>
-            {estimate.weather_fallback ? (
-              <Text style={styles.previewMuted}>* ใช้ค่าอากาศสำรอง</Text>
+            <Text style={styles.previewMuted}>
+              คำนวณจากอากาศที่แปลง {estimate.temp_c}°C ความชื้น {estimate.humidity}%
+            </Text>
+            {estimate.weather_source === 'fallback' ? (
+              <Text style={styles.previewMuted}>ใช้ค่าอากาศสำรอง</Text>
             ) : null}
           </>
         )}
       </Card>
 
       {submitError !== null ? <Text style={styles.previewError}>{submitError}</Text> : null}
-      <PrimaryButton label="ลงประกาศ" onPress={onSubmit} loading={submitting} />
+      <PrimaryButton
+        label="ลงประกาศ"
+        onPress={onSubmit}
+        loading={submitting}
+        disabled={!(weightNum > 0)}
+      />
     </Body>
   );
 }
@@ -290,6 +298,7 @@ function MyLots({
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap' },
+  plotName: { color: C.ink, fontSize: 16, fontWeight: '600', marginBottom: 12 },
   checkboxRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 12 },
   checkbox: {
     width: 24,

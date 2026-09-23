@@ -38,7 +38,7 @@ export interface EstimateResponse {
   price_per_kg: number;
   temp_c: number;
   humidity: number;
-  weather_fallback: boolean;
+  weather_source: 'live' | 'fallback';
 }
 
 export interface MyLot {

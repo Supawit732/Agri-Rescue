@@ -6,3 +6,9 @@ export function installWeatherSuccess(temperature = 32, humidity = 75): void {
     }),
   })) as unknown as typeof fetch;
 }
+
+export function installWeatherFailure(): void {
+  global.fetch = jest.fn(async () => {
+    throw new Error('network down');
+  }) as unknown as typeof fetch;
+}

@@ -57,7 +57,7 @@ lotsRouter.post(
       price_per_kg: pricePerKg,
       temp_c: weather.tempC,
       humidity: weather.humidity,
-      weather_fallback: weather.fallback,
+      weather_source: weather.fallback ? 'fallback' : 'live',
     });
   }),
 );
