@@ -98,3 +98,7 @@ Jest โหลด `server/.env.test` ก่อน แล้วรีเซ็ต
 ## D016 — LocationPicker และ geo API
 
 หน้าสมัครและหน้าเพิ่มแปลงใช้ `LocationPicker` ร่วมกัน ไม่ใส่พิกัดเริ่มต้น 13.65/100.62 ต้องมีพิกัดก่อนส่ง ลิงก์ Google Maps แบบเต็มแยกพิกัดในแอป ลิงก์สั้น `maps.app.goo.gl` / `goo.gl/maps` ไปที่ `POST /api/geo/resolve-link` (ตาม redirect แบบ `manual` สูงสุด 5 ทอด ตรวจ allowlist ทุกทอด ห้าม IP/localhost ภายใน 5 วินาที) ชื่อสถานที่จาก `GET /api/geo/reverse` เรียก Nominatim ด้วย User-Agent ของแอป แคช 24 ชม. และไม่เกิน 1 request/วินาที ถ้าเรียกไม่ได้แสดงพิกัดตัวเลข พิกัดนอกกรอบไทยคร่าว ๆ (lat 5–21, lng 97–106) เตือนแต่ไม่บล็อก `/api/geo/*` จำกัด 20 requests/นาทีต่อ IP ด้วย `express-rate-limit` ตอบ 429 ภาษาไทย
+
+## D017 — ข้อความ 401 ของ mobile client
+
+`mobile/src/api/client.ts` บังคับ logout และข้อความ «เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่» **เฉพาะเมื่อส่ง Bearer token ไปแล้วได้ 401** (เซสชันจริงหมดอายุ) ถ้าเรียกโดยไม่มี token (เช่น `POST /api/auth/login` ที่เบอร์/รหัสผิด ซึ่งเซิร์ฟเวอร์ตอบ 401 พร้อม «เบอร์โทรหรือรหัสผ่านไม่ถูกต้อง») ให้ parse body แล้วแสดงข้อความจากเซิร์ฟเวอร์ตามปกติ ไม่มี unit test ฝั่ง mobile ใน repo นี้ จึงบันทึกพฤติกรรมไว้ที่นี่
