@@ -2,7 +2,7 @@ import type { RowDataPacket } from 'mysql2';
 import { pool } from '../db/pool';
 import { assertLotTransition, type LotStatus } from '../domain/lotStateMachine';
 import { expireMissedDonationProofs } from '../donors/donationService';
-import { maybeRunDitDailyJob } from './ditPipeline';
+import { maybeRunDitDailyJob, maybeRunHourlyPriceRetry } from './ditPipeline';
 import { openSellThenDonateLots } from './openDonationWindows';
 
 export const EXPIRE_INTERVAL_MS = 10 * 60 * 1000;
@@ -48,6 +48,11 @@ export async function runExpireJobs(
       pricesSynced = dit?.prices.saved ?? 0;
     } catch (error) {
       console.error('DIT daily job failed', error);
+    }
+    try {
+      await maybeRunHourlyPriceRetry(now);
+    } catch (error) {
+      console.error('DIT hourly retry failed', error);
     }
   }
   return { lots, proofs, donationOpened, pricesSynced };

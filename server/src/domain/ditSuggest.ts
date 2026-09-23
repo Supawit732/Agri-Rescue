@@ -39,9 +39,34 @@ export function normalizeUnitLabel(raw: string): string {
 const STORE_OR_ORG_PATTERN =
   /อินทรีย์|ร้าน|ห้าง|ซูเปอร์มาร์เก็ต|มาร์เก็ต|แม็คโคร|โลตัส|บิ๊กซี|ท็อปซูเปอร์|ท็อปส์|เลมอนฟาร์ม|เซเว่น|gourmet|foodland|villa/i;
 
+const PROCESSED_PATTERN = /หิมพานต์|แห้ง|ดอง|แช่อิ่ม|กระป๋อง|\bอบ\b|แปรรูป|คั่ว|บด|ผง|น้ำมัน/;
+
 /** Drop organic / store / mall branded SKUs from auto-suggest. */
 export function isExcludedDitProductName(name: string): boolean {
   return STORE_OR_ORG_PATTERN.test(normalizeMocProductName(name));
+}
+
+/** Drop processed / dried / pickled SKUs that share a crop name substring. */
+export function isProcessedDitProductName(name: string): boolean {
+  return PROCESSED_PATTERN.test(normalizeMocProductName(name));
+}
+
+/**
+ * Prefer unit from MOC price response; fall back to parentheses in product name.
+ */
+export function resolveDitUnit(input: {
+  priceUnit: string | null | undefined;
+  nameUnit: string | null | undefined;
+}): string {
+  const price = input.priceUnit?.trim();
+  if (price !== undefined && price !== '') {
+    return price;
+  }
+  const name = input.nameUnit?.trim();
+  if (name !== undefined && name !== '' && name !== 'unknown') {
+    return name.startsWith('บาท') ? name : `บาท/${name}`;
+  }
+  return 'unknown';
 }
 
 function sellTypeRank(sellType: string | null): number {
@@ -109,7 +134,13 @@ export function suggestDitProducts(
     return [];
   }
   return products
-    .filter((p) => p.product_id !== '' && p.product_name.includes(needle) && !isExcludedDitProductName(p.product_name))
+    .filter(
+      (p) =>
+        p.product_id !== '' &&
+        p.product_name.includes(needle) &&
+        !isExcludedDitProductName(p.product_name) &&
+        !isProcessedDitProductName(p.product_name),
+    )
     .sort(compareDitSuggestions)
     .slice(0, limit);
 }

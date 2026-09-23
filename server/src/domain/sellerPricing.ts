@@ -7,7 +7,7 @@ export const PRICING_CONFIG = {
   minFloorOfMarket: 0.2,
   freshnessBase: 0.3,
   freshnessSpan: 0.7,
-  referenceMaxAgeDays: 7,
+  referenceMaxAgeDays: 30,
   sellThenDonateHours: 12,
   medianRadiusKm: 15,
   medianMinLots: 3,

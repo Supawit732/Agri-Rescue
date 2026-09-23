@@ -213,6 +213,7 @@ function DitMappingPanel(): React.ReactElement {
   const { api } = useAuth();
   const [refreshKey, setRefreshKey] = useState(0);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [advancedOpenId, setAdvancedOpenId] = useState<number | null>(null);
   const [unitDrafts, setUnitDrafts] = useState<Record<number, string>>({});
   const [searchQueries, setSearchQueries] = useState<Record<number, string>>({});
   const [searchHits, setSearchHits] = useState<Record<number, DitProductSearchHit[]>>({});
@@ -367,28 +368,23 @@ function DitMappingPanel(): React.ReactElement {
             ? `ดึงราคาล้มเหลว: ${syncJob.message ?? ''}`
             : null;
 
+  const auto = data?.automation;
+  const statusBar =
+    auto !== undefined && auto.last_auto_hm !== null
+      ? `อัปเดตอัตโนมัติล่าสุด ${auto.last_auto_hm} · สำเร็จ ${auto.success_label}` +
+        (auto.next_retry_hm !== null ? ` · ลองใหม่ครั้งถัดไป ${auto.next_retry_hm}` : '')
+      : 'รออัปเดตอัตโนมัติหลังเปิดเซิร์ฟเวอร์…';
+
   return (
     <Body>
       <Text style={styles.lead}>ราคา DIT / MOC</Text>
-      <Text style={styles.meta}>ระบบจับคู่และดึงราคาอัตโนมัติ — หน้านี้สำหรับดูและแก้เมื่อจำเป็น</Text>
-      {data?.products_fetched_at !== null && data?.products_fetched_at !== undefined ? (
-        <Text style={styles.meta}>
-          แคตตาล็อก {data.products_from_cache ? 'จากแคช' : 'เพิ่งดึง'} · {data.products_fetched_at}
-        </Text>
+      <Text style={styles.banner}>{statusBar}</Text>
+      {auto?.message !== null && auto?.message !== undefined ? (
+        <Text style={styles.meta}>{auto.message}</Text>
       ) : null}
-      {syncLabel !== null ? <Text style={styles.banner}>{syncLabel}</Text> : null}
+      {syncLabel !== null ? <Text style={styles.meta}>{syncLabel}</Text> : null}
       {banner !== null ? <Text style={styles.banner}>{banner}</Text> : null}
       {error !== null ? <Text style={styles.error}>{error}</Text> : null}
-      <View style={styles.actions}>
-        <View style={styles.slot}>
-          <PrimaryButton
-            label="ดึงราคาตอนนี้"
-            loading={busyKey === 'sync-prices' || syncJob?.status === 'running'}
-            disabled={busyKey !== null && busyKey !== 'sync-prices'}
-            onPress={() => void fetchPricesNow()}
-          />
-        </View>
-      </View>
       <DataState
         loading={loading}
         error={loadError}
@@ -408,6 +404,7 @@ function DitMappingPanel(): React.ReactElement {
                   : crop.dit_match_source === 'manual'
                     ? 'manual'
                     : 'ยังไม่จับคู่';
+              const advancedOpen = editingId === crop.id || advancedOpenId === crop.id;
               return (
                 <Card key={crop.id}>
                   <Text style={styles.name}>{crop.name_th}</Text>
@@ -415,11 +412,14 @@ function DitMappingPanel(): React.ReactElement {
                     รหัส {crop.dit_product_code ?? '—'} · {matchLabel}
                     {crop.dit_unit !== null ? ` · ${crop.dit_unit}` : ''}
                   </Text>
+                  {crop.dit_product_name !== null ? (
+                    <Text style={styles.meta}>สินค้า: {crop.dit_product_name}</Text>
+                  ) : null}
                   <Text style={styles.meta}>ราคาตลาดในระบบ {crop.market_price_per_kg} บาท/กก.</Text>
-                  {crop.latest_ref_price !== null ? (
+                  {crop.latest_ref_price !== null && !crop.latest_ref_price.rejected_as_outlier ? (
                     <>
                       <Text style={styles.meta}>
-                        ราคาล่าสุด {crop.latest_ref_price.wholesale_price}
+                        ราคาอ้างอิง {crop.latest_ref_price.wholesale_price}
                         {crop.latest_ref_price.unit !== null ? ` ${crop.latest_ref_price.unit}` : ''}
                         {' · '}
                         {crop.latest_ref_price.date}
@@ -427,80 +427,108 @@ function DitMappingPanel(): React.ReactElement {
                       {crop.latest_ref_price.fetched_at !== null ? (
                         <Text style={styles.meta}>ดึงเมื่อ {crop.latest_ref_price.fetched_at}</Text>
                       ) : null}
-                      {crop.latest_ref_price.rejected_as_outlier ? (
-                        <Text style={styles.error}>
-                          flag: ราคาเพี้ยน (baseline {crop.latest_ref_price.outlier_baseline ?? '—'}
-                          {crop.latest_ref_price.outlier_ratio !== null
-                            ? ` · ${crop.latest_ref_price.outlier_ratio.toFixed(2)}×`
-                            : ''}
-                          ) — ไม่ใช้ประเมิน
-                        </Text>
-                      ) : null}
                     </>
                   ) : (
-                    <Text style={styles.meta}>ยังไม่มีราคาอ้างอิง — ใช้ราคาประมาณ</Text>
+                    <Text style={styles.meta}>
+                      ยังไม่มีราคาใช้ได้ —{' '}
+                      {crop.dit_price_status ?? 'ใช้ราคาประมาณ'}
+                    </Text>
                   )}
+                  {crop.dit_price_status !== null && crop.latest_ref_price !== null ? (
+                    <Text style={styles.error}>{crop.dit_price_status}</Text>
+                  ) : null}
+                  {crop.latest_ref_price?.rejected_as_outlier ? (
+                    <Text style={styles.error}>flag: ราคาเพี้ยน — ไม่ใช้ประเมิน</Text>
+                  ) : null}
                   <View style={styles.actions}>
                     <View style={styles.slot}>
                       <SecondaryButton
-                        label={editing ? 'ปิดการแก้' : 'แก้คู่'}
-                        disabled={busyKey !== null}
+                        label={advancedOpen ? 'ซ่อนขั้นสูง' : 'ขั้นสูง'}
+                        disabled={busyKey !== null && !advancedOpen}
                         onPress={() => {
-                          setEditingId(editing ? null : crop.id);
+                          setAdvancedOpenId(advancedOpen ? null : crop.id);
+                          if (advancedOpen) {
+                            setEditingId(null);
+                          }
                           setError(null);
                         }}
                       />
                     </View>
                   </View>
-                  {editing ? (
+                  {advancedOpen ? (
                     <>
-                      <Field
-                        label="ตัวแปลงเป็น กก. (ถ้าหน่วยไม่ใช่ กก.)"
-                        value={unitDraftFor(crop)}
-                        onChangeText={(text) => setUnitDrafts((prev) => ({ ...prev, [crop.id]: text }))}
-                        keyboardType="numeric"
-                        placeholder="เว้นว่างถ้าเป็นบาท/กก."
-                      />
-                      <Field
-                        label="ค้นหาสินค้าด้วยชื่อ"
-                        value={searchQueries[crop.id] ?? ''}
-                        onChangeText={(text) => setSearchQueries((prev) => ({ ...prev, [crop.id]: text }))}
-                        placeholder={`เช่น ${crop.name_th}`}
-                      />
+                      <Text style={styles.historyTitle}>ขั้นสูง</Text>
                       <View style={styles.actions}>
                         <View style={styles.slot}>
+                          <PrimaryButton
+                            label="ดึงราคาตอนนี้"
+                            loading={busyKey === 'sync-prices' || syncJob?.status === 'running'}
+                            disabled={busyKey !== null && busyKey !== 'sync-prices'}
+                            onPress={() => void fetchPricesNow()}
+                          />
+                        </View>
+                        <View style={styles.slot}>
                           <SecondaryButton
-                            label="ค้นหา"
+                            label={editing ? 'ปิดการแก้คู่' : 'แก้คู่'}
                             disabled={busyKey !== null}
-                            onPress={() => void searchProducts(crop)}
+                            onPress={() => {
+                              setEditingId(editing ? null : crop.id);
+                              setError(null);
+                            }}
                           />
                         </View>
                       </View>
-                      {hits.map((hit) => (
-                        <View key={hit.product_id} style={styles.suggestionBox}>
-                          <Text style={styles.name}>{hit.product_name}</Text>
-                          <Text style={styles.meta}>
-                            {hit.product_id} · หน่วย {hit.unit}
-                            {hit.sell_type !== null ? ` · ${hit.sell_type}` : ''}
-                          </Text>
+                      {editing ? (
+                        <>
+                          <Field
+                            label="ตัวแปลงเป็น กก. (ถ้าหน่วยไม่ใช่ กก.)"
+                            value={unitDraftFor(crop)}
+                            onChangeText={(text) => setUnitDrafts((prev) => ({ ...prev, [crop.id]: text }))}
+                            keyboardType="numeric"
+                            placeholder="เว้นว่างถ้าเป็นบาท/กก."
+                          />
+                          <Field
+                            label="ค้นหาสินค้าด้วยชื่อ"
+                            value={searchQueries[crop.id] ?? ''}
+                            onChangeText={(text) => setSearchQueries((prev) => ({ ...prev, [crop.id]: text }))}
+                            placeholder={`เช่น ${crop.name_th}`}
+                          />
                           <View style={styles.actions}>
                             <View style={styles.slot}>
-                              <PrimaryButton
-                                label="บันทึกคู่ (manual)"
-                                loading={busyKey === `map-${crop.id}-${hit.product_id}`}
+                              <SecondaryButton
+                                label="ค้นหา"
                                 disabled={busyKey !== null}
-                                onPress={() =>
-                                  void confirmProduct(crop, {
-                                    product_code: hit.product_id,
-                                    product_name: hit.product_name,
-                                    unit: hit.unit,
-                                  })
-                                }
+                                onPress={() => void searchProducts(crop)}
                               />
                             </View>
                           </View>
-                        </View>
-                      ))}
+                          {hits.map((hit) => (
+                            <View key={hit.product_id} style={styles.suggestionBox}>
+                              <Text style={styles.name}>{hit.product_name}</Text>
+                              <Text style={styles.meta}>
+                                {hit.product_id} · หน่วย {hit.unit}
+                                {hit.sell_type !== null ? ` · ${hit.sell_type}` : ''}
+                              </Text>
+                              <View style={styles.actions}>
+                                <View style={styles.slot}>
+                                  <PrimaryButton
+                                    label="บันทึกคู่ (manual)"
+                                    loading={busyKey === `map-${crop.id}-${hit.product_id}`}
+                                    disabled={busyKey !== null}
+                                    onPress={() =>
+                                      void confirmProduct(crop, {
+                                        product_code: hit.product_id,
+                                        product_name: hit.product_name,
+                                        unit: hit.unit,
+                                      })
+                                    }
+                                  />
+                                </View>
+                              </View>
+                            </View>
+                          ))}
+                        </>
+                      ) : null}
                     </>
                   ) : null}
                 </Card>

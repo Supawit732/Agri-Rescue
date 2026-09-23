@@ -25,6 +25,29 @@ export interface MocPriceResponse {
 
 export type FetchJson = (url: string) => Promise<unknown>;
 
+export class MocApiError extends Error {
+  readonly kind: 'http' | 'bad_request' | 'aspnet' | 'timeout' | 'empty';
+
+  constructor(kind: MocApiError['kind'], message: string) {
+    super(message);
+    this.name = 'MocApiError';
+    this.kind = kind;
+  }
+}
+
+function assertMocJsonPayload(raw: unknown, url: string): Record<string, unknown> | unknown[] {
+  if (typeof raw === 'string') {
+    if (/Server Error|Runtime Error|ASP\.NET/i.test(raw)) {
+      throw new MocApiError('aspnet', `API กระทรวงตอบ error (ASP.NET) สำหรับ ${url}`);
+    }
+    throw new MocApiError('bad_request', `MOC non-JSON สำหรับ ${url}`);
+  }
+  if (raw !== null && typeof raw === 'object' && !Array.isArray(raw) && 'error' in raw) {
+    throw new MocApiError('bad_request', `API กระทรวงตอบ error: ${String((raw as { error: unknown }).error)}`);
+  }
+  return raw as Record<string, unknown> | unknown[];
+}
+
 async function fetchOnce(url: string, timeoutMs: number): Promise<unknown> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -33,10 +56,26 @@ async function fetchOnce(url: string, timeoutMs: number): Promise<unknown> {
       signal: controller.signal,
       headers: { Accept: 'application/json', 'User-Agent': 'Agri-Rescue/6.1c' },
     });
-    if (!response.ok) {
-      throw new Error(`MOC HTTP ${response.status} for ${url}`);
+    const text = await response.text();
+    let parsed: unknown = text;
+    try {
+      parsed = text === '' ? null : JSON.parse(text);
+    } catch {
+      parsed = text;
     }
-    return await response.json();
+    if (!response.ok) {
+      assertMocJsonPayload(parsed, url);
+      throw new MocApiError('http', `MOC HTTP ${response.status} for ${url}`);
+    }
+    return assertMocJsonPayload(parsed, url);
+  } catch (error) {
+    if (error instanceof MocApiError) {
+      throw error;
+    }
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new MocApiError('timeout', `MOC timeout for ${url}`);
+    }
+    throw error;
   } finally {
     clearTimeout(timer);
   }
@@ -82,20 +121,16 @@ export async function fetchMocProducts(fetchJson: FetchJson = defaultFetchJson):
     .filter((row) => row.product_id !== '');
 }
 
-export async function fetchMocPrices(input: {
-  productId: string;
-  fromDate: string;
-  toDate: string;
-  fetchJson?: FetchJson;
-}): Promise<{ response: MocPriceResponse; sourceUrl: string }> {
-  const sourceUrl = buildMocPriceUrl(input.productId, input.fromDate, input.toDate);
-  const fetchJson = input.fetchJson ?? defaultFetchJson;
-  const raw = (await fetchJson(sourceUrl)) as Record<string, unknown>;
+function parsePriceResponse(
+  raw: Record<string, unknown>,
+  productId: string,
+  sourceUrl: string,
+): { response: MocPriceResponse; sourceUrl: string } {
   const list = Array.isArray(raw.price_list) ? raw.price_list : [];
   return {
     sourceUrl,
     response: {
-      product_id: String(raw.product_id ?? input.productId),
+      product_id: String(raw.product_id ?? productId),
       product_name: String(raw.product_name ?? ''),
       category_name: raw.category_name == null ? null : String(raw.category_name),
       group_name: raw.group_name == null ? null : String(raw.group_name),
@@ -110,6 +145,43 @@ export async function fetchMocPrices(input: {
       }),
     },
   };
+}
+
+/**
+ * Working format (when MOC is up): plural gis-product-prices + CE YYYY-MM-DD.
+ * Tries 14-day then 30-day windows — long ranges sometimes return Bad Request.
+ */
+export async function fetchMocPrices(input: {
+  productId: string;
+  fromDate: string;
+  toDate: string;
+  fetchJson?: FetchJson;
+}): Promise<{ response: MocPriceResponse; sourceUrl: string }> {
+  const fetchJson = input.fetchJson ?? defaultFetchJson;
+  // Prefer shorter CE windows first — MOC sometimes 500/ASP.NET on long ranges.
+  const windows = [
+    { fromDate: daysAgoIso(7, new Date(`${input.toDate}T12:00:00Z`)), toDate: input.toDate },
+    { fromDate: daysAgoIso(14, new Date(`${input.toDate}T12:00:00Z`)), toDate: input.toDate },
+    { fromDate: input.fromDate, toDate: input.toDate },
+  ];
+  // de-dupe identical windows
+  const seen = new Set<string>();
+  let lastError: unknown;
+  for (const win of windows) {
+    const key = `${win.fromDate}:${win.toDate}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    const sourceUrl = buildMocPriceUrl(input.productId, win.fromDate, win.toDate);
+    try {
+      const raw = (await fetchJson(sourceUrl)) as Record<string, unknown>;
+      return parsePriceResponse(raw, input.productId, sourceUrl);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
 /** Latest day midpoint from a MOC price response. */
@@ -139,4 +211,27 @@ export function isoDateOnly(d = new Date()): string {
 export function daysAgoIso(days: number, from = new Date()): string {
   const d = new Date(from.getTime() - days * 24 * 60 * 60 * 1000);
   return isoDateOnly(d);
+}
+
+/** Human-readable Thai reason for admin cards. */
+export function mocErrorReasonTh(error: unknown): string {
+  if (error instanceof MocApiError) {
+    if (error.kind === 'aspnet' || error.kind === 'bad_request') {
+      return 'API กระทรวงตอบ error';
+    }
+    if (error.kind === 'timeout') {
+      return 'API กระทรวงไม่ตอบทันเวลา';
+    }
+    return error.message;
+  }
+  if (error instanceof Error) {
+    if (/ASP\.NET|Bad Request|MOC HTTP 5/i.test(error.message)) {
+      return 'API กระทรวงตอบ error';
+    }
+    if (/aborted|timeout/i.test(error.message)) {
+      return 'API กระทรวงไม่ตอบทันเวลา';
+    }
+    return error.message;
+  }
+  return 'ดึงราคาไม่สำเร็จ';
 }

@@ -39,7 +39,13 @@ describe('DIT automation', () => {
       {
         product_id: 'W-ORG',
         product_name: 'มะม่วงน้ำดอกไม้ อินทรีย์ ร้านเลมอนฟาร์ม (บาท/กก.)',
-        category_name: 'อินทรีย์',
+        category_name: 'ผัก-ผลไม้อินทรีย์',
+        sell_type: 'ขายส่ง',
+      },
+      {
+        product_id: 'W-DRY',
+        product_name: 'มะม่วงน้ำดอกไม้ แห้ง (บาท/กก.)',
+        category_name: 'ผลไม้',
         sell_type: 'ขายส่ง',
       },
     ]);

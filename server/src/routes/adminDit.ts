@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import type { ResultSetHeader, RowDataPacket } from 'mysql2';
 import { z } from 'zod';
+import { diagnoseDitMatch } from '../domain/ditAutoMatch';
 import { searchDitProducts, suggestDitProducts } from '../domain/ditSuggest';
 import { pool } from '../db/pool';
 import { asyncHandler } from '../http/asyncHandler';
 import { HttpError } from '../http/errors';
-import { getDitSyncJobState, startDitSyncJob } from '../jobs/ditPipeline';
+import { getDitAutomationStatus, getDitSyncJobState, startDitSyncJob } from '../jobs/ditPipeline';
 import { requireAuth, requireCapability } from '../middleware/auth';
 import { clearMocProductCacheForTests, getCachedMocProducts, getMocCatalogMeta, peekMocProductCache } from '../pricing/mocProductCache';
 import { syncCropReferencePrice } from '../pricing/referencePrices';
@@ -64,8 +65,8 @@ adminDitRouter.get(
   '/crops',
   asyncHandler(async (_req, res) => {
     const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT c.id, c.name_th, c.market_price_per_kg, c.dit_product_code, c.dit_unit, c.dit_unit_to_kg,
-              c.dit_match_source,
+      `SELECT c.id, c.name_th, c.market_price_per_kg, c.dit_product_code, c.dit_product_name,
+              c.dit_unit, c.dit_unit_to_kg, c.dit_match_source, c.dit_price_status,
               r.date AS ref_date, r.wholesale_price AS ref_wholesale_price, r.unit AS ref_unit,
               r.fetched_at AS ref_fetched_at, r.rejected_as_outlier AS ref_outlier,
               r.outlier_baseline AS ref_outlier_baseline, r.outlier_ratio AS ref_outlier_ratio,
@@ -80,7 +81,6 @@ adminDitRouter.get(
          )
        ORDER BY c.id`,
     );
-    // Never await MOC on this page — metadata from in-memory catalog only.
     const meta = getMocCatalogMeta();
     const peek = peekMocProductCache();
     const crops = rows.map((row) => ({
@@ -88,12 +88,14 @@ adminDitRouter.get(
       name_th: String(row.name_th),
       market_price_per_kg: Number(row.market_price_per_kg),
       dit_product_code: row.dit_product_code === null ? null : String(row.dit_product_code),
+      dit_product_name: row.dit_product_name === null ? null : String(row.dit_product_name),
       dit_unit: row.dit_unit === null ? null : String(row.dit_unit),
       dit_unit_to_kg: row.dit_unit_to_kg === null ? null : Number(row.dit_unit_to_kg),
       dit_match_source:
         row.dit_match_source === null || row.dit_match_source === undefined
           ? null
           : (String(row.dit_match_source) as 'auto' | 'manual'),
+      dit_price_status: row.dit_price_status === null ? null : String(row.dit_price_status),
       latest_ref_price:
         row.ref_wholesale_price === null || row.ref_wholesale_price === undefined
           ? null
@@ -126,7 +128,23 @@ adminDitRouter.get(
       products_from_cache: peek !== null,
       products_in_memory: meta.in_memory,
       sync_job: getDitSyncJobState(),
+      automation: getDitAutomationStatus(),
     });
+  }),
+);
+
+adminDitRouter.get(
+  '/crops/:id/diagnosis',
+  asyncHandler(async (req, res) => {
+    const cropId = z.coerce.number().int().positive().parse(req.params.id);
+    const [crops] = await pool.query<RowDataPacket[]>('SELECT id, name_th FROM crops WHERE id = ?', [cropId]);
+    const crop = crops[0];
+    if (crop === undefined) {
+      throw new HttpError(404, 'NOT_FOUND', 'ไม่พบพืชผล');
+    }
+    const cached = await loadMocCatalog({ allowNetwork: true });
+    const rows = diagnoseDitMatch(String(crop.name_th), cached.products);
+    res.json({ crop_id: cropId, name_th: String(crop.name_th), rows });
   }),
 );
 
@@ -142,24 +160,29 @@ adminDitRouter.post(
     const cached = await loadMocCatalog({ allowNetwork: false }).catch(() => null);
     const match = cached?.products.find((p) => p.product_id === body.product_code);
     const unitFromCatalog = match?.unit && match.unit !== 'unknown' ? match.unit : null;
+    const productName = match?.product_name ?? null;
     if (body.unit_to_kg === undefined) {
       await pool.query(
         `UPDATE crops
-         SET dit_product_code = ?, dit_unit = COALESCE(?, dit_unit), dit_match_source = 'manual'
+         SET dit_product_code = ?, dit_product_name = COALESCE(?, dit_product_name),
+             dit_unit = COALESCE(?, dit_unit), dit_match_source = 'manual', dit_price_status = NULL
          WHERE id = ?`,
-        [body.product_code, unitFromCatalog, cropId],
+        [body.product_code, productName, unitFromCatalog, cropId],
       );
     } else {
       await pool.query(
         `UPDATE crops
-         SET dit_product_code = ?, dit_unit = COALESCE(?, dit_unit), dit_unit_to_kg = ?, dit_match_source = 'manual'
+         SET dit_product_code = ?, dit_product_name = COALESCE(?, dit_product_name),
+             dit_unit = COALESCE(?, dit_unit), dit_unit_to_kg = ?, dit_match_source = 'manual', dit_price_status = NULL
          WHERE id = ?`,
-        [body.product_code, unitFromCatalog, body.unit_to_kg, cropId],
+        [body.product_code, productName, unitFromCatalog, body.unit_to_kg, cropId],
       );
     }
     const sync = await syncCropReferencePrice({
       cropId,
       productCode: body.product_code,
+      productName,
+      nameUnit: match?.unit ?? null,
     });
     res.json({
       crop_id: cropId,

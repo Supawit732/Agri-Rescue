@@ -189,10 +189,22 @@ export interface DitCrop {
   name_th: string;
   market_price_per_kg: number;
   dit_product_code: string | null;
+  dit_product_name: string | null;
   dit_unit: string | null;
   dit_unit_to_kg: number | null;
   dit_match_source: 'auto' | 'manual' | null;
+  dit_price_status: string | null;
   latest_ref_price: DitCropRefPrice | null;
+}
+
+export interface DitAutomationStatus {
+  last_auto_at: string | null;
+  last_auto_hm: string | null;
+  success_saved: number;
+  success_total: number;
+  success_label: string;
+  next_retry_hm: string | null;
+  message: string | null;
 }
 
 export interface DitProductSearchHit {
@@ -222,6 +234,7 @@ export interface DitCropsResponse {
   products_fetched_at: string | null;
   products_from_cache: boolean;
   sync_job: DitSyncJob;
+  automation: DitAutomationStatus;
 }
 
 export interface DitSuggestion {
