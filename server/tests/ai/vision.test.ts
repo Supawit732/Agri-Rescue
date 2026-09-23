@@ -82,6 +82,9 @@ describe('AI vision client', () => {
     expect(payload.response_format).toBeDefined();
     expect(payload.thinking).toEqual({ type: 'disabled' });
     expect(payload.messages[0]?.content.some((part) => part.type === 'image_url')).toBe(true);
+    const headers = firstCall[1].headers as Record<string, string>;
+    expect(headers['x-opencode-session']).toMatch(/^agri-rescue-assess-/);
+    expect(headers['User-Agent']).toBe('agri-rescue/0.1');
   });
 
   it('parses assessment JSON wrapped in a code fence', async () => {

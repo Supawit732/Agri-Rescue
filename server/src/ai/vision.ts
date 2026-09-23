@@ -136,11 +136,15 @@ async function postChatCompletions(
   signal: AbortSignal,
   fetchImpl: typeof fetch,
 ): Promise<Response> {
+  const sessionId = `agri-rescue-assess-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
   return fetchImpl(`${config.baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${config.apiKey}`,
+      // OpenCode Go routes by session; other OpenAI-compatible hosts ignore unknown headers.
+      'x-opencode-session': sessionId,
+      'User-Agent': 'agri-rescue/0.1',
     },
     body: JSON.stringify(payload),
     signal,

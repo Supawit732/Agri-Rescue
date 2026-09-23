@@ -79,7 +79,7 @@ Jest โหลด `server/.env.test` ก่อน แล้วรีเซ็ต
 
 ## D015 — ประเมินความสุกจากภาพผ่าน OpenAI-compatible vision API
 
-ใช้ตัวแปร `AI_VISION_BASE_URL` / `AI_VISION_API_KEY` / `AI_VISION_MODEL` (ค่าใน `.env.example` ว่าง; ถ้าไม่ใส่ base/model จะใช้ค่าเริ่มต้นของแผน) เรียก `POST {base}/chat/completions` ส่งรูปเป็น data URI ไม่ผูกกับผู้ให้บริการรายใดรายหนึ่ง
+ใช้ตัวแปร `AI_VISION_BASE_URL` / `AI_VISION_API_KEY` / `AI_VISION_MODEL` (ค่าใน `.env.example` ว่าง; ถ้าไม่ใส่ base/model จะใช้ค่าเริ่มต้นของแผน) เรียก `POST {base}/chat/completions` ส่งรูปเป็น data URI ไม่ผูกกับผู้ให้บริการรายใดรายหนึ่ง ใส่ `User-Agent: agri-rescue/0.1` และ `x-opencode-session` ทุกครั้ง (โฮสต์ OpenAI-compatible ทั่วไปมักเพิกเฉย ส่วน OpenCode Go ใช้เพื่อ routing)
 
 `POST /lots/assess-photo` จำกัด jpeg/png ≤ 5MB timeout 20 วินาที ส่ง `response_format` แบบ json_schema และ `thinking: { type: "disabled" }` ถ้าได้ 400 เพราะไม่รองรับพารามิเตอร์ ให้ retry ครั้งเดียวโดยตัดพารามิเตอร์นั้นออก แล้วดึง JSON จากคำตอบ (รองรับ code fence) validate ด้วย zod ถ้าไม่มี key / timeout / error / parse ไม่ได้ ตอบ `{ available: false, reason }` ความมั่นใจต่ำกว่า 0.6 ตอบพร้อม `low_confidence: true`
 
