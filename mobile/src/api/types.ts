@@ -179,6 +179,17 @@ export interface DitCropRefPrice {
   unit: string | null;
 }
 
+export interface DitLiveSuggestion {
+  product_code: string;
+  product_name: string;
+  unit: string;
+  sell_type: string | null;
+  category_name: string | null;
+  latest_price: number | null;
+  price_date: string | null;
+  price_unit: string | null;
+}
+
 export interface DitCrop {
   id: number;
   name_th: string;
@@ -187,6 +198,21 @@ export interface DitCrop {
   dit_unit: string | null;
   dit_unit_to_kg: number | null;
   latest_ref_price: DitCropRefPrice | null;
+  suggestions: DitLiveSuggestion[];
+}
+
+export interface DitProductSearchHit {
+  product_id: string;
+  product_name: string;
+  unit: string;
+  sell_type: string | null;
+  category_name: string | null;
+}
+
+export interface DitCropsResponse {
+  crops: DitCrop[];
+  products_fetched_at: string;
+  products_from_cache: boolean;
 }
 
 export interface DitSuggestion {

@@ -1,3 +1,4 @@
+import { normalizeMocProductName } from '../domain/ditSuggest';
 import { PRICING_CONFIG, buildMocPriceUrl, ditMidpoint } from '../domain/sellerPricing';
 
 export interface MocProduct {
@@ -43,13 +44,13 @@ export async function fetchMocProducts(fetchJson: FetchJson = defaultFetchJson):
     .map((row) => {
       const item = row as Record<string, unknown>;
       return {
-        product_id: String(item.product_id ?? ''),
-        product_name: String(item.product_name ?? ''),
+        product_id: String(item.product_id ?? '').trim(),
+        product_name: normalizeMocProductName(String(item.product_name ?? '')),
         category_name: item.category_name === null || item.category_name === undefined ? null : String(item.category_name),
         sell_type: item.sell_type === null || item.sell_type === undefined ? null : String(item.sell_type),
       };
     })
-    .filter((row) => row.product_id.trim() !== '');
+    .filter((row) => row.product_id !== '');
 }
 
 export async function fetchMocPrices(input: {

@@ -2,6 +2,7 @@ import request from 'supertest';
 import type { RowDataPacket } from 'mysql2';
 import { pool } from '../../src/db/pool';
 import * as mocClient from '../../src/pricing/mocClient';
+import { clearMocProductCacheForTests } from '../../src/pricing/mocProductCache';
 import { bearer, insertCrop, insertLot, insertPlot, loginStaff, registerUser, testApp } from '../helpers';
 
 describe('lots patch and pricing 6.1c', () => {
@@ -104,6 +105,7 @@ describe('admin DIT mapping', () => {
 
   afterEach(() => {
     jest.restoreAllMocks();
+    clearMocProductCacheForTests();
   });
 
   it('maps product code, stores reference price from mocked MOC, and requires unit conversion', async () => {
@@ -111,18 +113,30 @@ describe('admin DIT mapping', () => {
       sourceUrl: 'https://dataapi.moc.go.th/gis-product-prices?product_id=W14009&from_date=2024-01-01&to_date=2024-01-31',
       response: {
         product_id: 'W14009',
-        product_name: 'กล้วยน้ำว้า',
+        product_name: 'กล้วยน้ำว้า คละ (บาท/กก.)',
         category_name: 'ผลไม้',
         group_name: 'ผลไม้',
-        unit: 'บาท/หวี',
+        unit: 'บาท/กก.',
         price_list: [{ date: '2024-01-15T00:00:00', price_min: 60, price_max: 70 }],
       },
     });
     jest.spyOn(mocClient, 'fetchMocProducts').mockResolvedValue([
       {
         product_id: 'W14009',
-        product_name: 'กล้วยน้ำว้า',
+        product_name: 'กล้วยน้ำว้าทดสอบ คละ (บาท/กก.)\n',
         category_name: 'ผลไม้',
+        sell_type: 'ขายส่ง',
+      },
+      {
+        product_id: 'P14009',
+        product_name: 'กล้วยน้ำว้าทดสอบ คัด (บาท/ผล)',
+        category_name: 'ผลไม้',
+        sell_type: 'ขายปลีก',
+      },
+      {
+        product_id: 'W14099',
+        product_name: 'กล้วยน้ำว้าทดสอบ อินทรีย์ ท็อปซูเปอร์มาร์เก็ต (บาท/กก.)',
+        category_name: 'ผัก-ผลไม้อินทรีย์',
         sell_type: 'ขายส่ง',
       },
     ]);
@@ -142,7 +156,7 @@ describe('admin DIT mapping', () => {
     );
     expect(refs[0]?.product_code).toBe('W14009');
     expect(Number(refs[0]?.wholesale_price)).toBe(65);
-    expect(String(refs[0]?.unit)).toContain('หวี');
+    expect(String(refs[0]?.unit)).toContain('กก');
     expect(String(refs[0]?.source_url)).toContain('gis-product-prices');
 
     const withFactor = await request(app)
@@ -156,5 +170,24 @@ describe('admin DIT mapping', () => {
       .set(bearer(admin.token));
     expect(suggest.status).toBe(200);
     expect(Array.isArray(suggest.body.suggestions)).toBe(true);
+    expect(suggest.body.suggestions.map((s: { product_code: string }) => s.product_code)).toEqual([
+      'W14009',
+      'P14009',
+    ]);
+    expect(suggest.body.suggestions.every((s: { product_name: string }) => !s.product_name.includes('อินทรีย์'))).toBe(
+      true,
+    );
+
+    const crops = await request(app).get('/api/admin/dit/crops').set(bearer(admin.token));
+    expect(crops.status).toBe(200);
+    const row = (crops.body.crops as Array<{ id: number; suggestions: unknown[] }>).find((c) => c.id === cropId);
+    expect(row?.suggestions).toHaveLength(2);
+
+    const search = await request(app)
+      .get('/api/admin/dit/products')
+      .query({ q: 'กล้วยน้ำว้าทดสอบ' })
+      .set(bearer(admin.token));
+    expect(search.status).toBe(200);
+    expect(search.body.products.length).toBeGreaterThanOrEqual(2);
   });
 });

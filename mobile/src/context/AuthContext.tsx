@@ -9,7 +9,8 @@ import type {
   BatchDetail,
   BuyerType,
   Crop,
-  DitCrop,
+  DitCropsResponse,
+  DitProductSearchHit,
   DitSuggestion,
   DonationAudience,
   Driver,
@@ -109,8 +110,11 @@ interface Api {
   addOrgDocuments: (documents: { filename: string; mime: string; base64: string }[]) => Promise<AuthResponse>;
   resubmitOrg: () => Promise<AuthResponse>;
   unlockDonor: (userId: number) => Promise<User>;
-  listDitCrops: () => Promise<DitCrop[]>;
+  listDitCrops: () => Promise<DitCropsResponse>;
   mapDitCrop: (cropId: number, body: { product_code: string; unit_to_kg?: number | null }) => Promise<unknown>;
+  searchDitProducts: (q: string) => Promise<DitProductSearchHit[]>;
+  refreshDitProducts: () => Promise<{ count: number; fetched_at: string }>;
+  syncDitPrices: () => Promise<{ synced: number; skipped: boolean }>;
   suggestDit: (cropId: number) => Promise<DitSuggestion[]>;
   acceptDitSuggestion: (suggestionId: number) => Promise<unknown>;
   rejectDitSuggestion: (suggestionId: number) => Promise<unknown>;
@@ -327,9 +331,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
       },
       unlockDonor: (userId) =>
         authed<{ user: User }>('POST', `/api/donors/admin/donors/${userId}/unlock`).then((r) => r.user),
-      listDitCrops: () =>
-        authed<{ crops: DitCrop[] }>('GET', '/api/admin/dit/crops').then((r) => r.crops),
+      listDitCrops: () => authed<DitCropsResponse>('GET', '/api/admin/dit/crops'),
       mapDitCrop: (cropId, body) => authed('POST', `/api/admin/dit/crops/${cropId}/mapping`, body),
+      searchDitProducts: (q) =>
+        authed<{ products: DitProductSearchHit[] }>('GET', `/api/admin/dit/products?q=${encodeURIComponent(q)}`).then(
+          (r) => r.products,
+        ),
+      refreshDitProducts: () =>
+        authed<{ count: number; fetched_at: string }>('POST', '/api/admin/dit/products/refresh', {}),
+      syncDitPrices: () => authed<{ synced: number; skipped: boolean }>('POST', '/api/admin/dit/sync', {}),
       suggestDit: (cropId) =>
         authed<{ suggestions: DitSuggestion[] }>('POST', `/api/admin/dit/crops/${cropId}/suggest`, {}).then(
           (r) => r.suggestions,

@@ -16,7 +16,7 @@ import {
 import { useAuth } from '../src/context/AuthContext';
 import { useApiData } from '../src/hooks/useApiData';
 import { C } from '../src/theme';
-import type { DitCrop, DitSuggestion, OrgApplication } from '../src/api/types';
+import type { DitCrop, DitLiveSuggestion, DitProductSearchHit, OrgApplication } from '../src/api/types';
 
 const QUICK_REASONS = ['ขอหนังสือรับรองฉบับล่าสุด', 'เอกสารไม่ชัด', 'ชื่อองค์กรไม่ตรงกับเอกสาร'] as const;
 
@@ -212,8 +212,9 @@ function OrgApplicationsPanel(): React.ReactElement {
 function DitMappingPanel(): React.ReactElement {
   const { api } = useAuth();
   const [refreshKey, setRefreshKey] = useState(0);
-  const [drafts, setDrafts] = useState<Record<number, { product_code: string; unit_to_kg: string }>>({});
-  const [suggestions, setSuggestions] = useState<Record<number, DitSuggestion[]>>({});
+  const [unitDrafts, setUnitDrafts] = useState<Record<number, string>>({});
+  const [searchQueries, setSearchQueries] = useState<Record<number, string>>({});
+  const [searchHits, setSearchHits] = useState<Record<number, DitProductSearchHit[]>>({});
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
@@ -221,129 +222,166 @@ function DitMappingPanel(): React.ReactElement {
   const { data, loading, error: loadError, reload } = useApiData(() => api.listDitCrops(), [api, refreshKey]);
   const bump = useCallback(() => setRefreshKey((v) => v + 1), []);
 
-  const draftFor = (crop: DitCrop): { product_code: string; unit_to_kg: string } => {
-    const existing = drafts[crop.id];
-    if (existing !== undefined) {
-      return existing;
+  const unitDraftFor = (crop: DitCrop): string => {
+    if (unitDrafts[crop.id] !== undefined) {
+      return unitDrafts[crop.id]!;
     }
-    return {
-      product_code: crop.dit_product_code ?? '',
-      unit_to_kg: crop.dit_unit_to_kg !== null ? String(crop.dit_unit_to_kg) : '',
-    };
+    return crop.dit_unit_to_kg !== null ? String(crop.dit_unit_to_kg) : '';
   };
 
-  const setDraft = (cropId: number, patch: Partial<{ product_code: string; unit_to_kg: string }>): void => {
-    setDrafts((prev) => {
-      const crop = data?.find((entry) => entry.id === cropId);
-      const base =
-        prev[cropId] ??
-        (crop !== undefined
-          ? {
-              product_code: crop.dit_product_code ?? '',
-              unit_to_kg: crop.dit_unit_to_kg !== null ? String(crop.dit_unit_to_kg) : '',
-            }
-          : { product_code: '', unit_to_kg: '' });
-      return { ...prev, [cropId]: { ...base, ...patch } };
-    });
-  };
-
-  const saveMapping = async (crop: DitCrop): Promise<void> => {
-    const draft = draftFor(crop);
-    if (draft.product_code.trim() === '') {
-      setError('กรุณาระบุรหัสสินค้า DIT');
+  const confirmProduct = async (
+    crop: DitCrop,
+    product: { product_code: string; product_name: string; unit: string },
+  ): Promise<void> => {
+    const needsFactor = product.unit !== 'กก.' && product.unit !== 'unknown';
+    const unitRaw = unitDraftFor(crop).trim();
+    const unit_to_kg = unitRaw === '' ? undefined : Number(unitRaw);
+    if (needsFactor && (unit_to_kg === undefined || !(unit_to_kg > 0))) {
+      setError(`หน่วยของ ${product.product_name} เป็น ${product.unit} — กรุณาระบุตัวแปลงเป็น กก.`);
       return;
     }
-    setBusyKey(`map-${crop.id}`);
+    if (unit_to_kg !== undefined && !(unit_to_kg > 0)) {
+      setError('ตัวแปลงหน่วยต้องเป็นจำนวนบวก');
+      return;
+    }
+    setBusyKey(`map-${crop.id}-${product.product_code}`);
     setError(null);
     setBanner(null);
     try {
-      const unitRaw = draft.unit_to_kg.trim();
-      const unit_to_kg = unitRaw === '' ? undefined : Number(unitRaw);
-      if (unit_to_kg !== undefined && !(unit_to_kg > 0)) {
-        setError('ตัวแปลงหน่วยต้องเป็นจำนวนบวก');
-        return;
-      }
       await api.mapDitCrop(crop.id, {
-        product_code: draft.product_code.trim(),
+        product_code: product.product_code,
         ...(unit_to_kg !== undefined ? { unit_to_kg } : {}),
       });
-      setBanner(`บันทึกการจับคู่ ${crop.name_th} แล้ว`);
+      setBanner(`ยืนยัน ${crop.name_th} → ${product.product_code} แล้ว`);
+      setSearchHits((prev) => ({ ...prev, [crop.id]: [] }));
       bump();
       reload();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'บันทึกการจับคู่ไม่สำเร็จ');
+      setError(err instanceof ApiError ? err.message : 'ยืนยันการจับคู่ไม่สำเร็จ');
     } finally {
       setBusyKey(null);
     }
   };
 
-  const suggest = async (crop: DitCrop): Promise<void> => {
-    setBusyKey(`suggest-${crop.id}`);
+  const searchProducts = async (crop: DitCrop): Promise<void> => {
+    const q = (searchQueries[crop.id] ?? '').trim();
+    if (q === '') {
+      setError('พิมพ์ชื่อสินค้าเพื่อค้นหา');
+      return;
+    }
+    setBusyKey(`search-${crop.id}`);
     setError(null);
     setBanner(null);
     try {
-      const rows = await api.suggestDit(crop.id);
-      setSuggestions((prev) => ({ ...prev, [crop.id]: rows }));
+      const hits = await api.searchDitProducts(q);
+      setSearchHits((prev) => ({ ...prev, [crop.id]: hits }));
+      setBanner(hits.length === 0 ? `ไม่พบสินค้าที่ตรงกับ “${q}”` : `พบ ${hits.length} รายการ`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'ค้นหาสินค้าไม่สำเร็จ');
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  const refreshCatalog = async (): Promise<void> => {
+    setBusyKey('refresh-catalog');
+    setError(null);
+    setBanner(null);
+    try {
+      const res = await api.refreshDitProducts();
+      setBanner(`อัปเดตรายการสินค้า ${res.count} รายการ`);
+      bump();
+      reload();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'ดึงรายการสินค้าไม่สำเร็จ');
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  const fetchPricesNow = async (): Promise<void> => {
+    setBusyKey('sync-prices');
+    setError(null);
+    setBanner(null);
+    try {
+      const res = await api.syncDitPrices();
       setBanner(
-        rows.length === 0
-          ? `ไม่พบคำแนะนำสำหรับ ${crop.name_th}`
-          : `ได้คำแนะนำ ${rows.length} รายการสำหรับ ${crop.name_th}`,
+        res.skipped ? 'ข้ามการดึงราคา (โหมดทดสอบ)' : `ดึงราคาอ้างอิงแล้ว ${res.synced} พืช`,
       );
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'ขอคำแนะนำไม่สำเร็จ');
-    } finally {
-      setBusyKey(null);
-    }
-  };
-
-  const accept = async (suggestion: DitSuggestion): Promise<void> => {
-    setBusyKey(`accept-${suggestion.id}`);
-    setError(null);
-    setBanner(null);
-    try {
-      await api.acceptDitSuggestion(suggestion.id);
-      setSuggestions((prev) => ({
-        ...prev,
-        [suggestion.crop_id]: (prev[suggestion.crop_id] ?? []).filter((row) => row.id !== suggestion.id),
-      }));
-      setBanner(`ยอมรับรหัส ${suggestion.product_code} แล้ว`);
       bump();
       reload();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'ยอมรับคำแนะนำไม่สำเร็จ');
+      setError(err instanceof ApiError ? err.message : 'ดึงราคาไม่สำเร็จ');
     } finally {
       setBusyKey(null);
     }
   };
 
-  const reject = async (suggestion: DitSuggestion): Promise<void> => {
-    setBusyKey(`reject-${suggestion.id}`);
-    setError(null);
-    setBanner(null);
-    try {
-      await api.rejectDitSuggestion(suggestion.id);
-      setSuggestions((prev) => ({
-        ...prev,
-        [suggestion.crop_id]: (prev[suggestion.crop_id] ?? []).filter((row) => row.id !== suggestion.id),
-      }));
-      setBanner(`ปฏิเสธรหัส ${suggestion.product_code} แล้ว`);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'ปฏิเสธคำแนะนำไม่สำเร็จ');
-    } finally {
-      setBusyKey(null);
-    }
+  const renderSuggestion = (crop: DitCrop, suggestion: DitLiveSuggestion): React.ReactElement => {
+    const priceLabel =
+      suggestion.latest_price !== null
+        ? `ราคาล่าสุด ${suggestion.latest_price}${suggestion.price_unit !== null ? ` ${suggestion.price_unit}` : ''}${suggestion.price_date !== null ? ` (${suggestion.price_date})` : ''}`
+        : 'ยังไม่มีราคาล่าสุด';
+    return (
+      <View key={suggestion.product_code} style={styles.suggestionBox}>
+        <Text style={styles.name}>{suggestion.product_name}</Text>
+        <Text style={styles.meta}>
+          {suggestion.product_code} · หน่วย {suggestion.unit}
+          {suggestion.sell_type !== null ? ` · ${suggestion.sell_type}` : ''}
+        </Text>
+        <Text style={styles.meta}>{priceLabel}</Text>
+        <View style={styles.actions}>
+          <View style={styles.slot}>
+            <PrimaryButton
+              label="ยืนยัน"
+              loading={busyKey === `map-${crop.id}-${suggestion.product_code}`}
+              disabled={busyKey !== null}
+              onPress={() =>
+                void confirmProduct(crop, {
+                  product_code: suggestion.product_code,
+                  product_name: suggestion.product_name,
+                  unit: suggestion.unit,
+                })
+              }
+            />
+          </View>
+        </View>
+      </View>
+    );
   };
 
   return (
     <Body>
       <Text style={styles.lead}>จับคู่รหัสสินค้า DIT / MOC</Text>
-      <Text style={styles.meta}>กำหนด product_code และตัวแปลงหน่วย (ถ้าไม่ใช่บาท/กก.)</Text>
+      <Text style={styles.meta}>ระบบแนะนำ 3 อันดับแรกต่อพืช — กดยืนยันได้ทันที หรือค้นหาด้วยชื่อ</Text>
+      {data !== null ? (
+        <Text style={styles.meta}>
+          แคตตาล็อก {data.products_from_cache ? 'จากแคช' : 'เพิ่งดึง'} · {data.products_fetched_at}
+        </Text>
+      ) : null}
       {banner !== null ? <Text style={styles.banner}>{banner}</Text> : null}
       {error !== null ? <Text style={styles.error}>{error}</Text> : null}
+      <View style={styles.actions}>
+        <View style={styles.slot}>
+          <PrimaryButton
+            label="ดึงราคาตอนนี้"
+            loading={busyKey === 'sync-prices'}
+            disabled={busyKey !== null}
+            onPress={() => void fetchPricesNow()}
+          />
+        </View>
+        <View style={styles.slot}>
+          <SecondaryButton
+            label="รีเฟรชรายการสินค้า"
+            disabled={busyKey !== null}
+            onPress={() => void refreshCatalog()}
+          />
+        </View>
+      </View>
       <DataState
         loading={loading}
         error={loadError}
-        data={data}
+        data={data?.crops ?? null}
         onRetry={reload}
         emptyText="ยังไม่มีพืชในระบบ"
         isEmpty={(rows) => rows.length === 0}
@@ -351,8 +389,7 @@ function DitMappingPanel(): React.ReactElement {
         {(crops: DitCrop[]) => (
           <>
             {crops.map((crop) => {
-              const draft = draftFor(crop);
-              const cropSuggestions = suggestions[crop.id] ?? [];
+              const hits = searchHits[crop.id] ?? [];
               return (
                 <Card key={crop.id}>
                   <Text style={styles.name}>{crop.name_th}</Text>
@@ -371,64 +408,58 @@ function DitMappingPanel(): React.ReactElement {
                     <Text style={styles.meta}>ยังไม่มีราคาอ้างอิงจาก DIT</Text>
                   )}
                   <Field
-                    label="รหัสสินค้า DIT"
-                    value={draft.product_code}
-                    onChangeText={(text) => setDraft(crop.id, { product_code: text })}
-                    placeholder="เช่น W01001"
-                  />
-                  <Field
-                    label="ตัวแปลงเป็น กก. (ถ้าจำเป็น)"
-                    value={draft.unit_to_kg}
-                    onChangeText={(text) => setDraft(crop.id, { unit_to_kg: text })}
+                    label="ตัวแปลงเป็น กก. (ถ้าหน่วยไม่ใช่ กก.)"
+                    value={unitDraftFor(crop)}
+                    onChangeText={(text) => setUnitDrafts((prev) => ({ ...prev, [crop.id]: text }))}
                     keyboardType="numeric"
                     placeholder="เว้นว่างถ้าเป็นบาท/กก."
                   />
+                  <Text style={styles.historyTitle}>แนะนำอัตโนมัติ</Text>
+                  {crop.suggestions.length === 0 ? (
+                    <Text style={styles.meta}>ไม่พบรายการแนะนำ — ลองค้นหาด้วยชื่อ</Text>
+                  ) : (
+                    crop.suggestions.map((suggestion) => renderSuggestion(crop, suggestion))
+                  )}
+                  <Field
+                    label="ค้นหาสินค้าด้วยชื่อ"
+                    value={searchQueries[crop.id] ?? ''}
+                    onChangeText={(text) => setSearchQueries((prev) => ({ ...prev, [crop.id]: text }))}
+                    placeholder={`เช่น ${crop.name_th}`}
+                  />
                   <View style={styles.actions}>
                     <View style={styles.slot}>
-                      <PrimaryButton
-                        label="บันทึกการจับคู่"
-                        loading={busyKey === `map-${crop.id}`}
-                        disabled={busyKey !== null}
-                        onPress={() => void saveMapping(crop)}
-                      />
-                    </View>
-                    <View style={styles.slot}>
                       <SecondaryButton
-                        label="แนะนำรหัส"
+                        label="ค้นหา"
                         disabled={busyKey !== null}
-                        onPress={() => void suggest(crop)}
+                        onPress={() => void searchProducts(crop)}
                       />
                     </View>
                   </View>
-                  {cropSuggestions.length > 0 ? (
-                    <>
-                      <Text style={styles.historyTitle}>คำแนะนำ</Text>
-                      {cropSuggestions.map((suggestion) => (
-                        <View key={suggestion.id} style={styles.suggestionBox}>
-                          <Text style={styles.meta}>
-                            {suggestion.product_code} · {suggestion.product_name} ({suggestion.sell_type})
-                          </Text>
-                          <View style={styles.actions}>
-                            <View style={styles.slot}>
-                              <PrimaryButton
-                                label="ยอมรับ"
-                                loading={busyKey === `accept-${suggestion.id}`}
-                                disabled={busyKey !== null}
-                                onPress={() => void accept(suggestion)}
-                              />
-                            </View>
-                            <View style={styles.slot}>
-                              <SecondaryButton
-                                label="ปฏิเสธ"
-                                disabled={busyKey !== null}
-                                onPress={() => void reject(suggestion)}
-                              />
-                            </View>
-                          </View>
+                  {hits.map((hit) => (
+                    <View key={hit.product_id} style={styles.suggestionBox}>
+                      <Text style={styles.name}>{hit.product_name}</Text>
+                      <Text style={styles.meta}>
+                        {hit.product_id} · หน่วย {hit.unit}
+                        {hit.sell_type !== null ? ` · ${hit.sell_type}` : ''}
+                      </Text>
+                      <View style={styles.actions}>
+                        <View style={styles.slot}>
+                          <PrimaryButton
+                            label="ยืนยัน"
+                            loading={busyKey === `map-${crop.id}-${hit.product_id}`}
+                            disabled={busyKey !== null}
+                            onPress={() =>
+                              void confirmProduct(crop, {
+                                product_code: hit.product_id,
+                                product_name: hit.product_name,
+                                unit: hit.unit,
+                              })
+                            }
+                          />
                         </View>
-                      ))}
-                    </>
-                  ) : null}
+                      </View>
+                    </View>
+                  ))}
                 </Card>
               );
             })}
