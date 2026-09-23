@@ -4,8 +4,11 @@ import { asyncHandler } from '../http/asyncHandler';
 import { HttpError } from '../http/errors';
 import { reverseGeocode } from '../geo/nominatim';
 import { resolveGoogleMapsLink } from '../geo/resolveLink';
+import { geoRateLimit } from '../middleware/geoRateLimit';
 
 export const geoRouter = Router();
+
+geoRouter.use(geoRateLimit);
 
 const resolveSchema = z.object({
   url: z.string().trim().min(1, 'กรุณาวางลิงก์ Google Maps'),

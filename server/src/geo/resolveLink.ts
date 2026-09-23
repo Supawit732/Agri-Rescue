@@ -2,7 +2,33 @@ import { HttpError } from '../http/errors';
 import { isAllowedGoogleMapsHost, parseCoordsFromMapsUrl, type LatLng } from '../domain/mapsLink';
 
 export const RESOLVE_LINK_TIMEOUT_MS = 5000;
-const MAX_REDIRECTS = 10;
+/** Maximum redirect hops followed with redirect: 'manual'. */
+export const MAX_REDIRECT_HOPS = 5;
+
+const IPV4_RE = /^(?:\d{1,3}\.){3}\d{1,3}$/;
+
+/** Block literal IPs and loopback — SSRF guard for resolve-link. */
+export function isBlockedResolveHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (
+    host === 'localhost' ||
+    host === '0.0.0.0' ||
+    host === '::1' ||
+    host === '::' ||
+    host.endsWith('.localhost') ||
+    host.endsWith('.local')
+  ) {
+    return true;
+  }
+  if (IPV4_RE.test(host)) {
+    return true;
+  }
+  // Any remaining colon form is treated as IPv6.
+  if (host.includes(':')) {
+    return true;
+  }
+  return false;
+}
 
 function assertAllowedUrl(raw: string): URL {
   let url: URL;
@@ -14,14 +40,29 @@ function assertAllowedUrl(raw: string): URL {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     throw new HttpError(400, 'FORBIDDEN_HOST', 'อนุญาตเฉพาะลิงก์ Google Maps');
   }
+  if (isBlockedResolveHost(url.hostname)) {
+    throw new HttpError(400, 'FORBIDDEN_HOST', 'ไม่อนุญาตให้เรียก IP หรือ localhost');
+  }
   if (!isAllowedGoogleMapsHost(url.hostname)) {
     throw new HttpError(400, 'FORBIDDEN_HOST', 'อนุญาตเฉพาะลิงก์ Google Maps');
   }
   return url;
 }
 
+function assertAllowedRedirectTarget(next: URL): void {
+  if (next.protocol !== 'http:' && next.protocol !== 'https:') {
+    throw new HttpError(400, 'FORBIDDEN_HOST', 'อนุญาตเฉพาะลิงก์ Google Maps');
+  }
+  if (isBlockedResolveHost(next.hostname)) {
+    throw new HttpError(400, 'FORBIDDEN_HOST', 'ไม่อนุญาตให้เรียก IP หรือ localhost');
+  }
+  if (!isAllowedGoogleMapsHost(next.hostname)) {
+    throw new HttpError(400, 'FORBIDDEN_HOST', 'อนุญาตเฉพาะลิงก์ Google Maps');
+  }
+}
+
 /**
- * Follow Google Maps short-link redirects (allowlisted hosts only) and parse coords.
+ * Follow Google Maps short-link redirects manually (allowlisted hosts only, max 5 hops).
  */
 export async function resolveGoogleMapsLink(rawUrl: string): Promise<LatLng & { finalUrl: string }> {
   const start = assertAllowedUrl(rawUrl);
@@ -33,9 +74,10 @@ export async function resolveGoogleMapsLink(rawUrl: string): Promise<LatLng & { 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), RESOLVE_LINK_TIMEOUT_MS);
   let current = start.href;
+  let hopsUsed = 0;
 
   try {
-    for (let hop = 0; hop < MAX_REDIRECTS; hop += 1) {
+    while (true) {
       let response: Response;
       try {
         response = await fetch(current, {
@@ -53,14 +95,20 @@ export async function resolveGoogleMapsLink(rawUrl: string): Promise<LatLng & { 
 
       const location = response.headers.get('location');
       if (location !== null && response.status >= 300 && response.status < 400) {
-        const next = new URL(location, current);
-        if (!isAllowedGoogleMapsHost(next.hostname)) {
-          throw new HttpError(400, 'FORBIDDEN_HOST', 'อนุญาตเฉพาะลิงก์ Google Maps');
+        hopsUsed += 1;
+        if (hopsUsed > MAX_REDIRECT_HOPS) {
+          throw new HttpError(400, 'TOO_MANY_REDIRECTS', 'ตามลิงก์เกินจำนวนที่อนุญาต');
         }
+        const next = new URL(location, current);
+        assertAllowedRedirectTarget(next);
         current = next.href;
         const fromRedirect = parseCoordsFromMapsUrl(current);
         if (fromRedirect !== null) {
           return { ...fromRedirect, finalUrl: current };
+        }
+        // Already used the max hops without a final page — stop without another fetch.
+        if (hopsUsed === MAX_REDIRECT_HOPS) {
+          throw new HttpError(400, 'TOO_MANY_REDIRECTS', 'ตามลิงก์เกินจำนวนที่อนุญาต');
         }
         continue;
       }
@@ -81,7 +129,6 @@ export async function resolveGoogleMapsLink(rawUrl: string): Promise<LatLng & { 
 
       throw new HttpError(422, 'COORDS_NOT_FOUND', 'ไม่พบพิกัดในลิงก์นี้');
     }
-    throw new HttpError(422, 'COORDS_NOT_FOUND', 'ไม่พบพิกัดในลิงก์นี้');
   } finally {
     clearTimeout(timer);
   }

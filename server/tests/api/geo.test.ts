@@ -1,12 +1,27 @@
 import request from 'supertest';
 import { NOMINATIM_USER_AGENT, resetNominatimState } from '../../src/geo/nominatim';
+import { MAX_REDIRECT_HOPS } from '../../src/geo/resolveLink';
+import { GEO_RATE_LIMIT_MAX, resetGeoRateLimit } from '../../src/middleware/geoRateLimit';
 import { testApp } from '../helpers';
+
+function redirectResponse(location: string): Response {
+  return {
+    ok: false,
+    status: 302,
+    headers: {
+      get: (name: string) => (name.toLowerCase() === 'location' ? location : null),
+    },
+    url: '',
+    text: async () => '',
+  } as unknown as Response;
+}
 
 describe('GET /api/geo/reverse', () => {
   const app = testApp();
 
-  beforeEach(() => {
+  beforeEach(async () => {
     resetNominatimState();
+    await resetGeoRateLimit();
   });
 
   afterEach(() => {
@@ -77,6 +92,10 @@ describe('GET /api/geo/reverse', () => {
 describe('POST /api/geo/resolve-link', () => {
   const app = testApp();
 
+  beforeEach(async () => {
+    await resetGeoRateLimit();
+  });
+
   afterEach(() => {
     jest.useRealTimers();
   });
@@ -100,20 +119,23 @@ describe('POST /api/geo/resolve-link', () => {
     expect(res.body.error.message).toContain('Google Maps');
   });
 
+  it('rejects localhost and literal IP URLs', async () => {
+    const localhost = await request(app)
+      .post('/api/geo/resolve-link')
+      .send({ url: 'http://localhost/maps/@13.75,100.50' });
+    expect(localhost.status).toBe(400);
+    expect(localhost.body.error.code).toBe('FORBIDDEN_HOST');
+
+    const ip = await request(app)
+      .post('/api/geo/resolve-link')
+      .send({ url: 'http://127.0.0.1/maps/@13.75,100.50' });
+    expect(ip.status).toBe(400);
+    expect(ip.body.error.code).toBe('FORBIDDEN_HOST');
+  });
+
   it('follows allowlisted redirects and extracts coords', async () => {
     global.fetch = jest.fn(async () =>
-      Promise.resolve({
-        ok: false,
-        status: 302,
-        headers: {
-          get: (name: string) =>
-            name.toLowerCase() === 'location'
-              ? 'https://www.google.com/maps/@13.7367,100.5232,17z'
-              : null,
-        },
-        url: 'https://maps.app.goo.gl/abc',
-        text: async () => '',
-      }),
+      Promise.resolve(redirectResponse('https://www.google.com/maps/@13.7367,100.5232,17z')),
     ) as unknown as typeof fetch;
 
     const res = await request(app)
@@ -123,23 +145,66 @@ describe('POST /api/geo/resolve-link', () => {
     expect(res.body).toEqual({ lat: 13.7367, lng: 100.5232 });
   });
 
-  it('rejects redirect to a non-Google host', async () => {
-    global.fetch = jest.fn(async () =>
-      Promise.resolve({
-        ok: false,
-        status: 302,
-        headers: {
-          get: (name: string) => (name.toLowerCase() === 'location' ? 'https://phishing.example/x' : null),
-        },
-        url: 'https://maps.app.goo.gl/abc',
-        text: async () => '',
-      }),
-    ) as unknown as typeof fetch;
+  it('rejects redirect to a non-Google host mid-chain', async () => {
+    let calls = 0;
+    global.fetch = jest.fn(async () => {
+      calls += 1;
+      if (calls === 1) {
+        return redirectResponse('https://www.google.com/maps?q=bangkok');
+      }
+      return redirectResponse('https://evil.example/steal');
+    }) as unknown as typeof fetch;
 
     const res = await request(app)
       .post('/api/geo/resolve-link')
       .send({ url: 'https://maps.app.goo.gl/abc' });
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('FORBIDDEN_HOST');
+    expect(calls).toBe(2);
+  });
+
+  it(`rejects more than ${MAX_REDIRECT_HOPS} redirect hops with 400`, async () => {
+    expect(MAX_REDIRECT_HOPS).toBe(5);
+    let calls = 0;
+    global.fetch = jest.fn(async () => {
+      calls += 1;
+      return redirectResponse(`https://www.google.com/maps?hop=${calls}`);
+    }) as unknown as typeof fetch;
+
+    const res = await request(app)
+      .post('/api/geo/resolve-link')
+      .send({ url: 'https://maps.app.goo.gl/loop' });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('TOO_MANY_REDIRECTS');
+    expect(calls).toBe(MAX_REDIRECT_HOPS);
+  });
+});
+
+describe('GET/POST /api/geo rate limit', () => {
+  const app = testApp();
+
+  beforeEach(async () => {
+    await resetGeoRateLimit();
+    global.fetch = jest.fn() as unknown as typeof fetch;
+  });
+
+  it(`returns 429 after ${GEO_RATE_LIMIT_MAX} requests per IP per minute`, async () => {
+    expect(GEO_RATE_LIMIT_MAX).toBe(20);
+    for (let i = 0; i < GEO_RATE_LIMIT_MAX; i += 1) {
+      const res = await request(app)
+        .post('/api/geo/resolve-link')
+        .send({ url: 'https://www.google.com/maps/@13.7563,100.5018,17z' });
+      expect(res.status).toBe(200);
+    }
+    const limited = await request(app)
+      .post('/api/geo/resolve-link')
+      .send({ url: 'https://www.google.com/maps/@13.7563,100.5018,17z' });
+    expect(limited.status).toBe(429);
+    expect(limited.body).toEqual({
+      error: {
+        code: 'RATE_LIMIT',
+        message: 'เรียกบริการตำแหน่งบ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่',
+      },
+    });
   });
 });
