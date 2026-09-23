@@ -1,7 +1,7 @@
 import request from 'supertest';
 import type { RowDataPacket } from 'mysql2';
 import { pool } from '../../src/db/pool';
-import { bearer, insertCrop, insertLot, insertPlot, registerUser, testApp } from '../helpers';
+import { bearer, insertCrop, insertLot, insertPlot, loginStaff, registerUser, testApp } from '../helpers';
 
 describe('orders', () => {
   const app = testApp();
@@ -59,6 +59,18 @@ describe('orders', () => {
 
     const closed = await openLot(false);
     const charity = await registerUser(app, { role: 'buyer', buyer_type: 'charity' });
+    const pending = await request(app)
+      .post('/api/orders')
+      .set(bearer(charity.token))
+      .send({ lot_id: vendorLot.lotId, donation: true });
+    expect(pending.status).toBe(403);
+    expect(pending.body.error.message).toContain('สงเคราะห์');
+
+    const admin = await loginStaff(app, 'coordinator', 'อนุมัติสงเคราะห์');
+    await request(app)
+      .post(`/api/auth/admin/approve-charity/${charity.user.id}`)
+      .set(bearer(admin.token));
+
     const blocked = await request(app)
       .post('/api/orders')
       .set(bearer(charity.token))

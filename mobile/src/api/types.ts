@@ -1,13 +1,19 @@
 export type UserRole = 'farmer' | 'buyer' | 'driver' | 'coordinator';
 export type BuyerType = 'vendor' | 'shop' | 'charity';
 export type Grade = 'normal' | 'substandard';
+export type AppMode = 'sell' | 'buy';
 
 export interface User {
   id: number;
   name: string;
   phone: string;
   role: UserRole;
+  can_sell: boolean;
+  can_buy: boolean;
+  is_admin: boolean;
   buyer_type: BuyerType | null;
+  charity_approved: boolean;
+  line_id: string | null;
   lat: number | null;
   lng: number | null;
 }

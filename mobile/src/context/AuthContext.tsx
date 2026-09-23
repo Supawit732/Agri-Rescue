@@ -1,7 +1,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { apiRequest, setUnauthorizedHandler } from '../api/client';
-import { clearToken, loadToken, saveToken } from '../api/storage';
+import { clearAppMode, clearToken, loadAppMode, loadToken, saveAppMode, saveToken } from '../api/storage';
 import type {
+  AppMode,
   AssessPhotoResponse,
   AuthResponse,
   Batch,
@@ -25,13 +26,22 @@ interface RegisterInput {
   name: string;
   phone: string;
   password: string;
-  role: 'farmer' | 'buyer';
+  can_sell: boolean;
+  can_buy: boolean;
   buyer_type?: BuyerType | null;
+  line_id?: string | null;
   lat?: number | null;
   lng?: number | null;
 }
 
 interface Api {
+  getMe: () => Promise<User>;
+  updateProfile: (input: {
+    can_sell?: true;
+    can_buy?: true;
+    buyer_type?: BuyerType;
+    line_id?: string | null;
+  }) => Promise<AuthResponse>;
   getCrops: () => Promise<Crop[]>;
   getPlots: () => Promise<Plot[]>;
   createPlot: (input: { name: string; lat: number; lng: number; area_rai: number }) => Promise<Plot>;
@@ -75,37 +85,45 @@ interface AuthContextValue {
   ready: boolean;
   user: User | null;
   role: UserRole | null;
+  mode: AppMode;
+  setMode: (mode: AppMode) => void;
   login: (phone: string, password: string) => Promise<void>;
   register: (input: RegisterInput) => Promise<void>;
   logout: () => void;
+  refreshUser: () => Promise<void>;
   api: Api;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+function defaultMode(user: User, stored: AppMode | null): AppMode {
+  if (stored === 'sell' && user.can_sell) {
+    return 'sell';
+  }
+  if (stored === 'buy' && user.can_buy) {
+    return 'buy';
+  }
+  if (user.can_sell) {
+    return 'sell';
+  }
+  if (user.can_buy) {
+    return 'buy';
+  }
+  return 'sell';
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }): React.ReactElement {
   const [ready, setReady] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    void (async () => {
-      const stored = await loadToken();
-      if (active) {
-        setToken(stored);
-        setReady(true);
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, []);
+  const [mode, setModeState] = useState<AppMode>('sell');
 
   const logout = useCallback(() => {
     setToken(null);
     setUser(null);
+    setModeState('sell');
     void clearToken();
+    void clearAppMode();
   }, []);
 
   useEffect(() => {
@@ -118,7 +136,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
   const applyAuth = useCallback(async (auth: AuthResponse) => {
     setToken(auth.token);
     setUser(auth.user);
+    const stored = await loadAppMode();
+    const nextMode = defaultMode(auth.user, stored);
+    setModeState(nextMode);
     await saveToken(auth.token);
+    await saveAppMode(nextMode);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      const stored = await loadToken();
+      if (!active) {
+        return;
+      }
+      if (stored === null) {
+        setReady(true);
+        return;
+      }
+      setToken(stored);
+      try {
+        const me = await apiRequest<{ user: User }>({ method: 'GET', path: '/api/auth/me', token: stored });
+        if (!active) {
+          return;
+        }
+        setUser(me.user);
+        const savedMode = await loadAppMode();
+        setModeState(defaultMode(me.user, savedMode));
+      } catch {
+        if (active) {
+          setToken(null);
+          setUser(null);
+          await clearToken();
+        }
+      } finally {
+        if (active) {
+          setReady(true);
+        }
+      }
+    })();
+    return () => {
+      active = false;
+    };
   }, []);
 
   const login = useCallback(
@@ -137,10 +196,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
     [applyAuth],
   );
 
+  const setMode = useCallback((next: AppMode) => {
+    setModeState(next);
+    void saveAppMode(next);
+  }, []);
+
+  const refreshUser = useCallback(async () => {
+    if (token === null) {
+      return;
+    }
+    const me = await apiRequest<{ user: User }>({ method: 'GET', path: '/api/auth/me', token });
+    setUser(me.user);
+  }, [token]);
+
+  const updateProfile = useCallback(
+    async (input: {
+      can_sell?: true;
+      can_buy?: true;
+      buyer_type?: BuyerType;
+      line_id?: string | null;
+    }) => {
+      const auth = await apiRequest<AuthResponse>({
+        method: 'PATCH',
+        path: '/api/auth/profile',
+        token,
+        body: input,
+      });
+      await applyAuth(auth);
+      return auth;
+    },
+    [applyAuth, token],
+  );
+
   const api = useMemo<Api>(() => {
-    const authed = <T,>(method: 'GET' | 'POST' | 'DELETE', path: string, body?: unknown): Promise<T> =>
+    const authed = <T,>(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: string, body?: unknown): Promise<T> =>
       apiRequest<T>({ method, path, token, body });
     return {
+      getMe: () => authed<{ user: User }>('GET', '/api/auth/me').then((r) => r.user),
+      updateProfile,
       getCrops: () => authed<{ crops: Crop[] }>('GET', '/api/crops').then((r) => r.crops),
       getPlots: () => authed<{ plots: Plot[] }>('GET', '/api/plots/mine').then((r) => r.plots),
       createPlot: (input) => authed<{ plot: Plot }>('POST', '/api/plots', input).then((r) => r.plot),
@@ -166,11 +259,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
       unlockStop: (id) => authed<{ id: number; otp_attempts: number; locked: boolean }>('POST', `/api/stops/${id}/unlock`),
       getImpact: () => authed<{ summary: ImpactSummary }>('GET', '/api/impact/summary').then((r) => r.summary),
     };
-  }, [token]);
+  }, [token, updateProfile]);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ ready, user, role: user?.role ?? null, login, register, logout, api }),
-    [ready, user, login, register, logout, api],
+    () => ({
+      ready,
+      user,
+      role: user?.role ?? null,
+      mode,
+      setMode,
+      login,
+      register,
+      logout,
+      refreshUser,
+      api,
+    }),
+    [ready, user, mode, setMode, login, register, logout, refreshUser, api],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

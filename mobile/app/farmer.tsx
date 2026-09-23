@@ -27,7 +27,7 @@ import { C, urgency } from '../src/theme';
 import type { AssessPhotoResponse, Crop, EstimateResponse, Grade, MyLot, Plot } from '../src/api/types';
 
 export default function FarmerScreen(): React.ReactElement {
-  const { api, logout } = useAuth();
+  const { api, logout, user, mode, setMode } = useAuth();
   const router = useRouter();
   const [tab, setTab] = useState<'new' | 'mine'>('new');
   const [refreshKey, setRefreshKey] = useState(0);
@@ -41,9 +41,24 @@ export default function FarmerScreen(): React.ReactElement {
     setRefreshKey((value) => value + 1);
   }, []);
 
+  const switchMode = (next: 'sell' | 'buy'): void => {
+    setMode(next);
+    if (next === 'buy') {
+      router.replace('/buyer');
+    }
+  };
+
   return (
     <Screen>
-      <TopBar title="เกษตรกร" onImpact={() => router.push('/impact')} onLogout={logout} />
+      <TopBar
+        title="โหมดขาย"
+        onImpact={() => router.push('/impact')}
+        onProfile={() => router.push('/profile')}
+        onLogout={logout}
+        mode={mode}
+        onModeChange={switchMode}
+        showModeToggle={user?.can_sell === true && user.can_buy === true}
+      />
       <Segmented
         options={[
           { key: 'new', label: 'ลงล็อต' },

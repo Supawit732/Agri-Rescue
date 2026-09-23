@@ -5,7 +5,7 @@ import { pool } from '../db/pool';
 import { haversineKm } from '../domain/geo';
 import { urgentPricePerKg, type ProduceGrade } from '../domain/pricing';
 import { asyncHandler } from '../http/asyncHandler';
-import { requireAuth, requireRole } from '../middleware/auth';
+import { requireAuth, requireCapability } from '../middleware/auth';
 
 export const marketRouter = Router();
 
@@ -33,7 +33,7 @@ interface MarketRow extends RowDataPacket {
 marketRouter.get(
   '/',
   requireAuth,
-  requireRole('buyer'),
+  requireCapability('buy'),
   asyncHandler(async (req, res) => {
     const query = querySchema.parse(req.query);
     const radiusKm = query.radius_km ?? 15;

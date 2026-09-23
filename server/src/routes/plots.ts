@@ -3,7 +3,7 @@ import type { ResultSetHeader, RowDataPacket } from 'mysql2';
 import { z } from 'zod';
 import { pool } from '../db/pool';
 import { asyncHandler } from '../http/asyncHandler';
-import { requireAuth, requireRole } from '../middleware/auth';
+import { requireAuth, requireCapability } from '../middleware/auth';
 
 export const plotsRouter = Router();
 
@@ -14,7 +14,7 @@ const plotSchema = z.object({
   area_rai: z.number().positive('พื้นที่ต้องมากกว่า 0'),
 });
 
-plotsRouter.use(requireAuth, requireRole('farmer'));
+plotsRouter.use(requireAuth, requireCapability('sell'));
 
 plotsRouter.get(
   '/',

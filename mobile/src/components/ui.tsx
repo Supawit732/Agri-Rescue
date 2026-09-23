@@ -25,17 +25,50 @@ export function TopBar({
   title,
   onImpact,
   onLogout,
+  onProfile,
+  mode,
+  onModeChange,
+  showModeToggle,
 }: {
   title: string;
   onImpact?: () => void;
   onLogout?: () => void;
+  onProfile?: () => void;
+  mode?: 'sell' | 'buy';
+  onModeChange?: (mode: 'sell' | 'buy') => void;
+  showModeToggle?: boolean;
 }): React.ReactElement {
   return (
     <View style={styles.topBar}>
-      <Text style={styles.topTitle} numberOfLines={1}>
-        {title}
-      </Text>
+      <View style={styles.topLeft}>
+        <Text style={styles.topTitle} numberOfLines={1}>
+          {title}
+        </Text>
+        {showModeToggle === true && onModeChange !== undefined ? (
+          <View style={styles.modeRow}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => onModeChange('sell')}
+              style={[styles.modeChip, mode === 'sell' ? styles.modeChipOn : null]}
+            >
+              <Text style={[styles.modeChipText, mode === 'sell' ? styles.modeChipTextOn : null]}>โหมดขาย</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => onModeChange('buy')}
+              style={[styles.modeChip, mode === 'buy' ? styles.modeChipOn : null]}
+            >
+              <Text style={[styles.modeChipText, mode === 'buy' ? styles.modeChipTextOn : null]}>โหมดซื้อ</Text>
+            </Pressable>
+          </View>
+        ) : null}
+      </View>
       <View style={styles.topActions}>
+        {onProfile !== undefined ? (
+          <Pressable accessibilityRole="button" onPress={onProfile} style={styles.topLink}>
+            <Text style={styles.topLinkText}>โปรไฟล์</Text>
+          </Pressable>
+        ) : null}
         {onImpact !== undefined ? (
           <Pressable accessibilityRole="button" onPress={onImpact} style={styles.topLink}>
             <Text style={styles.topLinkText}>ผลลัพธ์</Text>
@@ -274,9 +307,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     backgroundColor: C.leaf,
+    gap: 8,
   },
-  topTitle: { color: C.white, fontSize: 18, fontWeight: '700', flex: 1 },
-  topActions: { flexDirection: 'row', gap: 8 },
+  topLeft: { flex: 1, minWidth: 0 },
+  topTitle: { color: C.white, fontSize: 18, fontWeight: '700' },
+  modeRow: { flexDirection: 'row', gap: 6, marginTop: 6 },
+  modeChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  modeChipOn: { backgroundColor: C.white },
+  modeChipText: { color: C.white, fontSize: 12, fontWeight: '700' },
+  modeChipTextOn: { color: C.leaf },
+  topActions: { flexDirection: 'row', gap: 8, flexShrink: 0 },
   topLink: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.18)' },
   topLinkText: { color: C.white, fontWeight: '600', fontSize: 13 },
   sectionTitle: { fontSize: 16, fontWeight: '700', color: C.ink, marginBottom: 8, marginTop: 4 },

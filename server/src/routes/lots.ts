@@ -7,7 +7,7 @@ import { urgentPricePerKg, type ProduceGrade } from '../domain/pricing';
 import { predictShelfHours } from '../domain/shelfLife';
 import { asyncHandler } from '../http/asyncHandler';
 import { HttpError } from '../http/errors';
-import { requireAuth, requireRole } from '../middleware/auth';
+import { requireAuth, requireCapability } from '../middleware/auth';
 import { fetchWeather, WEATHER_BASIS } from '../weather/openMeteo';
 
 export const lotsRouter = Router();
@@ -48,7 +48,7 @@ interface CropRow extends RowDataPacket {
   market_price_per_kg: number;
 }
 
-lotsRouter.use(requireAuth, requireRole('farmer'));
+lotsRouter.use(requireAuth, requireCapability('sell'));
 
 lotsRouter.post(
   '/estimate',
