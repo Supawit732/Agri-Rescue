@@ -50,6 +50,38 @@ function writeDiskCache(products: MocProduct[]): void {
   }
 }
 
+function fromMemory(): { products: DitProductCandidate[]; fetched_at: string; from_cache: boolean } | null {
+  if (memory === null) {
+    return null;
+  }
+  return {
+    products: memory.products,
+    fetched_at: new Date(memory.fetchedAtMs).toISOString(),
+    from_cache: true,
+  };
+}
+
+function fromDisk(allowStale: boolean, nowMs: number): {
+  products: DitProductCandidate[];
+  fetched_at: string;
+  from_cache: boolean;
+} | null {
+  const disk = readDiskCache();
+  if (disk === null) {
+    return null;
+  }
+  const fetchedAtMs = Date.parse(disk.fetched_at);
+  if (!Number.isFinite(fetchedAtMs)) {
+    return null;
+  }
+  if (!allowStale && nowMs - fetchedAtMs >= CACHE_TTL_MS) {
+    return null;
+  }
+  const products = toCandidates(disk.products);
+  memory = { fetchedAtMs, products };
+  return { products, fetched_at: disk.fetched_at, from_cache: true };
+}
+
 export async function getCachedMocProducts(input?: {
   forceRefresh?: boolean;
   fetchJson?: FetchJson;
@@ -57,28 +89,32 @@ export async function getCachedMocProducts(input?: {
 }): Promise<{ products: DitProductCandidate[]; fetched_at: string; from_cache: boolean }> {
   const nowMs = input?.nowMs ?? Date.now();
   if (!input?.forceRefresh && memory !== null && nowMs - memory.fetchedAtMs < CACHE_TTL_MS) {
-    return {
-      products: memory.products,
-      fetched_at: new Date(memory.fetchedAtMs).toISOString(),
-      from_cache: true,
-    };
+    return fromMemory()!;
   }
   if (!input?.forceRefresh) {
-    const disk = readDiskCache();
-    if (disk !== null) {
-      const fetchedAtMs = Date.parse(disk.fetched_at);
-      if (Number.isFinite(fetchedAtMs) && nowMs - fetchedAtMs < CACHE_TTL_MS) {
-        const products = toCandidates(disk.products);
-        memory = { fetchedAtMs, products };
-        return { products, fetched_at: disk.fetched_at, from_cache: true };
-      }
+    const freshDisk = fromDisk(false, nowMs);
+    if (freshDisk !== null) {
+      return freshDisk;
     }
   }
-  const raw = await fetchMocProducts(input?.fetchJson);
-  const products = toCandidates(raw);
-  memory = { fetchedAtMs: nowMs, products };
-  writeDiskCache(raw);
-  return { products, fetched_at: new Date(nowMs).toISOString(), from_cache: false };
+  try {
+    const raw = await fetchMocProducts(input?.fetchJson);
+    const products = toCandidates(raw);
+    memory = { fetchedAtMs: nowMs, products };
+    writeDiskCache(raw);
+    return { products, fetched_at: new Date(nowMs).toISOString(), from_cache: false };
+  } catch (error) {
+    // MOC outages are common — prefer any cached catalog over failing the admin UI.
+    const staleMemory = fromMemory();
+    if (staleMemory !== null) {
+      return staleMemory;
+    }
+    const staleDisk = fromDisk(true, nowMs);
+    if (staleDisk !== null) {
+      return staleDisk;
+    }
+    throw error;
+  }
 }
 
 /** Test helper */

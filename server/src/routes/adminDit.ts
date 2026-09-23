@@ -25,6 +25,13 @@ const mappingSchema = z.object({
   unit_to_kg: z.number().positive().nullable().optional(),
 });
 
+async function loadMocCatalog(input?: { forceRefresh?: boolean }) {
+  try {
+    return await getCachedMocProducts(input);
+  } catch {
+    throw new HttpError(502, 'MOC_UNAVAILABLE', 'ดึงรายการสินค้าจากกรมการค้าภายในไม่สำเร็จ ลองใหม่ภายหลัง');
+  }
+}
 async function latestPriceForProduct(
   productId: string,
   fetchJson?: FetchJson,
@@ -76,7 +83,7 @@ adminDitRouter.get(
   '/products',
   asyncHandler(async (req, res) => {
     const q = typeof req.query.q === 'string' ? req.query.q : '';
-    const cached = await getCachedMocProducts();
+    const cached = await loadMocCatalog();
     const products = q.trim() === '' ? cached.products.slice(0, 50) : searchDitProducts(q, cached.products, 30);
     res.json({
       products,
@@ -89,7 +96,7 @@ adminDitRouter.get(
 adminDitRouter.post(
   '/products/refresh',
   asyncHandler(async (_req, res) => {
-    const cached = await getCachedMocProducts({ forceRefresh: true });
+    const cached = await loadMocCatalog({ forceRefresh: true });
     res.json({
       count: cached.products.length,
       fetched_at: cached.fetched_at,
@@ -114,7 +121,7 @@ adminDitRouter.get(
          )
        ORDER BY c.id`,
     );
-    const cached = await getCachedMocProducts();
+    const cached = await loadMocCatalog();
     const crops = await Promise.all(
       rows.map(async (row) => {
         const top = suggestDitProducts(String(row.name_th), cached.products, 3);
@@ -164,7 +171,7 @@ adminDitRouter.post(
     if (crops[0] === undefined) {
       throw new HttpError(404, 'NOT_FOUND', 'ไม่พบพืชผล');
     }
-    const cached = await getCachedMocProducts();
+    const cached = await loadMocCatalog();
     const match = cached.products.find((p) => p.product_id === body.product_code);
     const unitFromCatalog = match?.unit && match.unit !== 'unknown' ? match.unit : null;
     if (body.unit_to_kg === undefined) {
@@ -201,7 +208,7 @@ adminDitRouter.post(
     if (crop === undefined) {
       throw new HttpError(404, 'NOT_FOUND', 'ไม่พบพืชผล');
     }
-    const cached = await getCachedMocProducts();
+    const cached = await loadMocCatalog();
     const top = suggestDitProducts(String(crop.name_th), cached.products, 3);
     const withPrices = await attachPrices(top);
     res.json({
