@@ -24,7 +24,7 @@ import { useAuth } from '../src/context/AuthContext';
 import { useApiData } from '../src/hooks/useApiData';
 import { formatCountdown, hoursLeftFrom, useNow } from '../src/hooks/useNow';
 import { C, urgency } from '../src/theme';
-import type { AssessPhotoResponse, Crop, EstimateResponse, Grade, MyLot, Plot } from '../src/api/types';
+import type { AssessPhotoResponse, Crop, DonationAudience, EstimateResponse, Grade, MyLot, Plot } from '../src/api/types';
 
 export default function FarmerScreen(): React.ReactElement {
   const { api, logout, user, mode, setMode } = useAuth();
@@ -180,6 +180,7 @@ function NewLotForm({
   const [ripeness, setRipeness] = useState(2);
   const [grade, setGrade] = useState<Grade>('substandard');
   const [donation, setDonation] = useState(false);
+  const [donationAudience, setDonationAudience] = useState<DonationAudience>('verified_org_only');
   const [estimate, setEstimate] = useState<EstimateResponse | null>(null);
   const [estimateError, setEstimateError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -392,6 +393,7 @@ function NewLotForm({
         grade,
         ripeness,
         allow_donation: donation,
+        donation_audience: donation ? donationAudience : undefined,
         ai_ripeness: aiResult?.ripeness ?? null,
         ai_confidence: aiResult?.confidence ?? null,
         ai_model: aiResult?.model ?? null,
@@ -491,8 +493,25 @@ function NewLotForm({
         <View style={[styles.checkbox, donation ? styles.checkboxOn : null]}>
           {donation ? <Text style={styles.checkboxMark}>✓</Text> : null}
         </View>
-        <Text style={styles.checkboxLabel}>ยินดีบริจาค (ให้ผู้รับซื้อประเภทสงเคราะห์)</Text>
+        <Text style={styles.checkboxLabel}>ยินดีบริจาค</Text>
       </Pressable>
+      {donation ? (
+        <>
+          <SectionTitle>เปิดรับผู้รับบริจาค</SectionTitle>
+          <View style={styles.row}>
+            <Chip
+              label="เฉพาะองค์กรที่ยืนยันแล้ว"
+              selected={donationAudience === 'verified_org_only'}
+              onPress={() => setDonationAudience('verified_org_only')}
+            />
+            <Chip
+              label="รวมจิตอาสาด้วย"
+              selected={donationAudience === 'all_donors'}
+              onPress={() => setDonationAudience('all_donors')}
+            />
+          </View>
+        </>
+      ) : null}
 
       <Card style={tone !== null ? { borderColor: tone.fg, backgroundColor: tone.bg } : undefined}>
         {estimateError !== null ? (

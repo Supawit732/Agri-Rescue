@@ -134,9 +134,23 @@ async function upsertUser(connection: PoolConnection, user: NewUser): Promise<nu
     [user.name, user.phone, user.passwordHash, user.role, canSell, canBuy, isAdmin, user.lat, user.lng],
   );
   if (user.buyerType !== null) {
+    const isCharity = user.buyerType === 'charity';
     await connection.query(
-      `INSERT INTO buyer_profiles (user_id, buyer_type, charity_approved) VALUES (?, ?, 1)`,
-      [result.insertId, user.buyerType],
+      `INSERT INTO buyer_profiles (
+         user_id, buyer_type, charity_approved, donor_tier, distribution_mode, beneficiary_count,
+         org_name, org_type, org_status, org_reviewed_at
+       ) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        result.insertId,
+        user.buyerType,
+        isCharity ? 'verified_org' : null,
+        isCharity ? 'redistribute' : null,
+        isCharity ? 40 : null,
+        isCharity ? user.name : null,
+        isCharity ? 'shelter' : null,
+        isCharity ? 'approved' : 'none',
+        isCharity ? new Date() : null,
+      ],
     );
   }
   return result.insertId;

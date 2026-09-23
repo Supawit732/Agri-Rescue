@@ -14,6 +14,9 @@ export const unstable_settings = {
 const publicRoutes = new Set(['login', 'register']);
 
 function homeFor(user: User, mode: AppMode): string {
+  if (user.is_admin && !user.can_sell && !user.can_buy) {
+    return '/admin';
+  }
   if (mode === 'sell' && user.can_sell) {
     return '/farmer';
   }
@@ -27,7 +30,7 @@ function homeFor(user: User, mode: AppMode): string {
     return '/buyer';
   }
   if (user.is_admin) {
-    return '/impact';
+    return '/admin';
   }
   return '/login';
 }
@@ -63,6 +66,11 @@ function AuthGate(): React.ReactElement {
       return;
     }
 
+    if (current === 'admin' && !user.is_admin) {
+      router.replace(home as never);
+      return;
+    }
+
     if (current === 'farmer' && !user.can_sell) {
       if (user.can_buy) {
         setMode('buy');
@@ -78,7 +86,7 @@ function AuthGate(): React.ReactElement {
       return;
     }
 
-    const allowed = new Set(['farmer', 'buyer', 'impact', 'profile']);
+    const allowed = new Set(['farmer', 'buyer', 'impact', 'profile', 'admin']);
     if (!allowed.has(current)) {
       router.replace(home as never);
     }
@@ -100,6 +108,7 @@ function AuthGate(): React.ReactElement {
       <Stack.Screen name="farmer" />
       <Stack.Screen name="buyer" />
       <Stack.Screen name="profile" />
+      <Stack.Screen name="admin" />
       <Stack.Screen name="driver" />
       <Stack.Screen name="coordinator" />
       <Stack.Screen name="impact" />

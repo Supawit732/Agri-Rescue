@@ -35,6 +35,7 @@ const createSchema = z.object({
   grade: gradeSchema,
   ripeness: z.number().int().min(0).max(4),
   allow_donation: z.boolean().optional(),
+  donation_audience: z.enum(['verified_org_only', 'all_donors']).optional(),
   photo_url: z.string().max(1024).nullable().optional(),
   ai_ripeness: z.number().int().min(0).max(4).nullable().optional(),
   ai_confidence: z.number().min(0).max(1).nullable().optional(),
@@ -124,6 +125,8 @@ lotsRouter.post(
     const createdAt = new Date();
     const expiresAt = new Date(createdAt.getTime() + shelfHours * 60 * 60 * 1000);
     const allowDonation = body.allow_donation === true ? 1 : 0;
+    const donationAudience =
+      allowDonation === 1 ? (body.donation_audience ?? 'verified_org_only') : 'verified_org_only';
     const hasAi =
       body.ai_ripeness !== undefined &&
       body.ai_ripeness !== null &&
@@ -136,9 +139,9 @@ lotsRouter.post(
       await connection.beginTransaction();
       const [lotResult] = await connection.query<ResultSetHeader>(
         `INSERT INTO harvest_lots (
-           plot_id, crop_id, weight_kg, grade, ripeness, photo_url, allow_donation,
+           plot_id, crop_id, weight_kg, grade, ripeness, photo_url, allow_donation, donation_audience,
            predicted_shelf_hours, expires_at, status, created_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?)`,
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?)`,
         [
           body.plot_id,
           body.crop_id,
@@ -147,6 +150,7 @@ lotsRouter.post(
           body.ripeness,
           body.photo_url ?? null,
           allowDonation,
+          donationAudience,
           shelfHours,
           expiresAt,
           createdAt,
@@ -182,6 +186,7 @@ lotsRouter.post(
           ripeness: body.ripeness,
           photo_url: body.photo_url ?? null,
           allow_donation: allowDonation === 1,
+          donation_audience: donationAudience,
           predicted_shelf_hours: shelfHours,
           expires_at: expiresAt.toISOString(),
           status: 'open',

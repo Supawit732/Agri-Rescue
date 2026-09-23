@@ -3,6 +3,13 @@ import bcrypt from 'bcryptjs';
 import type { ResultSetHeader, RowDataPacket } from 'mysql2';
 import { z } from 'zod';
 import { pool } from '../db/pool';
+import {
+  activeDonorTier,
+  remainingWeeklyKg,
+  weekStartBangkok,
+  weeklyCapKg,
+  type OrgStatus,
+} from '../domain/donorRules';
 import { asyncHandler } from '../http/asyncHandler';
 import { HttpError } from '../http/errors';
 import { requireAuth, requireCapability, signAccessToken } from '../middleware/auth';
@@ -65,6 +72,14 @@ interface UserRow extends RowDataPacket {
   lng: number | null;
   buyer_type: 'vendor' | 'shop' | 'charity' | null;
   charity_approved: number | boolean | null;
+  donor_tier: 'volunteer' | 'trusted_volunteer' | 'verified_org' | null;
+  beneficiary_count: number | null;
+  distribution_mode: 'self_use' | 'redistribute' | null;
+  donation_suspended: number | boolean | null;
+  trusted_proof_count: number | null;
+  org_status: OrgStatus | null;
+  org_reject_reason: string | null;
+  org_name: string | null;
   password_hash?: string;
 }
 
@@ -78,6 +93,16 @@ export interface PublicUser {
   is_admin: boolean;
   buyer_type: 'vendor' | 'shop' | 'charity' | null;
   charity_approved: boolean;
+  donor_tier: 'volunteer' | 'trusted_volunteer' | 'verified_org' | null;
+  beneficiary_count: number | null;
+  distribution_mode: 'self_use' | 'redistribute' | null;
+  donation_suspended: boolean;
+  trusted_proof_count: number;
+  org_status: OrgStatus;
+  org_reject_reason: string | null;
+  org_name: string | null;
+  donation_weekly_cap_kg: number | null;
+  donation_remaining_kg: number | null;
   line_id: string | null;
   lat: number | null;
   lng: number | null;
@@ -88,6 +113,11 @@ function asBool(value: number | boolean | null | undefined): boolean {
 }
 
 export function toPublicUser(row: UserRow): PublicUser {
+  const orgStatus = (row.org_status ?? 'none') as OrgStatus;
+  const donorTier = row.donor_tier ?? null;
+  const active = activeDonorTier({ donor_tier: donorTier, org_status: orgStatus });
+  const capKg =
+    active === null ? null : weeklyCapKg(active, row.beneficiary_count === null || row.beneficiary_count === undefined ? null : Number(row.beneficiary_count));
   return {
     id: Number(row.id),
     name: row.name,
@@ -98,6 +128,16 @@ export function toPublicUser(row: UserRow): PublicUser {
     is_admin: asBool(row.is_admin),
     buyer_type: row.buyer_type,
     charity_approved: asBool(row.charity_approved),
+    donor_tier: donorTier,
+    beneficiary_count: row.beneficiary_count === null || row.beneficiary_count === undefined ? null : Number(row.beneficiary_count),
+    distribution_mode: row.distribution_mode ?? null,
+    donation_suspended: asBool(row.donation_suspended),
+    trusted_proof_count: Number(row.trusted_proof_count ?? 0),
+    org_status: orgStatus,
+    org_reject_reason: row.org_reject_reason ?? null,
+    org_name: row.org_name ?? null,
+    donation_weekly_cap_kg: capKg,
+    donation_remaining_kg: capKg,
     line_id: row.line_id,
     lat: row.lat,
     lng: row.lng,
@@ -106,7 +146,9 @@ export function toPublicUser(row: UserRow): PublicUser {
 
 const USER_SELECT = `SELECT u.id, u.name, u.phone, u.role, u.can_sell, u.can_buy, u.is_admin,
                             u.line_id, u.lat, u.lng,
-                            bp.buyer_type, bp.charity_approved
+                            bp.buyer_type, bp.charity_approved, bp.donor_tier, bp.beneficiary_count,
+                            bp.distribution_mode, bp.donation_suspended, bp.trusted_proof_count,
+                            bp.org_status, bp.org_reject_reason, bp.org_name
                      FROM users u
                      LEFT JOIN buyer_profiles bp ON bp.user_id = u.id`;
 
@@ -116,7 +158,25 @@ export async function loadPublicUser(userId: number): Promise<PublicUser> {
   if (user === undefined) {
     throw new HttpError(404, 'NOT_FOUND', 'ไม่พบผู้ใช้');
   }
-  return toPublicUser(user);
+  const publicUser = toPublicUser(user);
+  if (publicUser.donation_weekly_cap_kg !== null && !publicUser.donation_suspended) {
+    const start = weekStartBangkok();
+    const [usedRows] = await pool.query<RowDataPacket[]>(
+      `SELECT COALESCE(SUM(h.weight_kg), 0) AS used_kg
+       FROM orders o
+       JOIN harvest_lots h ON h.id = o.lot_id
+       WHERE o.buyer_id = ?
+         AND o.is_donation = 1
+         AND o.status <> 'cancelled'
+         AND o.created_at >= ?`,
+      [userId, start],
+    );
+    const usedKg = Number(usedRows[0]?.used_kg ?? 0);
+    publicUser.donation_remaining_kg = remainingWeeklyKg(publicUser.donation_weekly_cap_kg, usedKg);
+  } else {
+    publicUser.donation_remaining_kg = null;
+  }
+  return publicUser;
 }
 
 function primaryRole(canSell: boolean, canBuy: boolean): UserRole {
@@ -163,9 +223,20 @@ authRouter.post(
         ],
       );
       if (body.can_buy && body.buyer_type !== undefined && body.buyer_type !== null) {
+        const isCharity = body.buyer_type === 'charity';
         await connection.query(
-          `INSERT INTO buyer_profiles (user_id, buyer_type, charity_approved) VALUES (?, ?, ?)`,
-          [result.insertId, body.buyer_type, charityApproved],
+          `INSERT INTO buyer_profiles (
+             user_id, buyer_type, charity_approved, donor_tier, org_status, org_name, distribution_mode, beneficiary_count
+           ) VALUES (?, ?, ?, NULL, ?, ?, ?, ?)`,
+          [
+            result.insertId,
+            body.buyer_type,
+            charityApproved,
+            isCharity ? 'pending' : 'none',
+            isCharity ? 'องค์กรรอเอกสาร' : null,
+            isCharity ? 'redistribute' : null,
+            isCharity ? 100 : null,
+          ],
         );
       }
       await connection.commit();
@@ -190,7 +261,9 @@ authRouter.post(
     const [authRows] = await pool.query<UserRow[]>(
       `SELECT u.id, u.name, u.phone, u.role, u.can_sell, u.can_buy, u.is_admin,
               u.line_id, u.lat, u.lng, u.password_hash,
-              bp.buyer_type, bp.charity_approved
+              bp.buyer_type, bp.charity_approved, bp.donor_tier, bp.beneficiary_count,
+              bp.distribution_mode, bp.donation_suspended, bp.trusted_proof_count,
+              bp.org_status, bp.org_reject_reason, bp.org_name
        FROM users u
        LEFT JOIN buyer_profiles bp ON bp.user_id = u.id
        WHERE u.phone = ?`,
@@ -289,8 +362,13 @@ authRouter.post(
       throw new HttpError(400, 'VALIDATION', 'รหัสผู้ใช้ไม่ถูกต้อง');
     }
     const [result] = await pool.query<ResultSetHeader>(
-      `UPDATE buyer_profiles SET charity_approved = 1
-       WHERE user_id = ? AND buyer_type = 'charity'`,
+      `UPDATE buyer_profiles
+       SET charity_approved = 1, donor_tier = 'verified_org', org_status = 'approved',
+           org_reviewed_at = UTC_TIMESTAMP(),
+           distribution_mode = COALESCE(distribution_mode, 'redistribute'),
+           beneficiary_count = COALESCE(beneficiary_count, 100),
+           org_name = COALESCE(org_name, 'องค์กรสงเคราะห์')
+       WHERE user_id = ? AND buyer_type = 'charity' AND charity_approved = 0`,
       [userId],
     );
     if (result.affectedRows === 0) {

@@ -13,6 +13,9 @@ beforeAll(async () => {
   }
   await migrate();
   await pool.query(`
+    DELETE FROM donation_infractions;
+    DELETE FROM donation_proofs;
+    DELETE FROM org_application_docs;
     DELETE FROM impact_logs;
     DELETE FROM route_stops;
     DELETE FROM orders;
@@ -21,6 +24,7 @@ beforeAll(async () => {
     DELETE FROM harvest_lots;
     DELETE FROM plots;
     DELETE FROM crops;
+    DELETE FROM buyer_profiles;
     DELETE FROM users;
   `);
 });

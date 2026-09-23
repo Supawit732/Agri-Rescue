@@ -9,6 +9,7 @@ import type {
   BatchDetail,
   BuyerType,
   Crop,
+  DonationAudience,
   Driver,
   EstimateResponse,
   Grade,
@@ -16,6 +17,7 @@ import type {
   MarketLot,
   MyLot,
   Order,
+  OrgApplication,
   Plot,
   Stop,
   User,
@@ -58,15 +60,27 @@ interface Api {
     grade: Grade;
     ripeness: number;
     allow_donation: boolean;
+    donation_audience?: DonationAudience;
     ai_ripeness?: number | null;
     ai_confidence?: number | null;
     ai_model?: string | null;
   }) => Promise<unknown>;
   getMyLots: () => Promise<MyLot[]>;
   getMarket: (lat: number, lng: number, radiusKm: number) => Promise<MarketLot[]>;
-  createOrder: (lotId: number, donation: boolean) => Promise<{ order: Order }>;
-  getMyOrders: () => Promise<Order[]>;
-  cancelOrder: (id: number) => Promise<unknown>;
+  createOrder: (
+    lotId: number,
+    donation: boolean,
+    extras?: { distribution_place?: string; distribution_at?: string },
+  ) => Promise<{ order: Order }>;
+  becomeVolunteer: () => Promise<AuthResponse>;
+  applyOrg: (input: Record<string, unknown>) => Promise<AuthResponse>;
+  listOrgApplications: () => Promise<OrgApplication[]>;
+  approveOrg: (userId: number) => Promise<User>;
+  rejectOrg: (userId: number, reason: string) => Promise<User>;
+  requestMoreOrgInfo: (userId: number, reason: string) => Promise<User>;
+  addOrgDocuments: (documents: { filename: string; mime: string; base64: string }[]) => Promise<AuthResponse>;
+  resubmitOrg: () => Promise<AuthResponse>;
+  unlockDonor: (userId: number) => Promise<User>;
   getDrivers: () => Promise<Driver[]>;
   getBatches: () => Promise<Batch[]>;
   createBatch: (driverId: number) => Promise<BatchDetail>;
@@ -79,6 +93,8 @@ interface Api {
   }>;
   unlockStop: (id: number) => Promise<{ id: number; otp_attempts: number; locked: boolean }>;
   getImpact: () => Promise<ImpactSummary>;
+  getMyOrders: () => Promise<Order[]>;
+  cancelOrder: (id: number) => Promise<unknown>;
 }
 
 interface AuthContextValue {
@@ -243,7 +259,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
       getMyLots: () => authed<{ lots: MyLot[] }>('GET', '/api/lots/mine').then((r) => r.lots),
       getMarket: (lat, lng, radiusKm) =>
         authed<{ lots: MarketLot[] }>('GET', `/api/market?lat=${lat}&lng=${lng}&radius_km=${radiusKm}`).then((r) => r.lots),
-      createOrder: (lotId, donation) => authed<{ order: Order }>('POST', '/api/orders', { lot_id: lotId, donation }),
+      createOrder: (lotId, donation, extras) =>
+        authed<{ order: Order }>('POST', '/api/orders', { lot_id: lotId, donation, ...extras }),
+      becomeVolunteer: async () => {
+        const res = await authed<{ user: User }>('POST', '/api/donors/volunteer', {});
+        setUser(res.user);
+        return { token: token ?? '', user: res.user };
+      },
+      applyOrg: async (input) => {
+        const res = await authed<{ user: User }>('POST', '/api/donors/org-applications', input);
+        setUser(res.user);
+        return { token: token ?? '', user: res.user };
+      },
+      listOrgApplications: () =>
+        authed<{ applications: OrgApplication[] }>('GET', '/api/donors/admin/org-applications').then((r) => r.applications),
+      approveOrg: (userId) =>
+        authed<{ user: User }>('POST', `/api/donors/admin/org-applications/${userId}/approve`).then((r) => r.user),
+      rejectOrg: (userId, reason) =>
+        authed<{ user: User }>('POST', `/api/donors/admin/org-applications/${userId}/reject`, { reason }).then((r) => r.user),
+      requestMoreOrgInfo: (userId, reason) =>
+        authed<{ user: User }>('POST', `/api/donors/admin/org-applications/${userId}/needs-more-info`, { reason }).then(
+          (r) => r.user,
+        ),
+      addOrgDocuments: async (documents) => {
+        const res = await authed<{ user: User }>('POST', '/api/donors/org-applications/documents', { documents });
+        setUser(res.user);
+        return { token: token ?? '', user: res.user };
+      },
+      resubmitOrg: async () => {
+        const res = await authed<{ user: User }>('POST', '/api/donors/org-applications/resubmit', {});
+        setUser(res.user);
+        return { token: token ?? '', user: res.user };
+      },
+      unlockDonor: (userId) =>
+        authed<{ user: User }>('POST', `/api/donors/admin/donors/${userId}/unlock`).then((r) => r.user),
       getMyOrders: () => authed<{ orders: Order[] }>('GET', '/api/orders/mine').then((r) => r.orders),
       cancelOrder: (id) => authed('DELETE', `/api/orders/${id}`),
       getDrivers: () => authed<{ drivers: Driver[] }>('GET', '/api/batches/drivers').then((r) => r.drivers),

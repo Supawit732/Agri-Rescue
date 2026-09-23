@@ -2,6 +2,8 @@ export type UserRole = 'farmer' | 'buyer' | 'driver' | 'coordinator';
 export type BuyerType = 'vendor' | 'shop' | 'charity';
 export type Grade = 'normal' | 'substandard';
 export type AppMode = 'sell' | 'buy';
+export type DonorTier = 'volunteer' | 'trusted_volunteer' | 'verified_org';
+export type DonationAudience = 'verified_org_only' | 'all_donors';
 
 export interface User {
   id: number;
@@ -13,6 +15,16 @@ export interface User {
   is_admin: boolean;
   buyer_type: BuyerType | null;
   charity_approved: boolean;
+  donor_tier: DonorTier | null;
+  beneficiary_count: number | null;
+  distribution_mode: 'self_use' | 'redistribute' | null;
+  donation_suspended: boolean;
+  trusted_proof_count: number;
+  org_status: 'none' | 'pending' | 'approved' | 'rejected' | 'needs_more_info';
+  org_reject_reason: string | null;
+  org_name: string | null;
+  donation_weekly_cap_kg: number | null;
+  donation_remaining_kg: number | null;
   line_id: string | null;
   lat: number | null;
   lng: number | null;
@@ -21,6 +33,34 @@ export interface User {
 export interface AuthResponse {
   token: string;
   user: User;
+}
+
+export interface OrgApplicationDoc {
+  id: number;
+  original_name: string;
+  mime: string;
+  size_bytes: number;
+  created_at: string;
+}
+
+export interface OrgApplication {
+  user_id: number;
+  name: string;
+  phone: string;
+  org_name: string;
+  org_type: string;
+  contact_name: string;
+  contact_title: string;
+  contact_phone: string;
+  org_lat: number;
+  org_lng: number;
+  beneficiary_count: number;
+  distribution_mode: string;
+  org_status?: string;
+  org_reject_reason?: string | null;
+  created_at: string;
+  documents: OrgApplicationDoc[];
+  review_logs?: { id: number; admin_id: number; action: string; reason: string | null; created_at: string }[];
 }
 
 export interface Crop {
@@ -77,6 +117,7 @@ export interface MyLot {
   ripeness: number;
   photo_url: string | null;
   allow_donation: number | boolean;
+  donation_audience?: DonationAudience;
   predicted_shelf_hours: number;
   expires_at: string;
   status: string;
@@ -94,6 +135,7 @@ export interface MarketLot {
   grade: Grade;
   ripeness: number;
   allow_donation: boolean;
+  donation_audience?: DonationAudience;
   expires_at: string;
   hours_left: number;
   distance_km: number;

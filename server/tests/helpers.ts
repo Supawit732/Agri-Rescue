@@ -115,14 +115,15 @@ export async function insertLot(input: {
   cropId: number;
   expiresAt: Date;
   allowDonation?: boolean;
+  donationAudience?: 'verified_org_only' | 'all_donors';
   grade?: 'normal' | 'substandard';
   weightKg?: number;
 }): Promise<number> {
   const [result] = await pool.query<ResultSetHeader>(
     `INSERT INTO harvest_lots (
-       plot_id, crop_id, weight_kg, grade, ripeness, allow_donation,
+       plot_id, crop_id, weight_kg, grade, ripeness, allow_donation, donation_audience,
        predicted_shelf_hours, expires_at, status
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open')`,
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open')`,
     [
       input.plotId,
       input.cropId,
@@ -130,6 +131,7 @@ export async function insertLot(input: {
       input.grade ?? 'normal',
       2,
       input.allowDonation === true ? 1 : 0,
+      input.donationAudience ?? 'verified_org_only',
       61,
       input.expiresAt,
     ],

@@ -18,7 +18,7 @@ import { useAuth } from '../src/context/AuthContext';
 import { useApiData } from '../src/hooks/useApiData';
 import { formatCountdown, hoursLeftFrom, useNow } from '../src/hooks/useNow';
 import { C, urgency } from '../src/theme';
-import type { MarketLot, Order } from '../src/api/types';
+import type { MarketLot, Order, User } from '../src/api/types';
 
 export default function BuyerScreen(): React.ReactElement {
   const { api, logout, user, mode, setMode } = useAuth();
@@ -63,21 +63,76 @@ export default function BuyerScreen(): React.ReactElement {
   );
 }
 
+function donationEligibility(
+  user: User | null,
+  lot: MarketLot,
+): { canDonate: boolean; badge: string | null; reason: string | null } {
+  if (!lot.allow_donation) {
+    return { canDonate: false, badge: null, reason: null };
+  }
+  if (user === null) {
+    return { canDonate: false, badge: 'บริจาคเฉพาะองค์กร', reason: 'ต้องเข้าสู่ระบบ' };
+  }
+  if (user.donation_suspended) {
+    return { canDonate: false, badge: 'บริจาคเฉพาะองค์กร', reason: 'สิทธิ์รับบริจาคถูกระงับ' };
+  }
+  if (user.org_status === 'pending') {
+    return { canDonate: false, badge: 'บริจาคเฉพาะองค์กร', reason: 'รอการอนุมัติองค์กร' };
+  }
+  if (user.org_status === 'needs_more_info') {
+    return { canDonate: false, badge: 'บริจาคเฉพาะองค์กร', reason: 'ต้องส่งเอกสารเพิ่มก่อนขอรับบริจาค' };
+  }
+  if (user.org_status === 'rejected') {
+    return { canDonate: false, badge: 'บริจาคเฉพาะองค์กร', reason: 'คำขอองค์กรถูกปฏิเสธ' };
+  }
+  if (user.donor_tier === null) {
+    return { canDonate: false, badge: 'บริจาคเฉพาะองค์กร', reason: 'ยังไม่ได้ลงทะเบียนผู้รับบริจาค' };
+  }
+  if (lot.donation_audience === 'verified_org_only' && user.donor_tier !== 'verified_org') {
+    return { canDonate: false, badge: 'บริจาคเฉพาะองค์กร', reason: 'ล็อตนี้เปิดรับเฉพาะองค์กรที่ยืนยันแล้ว' };
+  }
+  if (
+    user.donation_remaining_kg !== null &&
+    user.donation_remaining_kg !== undefined &&
+    lot.weight_kg > user.donation_remaining_kg
+  ) {
+    return {
+      canDonate: false,
+      badge: 'บริจาคเฉพาะองค์กร',
+      reason: `เกินเพดานสัปดาห์นี้ (คงเหลือ ${user.donation_remaining_kg} กก.)`,
+    };
+  }
+  return { canDonate: true, badge: 'รับบริจาคได้', reason: null };
+}
+
 function Market({ refreshKey, onBooked }: { refreshKey: number; onBooked: () => void }): React.ReactElement {
-  const { api, user } = useAuth();
+  const { api, user, refreshUser } = useAuth();
   const lat = user?.lat ?? 13.65;
   const lng = user?.lng ?? 100.62;
-  const isCharity = user?.buyer_type === 'charity';
+  const needsPlace =
+    user?.donor_tier === 'volunteer' ||
+    user?.donor_tier === 'trusted_volunteer' ||
+    user?.distribution_mode === 'redistribute';
   const { data, loading, error, reload } = useApiData(() => api.getMarket(lat, lng, 15), [refreshKey, lat, lng]);
   const now = useNow();
   const [banner, setBanner] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [confirm, setConfirm] = useState<{ lot: MarketLot; donation: boolean } | null>(null);
 
   const book = async (lot: MarketLot, donation: boolean): Promise<void> => {
     setBanner(null);
     setBusyId(lot.id);
     try {
-      await api.createOrder(lot.id, donation);
+      const extras =
+        donation && needsPlace
+          ? {
+              distribution_place: 'จุดรับ/แจกที่ระบุโดยผู้รับ',
+              distribution_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+            }
+          : undefined;
+      await api.createOrder(lot.id, donation, extras);
+      setConfirm(null);
+      await refreshUser();
       onBooked();
       reload();
     } catch (err) {
@@ -99,10 +154,36 @@ function Market({ refreshKey, onBooked }: { refreshKey: number; onBooked: () => 
       {(lots) => (
         <Body>
           {banner !== null ? <Text style={styles.banner}>{banner}</Text> : null}
+          {confirm !== null ? (
+            <Card>
+              <Text style={styles.confirmTitle}>ยืนยันก่อนจอง</Text>
+              <Text style={styles.cardLine}>
+                {confirm.lot.crop_name_th} · {confirm.lot.weight_kg} กก. · โดย {confirm.lot.farmer_name}
+              </Text>
+              <Text style={styles.confirmKind}>
+                {confirm.donation
+                  ? 'ประเภท: ขอรับบริจาค (ไม่คิดเงิน)'
+                  : `ประเภท: ซื้อ ${confirm.lot.price_per_kg} บาท/กก.`}
+              </Text>
+              <View style={styles.actions}>
+                <View style={styles.slot}>
+                  <PrimaryButton
+                    label={confirm.donation ? 'ยืนยันขอรับบริจาค' : 'ยืนยันซื้อ'}
+                    tone={confirm.donation ? 'turmeric' : undefined}
+                    loading={busyId === confirm.lot.id}
+                    onPress={() => void book(confirm.lot, confirm.donation)}
+                  />
+                </View>
+                <View style={styles.slot}>
+                  <SecondaryButton label="ยกเลิก" onPress={() => setConfirm(null)} />
+                </View>
+              </View>
+            </Card>
+          ) : null}
           {lots.map((lot) => {
             const hours = hoursLeftFrom(lot.expires_at, now);
             const tone = urgency(hours);
-            const canDonate = isCharity && lot.allow_donation;
+            const elig = donationEligibility(user, lot);
             return (
               <Card key={lot.id}>
                 <View style={styles.cardHeader}>
@@ -115,22 +196,35 @@ function Market({ refreshKey, onBooked }: { refreshKey: number; onBooked: () => 
                 <Text style={styles.cardLine}>
                   ระยะ {lot.distance_km.toFixed(1)} กม. · {lot.grade === 'substandard' ? 'ตกเกรด' : 'ปกติ'}
                 </Text>
-                {canDonate ? (
-                  <>
-                    <Text style={styles.donateText}>รับบริจาคได้</Text>
+                {elig.badge !== null ? (
+                  <Badge
+                    text={elig.badge}
+                    fg={elig.canDonate ? C.turmeric : C.mute}
+                    bg={elig.canDonate ? C.turmericSoft : C.leafSoft}
+                  />
+                ) : null}
+                {!elig.canDonate && elig.reason !== null ? (
+                  <Text style={styles.reason}>{elig.reason}</Text>
+                ) : null}
+                <View style={styles.actions}>
+                  <View style={styles.slot}>
                     <PrimaryButton
-                      label="รับบริจาค"
-                      tone="turmeric"
+                      label={`ซื้อ ${lot.price_per_kg} บาท/กก.`}
                       loading={busyId === lot.id}
-                      onPress={() => void book(lot, true)}
+                      onPress={() => setConfirm({ lot, donation: false })}
                     />
-                  </>
-                ) : (
-                  <>
-                    <Text style={styles.priceText}>{lot.price_per_kg} บาท/กก.</Text>
-                    <PrimaryButton label="จอง" loading={busyId === lot.id} onPress={() => void book(lot, false)} />
-                  </>
-                )}
+                  </View>
+                  {elig.canDonate ? (
+                    <View style={styles.slot}>
+                      <PrimaryButton
+                        label="ขอรับบริจาค"
+                        tone="turmeric"
+                        loading={busyId === lot.id}
+                        onPress={() => setConfirm({ lot, donation: true })}
+                      />
+                    </View>
+                  ) : null}
+                </View>
               </Card>
             );
           })}
@@ -181,7 +275,7 @@ function MyOrders({ refreshKey, onChanged }: { refreshKey: number; onChanged: ()
                   <Badge text={STATUS_LABELS[order.status] ?? order.status} fg={C.leaf} bg={C.leafSoft} />
                 </View>
                 <Text style={styles.cardLine}>
-                  {order.is_donation ? 'บริจาค' : `${order.agreed_price_per_kg} บาท/กก.`}
+                  {order.is_donation ? 'รับบริจาค' : `ซื้อ ${order.agreed_price_per_kg} บาท/กก.`}
                 </Text>
                 {active ? (
                   <View style={styles.otpBox}>
@@ -210,8 +304,11 @@ const styles = StyleSheet.create({
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   cardTitle: { fontSize: 16, fontWeight: '700', color: C.ink, flex: 1, marginRight: 8 },
   cardLine: { color: C.ink, marginBottom: 4 },
-  priceText: { fontSize: 18, fontWeight: '800', color: C.leaf, marginVertical: 6 },
-  donateText: { fontSize: 16, fontWeight: '800', color: C.turmeric, marginVertical: 6 },
+  reason: { color: C.chili, marginTop: 6, marginBottom: 4 },
+  confirmTitle: { fontSize: 18, fontWeight: '800', color: C.ink, marginBottom: 6 },
+  confirmKind: { fontSize: 15, fontWeight: '700', color: C.leaf, marginVertical: 8 },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  slot: { flexGrow: 1, flexBasis: '45%', minWidth: 140 },
   otpBox: { backgroundColor: C.leafSoft, borderRadius: 12, padding: 12, alignItems: 'center', marginVertical: 8 },
   otpLabel: { color: C.mute, marginBottom: 4 },
   otpValue: { fontSize: 40, fontWeight: '900', color: C.leaf, letterSpacing: 8 },

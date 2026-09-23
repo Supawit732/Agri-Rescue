@@ -1,11 +1,16 @@
 import { Router } from 'express';
 import { randomInt } from 'crypto';
 import type { ResultSetHeader, RowDataPacket } from 'mysql2';
-import type { PoolConnection } from 'mysql2/promise';
 import { z } from 'zod';
 import { pool } from '../db/pool';
 import { assertLotTransition, type LotStatus } from '../domain/lotStateMachine';
 import { urgentPricePerKg, type ProduceGrade } from '../domain/pricing';
+import type { DonationAudience } from '../domain/donorRules';
+import {
+  assertMayRequestDonation,
+  loadDonorProfile,
+  usedDonationKgThisWeek,
+} from '../donors/donationService';
 import { asyncHandler } from '../http/asyncHandler';
 import { HttpError } from '../http/errors';
 import { requireAuth, requireCapability } from '../middleware/auth';
@@ -15,6 +20,8 @@ export const ordersRouter = Router();
 const createSchema = z.object({
   lot_id: z.number().int().positive(),
   donation: z.boolean(),
+  distribution_place: z.string().trim().min(1).max(512).optional(),
+  distribution_at: z.string().datetime().optional(),
 });
 
 interface LotLock extends RowDataPacket {
@@ -22,16 +29,12 @@ interface LotLock extends RowDataPacket {
   status: LotStatus;
   grade: ProduceGrade;
   allow_donation: number;
+  donation_audience: DonationAudience;
+  weight_kg: number;
   expires_at: Date;
   base_shelf_days: number;
   market_price_per_kg: number;
   farmer_id: number;
-}
-
-interface BuyerRow extends RowDataPacket {
-  id: number;
-  buyer_type: 'vendor' | 'shop' | 'charity' | null;
-  charity_approved: number | boolean | null;
 }
 
 interface OrderRow extends RowDataPacket {
@@ -43,6 +46,8 @@ interface OrderRow extends RowDataPacket {
   status: string;
   batch_id: number | null;
   drop_otp: string;
+  distribution_place: string | null;
+  distribution_at: Date | null;
   created_at: Date;
 }
 
@@ -56,9 +61,15 @@ ordersRouter.post(
     const connection = await pool.getConnection();
     try {
       await connection.beginTransaction();
-      const buyer = await lockBuyer(connection, buyerId);
+      const [userRows] = await connection.query<RowDataPacket[]>(
+        'SELECT id FROM users WHERE id = ? AND can_buy = 1 FOR UPDATE',
+        [buyerId],
+      );
+      if (userRows[0] === undefined) {
+        throw new HttpError(403, 'FORBIDDEN', 'ไม่มีสิทธิ์เข้าถึง');
+      }
       const [lots] = await connection.query<LotLock[]>(
-        `SELECT h.id, h.status, h.grade, h.allow_donation, h.expires_at,
+        `SELECT h.id, h.status, h.grade, h.allow_donation, h.donation_audience, h.weight_kg, h.expires_at,
                 c.base_shelf_days, c.market_price_per_kg, p.farmer_id
          FROM harvest_lots h
          JOIN crops c ON c.id = h.crop_id
@@ -82,13 +93,25 @@ ordersRouter.post(
       }
       const donation = body.donation;
       let agreedPrice = 0;
+      let distributionPlace: string | null = null;
+      let distributionAt: Date | null = null;
       if (donation) {
-        if (buyer.buyer_type !== 'charity' || Number(buyer.charity_approved) !== 1) {
-          throw new HttpError(403, 'FORBIDDEN', 'บริจาคได้เฉพาะผู้ซื้อประเภทสงเคราะห์ที่ได้รับการอนุมัติ');
+        const profile = await loadDonorProfile(connection, buyerId);
+        if (profile === null) {
+          throw new HttpError(403, 'FORBIDDEN', 'ต้องเป็นผู้รับบริจาคที่ลงทะเบียนแล้ว');
         }
-        if (Number(lot.allow_donation) !== 1) {
-          throw new HttpError(403, 'FORBIDDEN', 'ล็อตนี้ไม่เปิดรับบริจาค');
-        }
+        const usedKg = await usedDonationKgThisWeek(connection, buyerId);
+        distributionPlace = body.distribution_place ?? null;
+        distributionAt = body.distribution_at !== undefined ? new Date(body.distribution_at) : null;
+        assertMayRequestDonation({
+          profile,
+          audience: lot.donation_audience,
+          lotWeightKg: Number(lot.weight_kg),
+          usedKg,
+          allowDonation: Number(lot.allow_donation) === 1,
+          distributionPlace,
+          distributionAt,
+        });
       } else {
         const hoursLeft = (new Date(lot.expires_at).getTime() - Date.now()) / (60 * 60 * 1000);
         agreedPrice = urgentPricePerKg({
@@ -103,9 +126,9 @@ ordersRouter.post(
       const dropOtp = String(randomInt(0, 10000)).padStart(4, '0');
       const [result] = await connection.query<ResultSetHeader>(
         `INSERT INTO orders
-           (lot_id, buyer_id, agreed_price_per_kg, is_donation, status, batch_id, drop_otp)
-         VALUES (?, ?, ?, ?, 'reserved', NULL, ?)`,
-        [lot.id, buyerId, agreedPrice, donation ? 1 : 0, dropOtp],
+           (lot_id, buyer_id, agreed_price_per_kg, is_donation, status, batch_id, drop_otp, distribution_place, distribution_at)
+         VALUES (?, ?, ?, ?, 'reserved', NULL, ?, ?, ?)`,
+        [lot.id, buyerId, agreedPrice, donation ? 1 : 0, dropOtp, distributionPlace, distributionAt],
       );
       await connection.commit();
       res.status(201).json({
@@ -117,6 +140,8 @@ ordersRouter.post(
           status: 'reserved',
           batch_id: null,
           drop_otp: dropOtp,
+          distribution_place: distributionPlace,
+          distribution_at: distributionAt?.toISOString() ?? null,
         },
       });
     } catch (error) {
@@ -132,7 +157,8 @@ ordersRouter.get(
   '/mine',
   asyncHandler(async (req, res) => {
     const [rows] = await pool.query<OrderRow[]>(
-      `SELECT id, lot_id, buyer_id, agreed_price_per_kg, is_donation, status, batch_id, drop_otp, created_at
+      `SELECT id, lot_id, buyer_id, agreed_price_per_kg, is_donation, status, batch_id, drop_otp,
+              distribution_place, distribution_at, created_at
        FROM orders
        WHERE buyer_id = ?
        ORDER BY id`,
@@ -147,6 +173,8 @@ ordersRouter.get(
         status: row.status,
         batch_id: row.batch_id === null ? null : Number(row.batch_id),
         drop_otp: row.drop_otp,
+        distribution_place: row.distribution_place,
+        distribution_at: row.distribution_at === null ? null : new Date(row.distribution_at).toISOString(),
         created_at: new Date(row.created_at).toISOString(),
       })),
     });
@@ -202,19 +230,3 @@ ordersRouter.delete(
     }
   }),
 );
-
-async function lockBuyer(connection: PoolConnection, buyerId: number): Promise<BuyerRow> {
-  const [rows] = await connection.query<BuyerRow[]>(
-    `SELECT u.id, bp.buyer_type, bp.charity_approved
-     FROM users u
-     LEFT JOIN buyer_profiles bp ON bp.user_id = u.id
-     WHERE u.id = ? AND u.can_buy = 1
-     FOR UPDATE`,
-    [buyerId],
-  );
-  const buyer = rows[0];
-  if (buyer === undefined) {
-    throw new HttpError(403, 'FORBIDDEN', 'ไม่มีสิทธิ์เข้าถึง');
-  }
-  return buyer;
-}
