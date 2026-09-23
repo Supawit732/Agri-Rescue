@@ -304,7 +304,8 @@ function NewLotForm({
               {totalPrice !== null ? `ราคารวม ${totalPrice} บาท` : 'กรอกน้ำหนักเพื่อดูราคารวม'}
             </Text>
             <Text style={styles.previewMuted}>
-              คำนวณจากอากาศที่แปลง {estimate.temp_c}°C ความชื้น {estimate.humidity}%
+              คำนวณจากพยากรณ์อากาศ 3 วันข้างหน้า (เฉลี่ยกลางวัน {estimate.temp_c}°C ความชื้น{' '}
+              {estimate.humidity}%)
             </Text>
             {estimate.weather_source === 'fallback' ? (
               <Text style={styles.previewMuted}>ใช้ค่าอากาศสำรอง</Text>

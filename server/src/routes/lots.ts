@@ -7,7 +7,7 @@ import { predictShelfHours } from '../domain/shelfLife';
 import { asyncHandler } from '../http/asyncHandler';
 import { HttpError } from '../http/errors';
 import { requireAuth, requireRole } from '../middleware/auth';
-import { fetchWeather } from '../weather/openMeteo';
+import { fetchWeather, WEATHER_BASIS } from '../weather/openMeteo';
 
 export const lotsRouter = Router();
 
@@ -45,7 +45,12 @@ lotsRouter.post(
     const body = estimateSchema.parse(req.body);
     const crop = await findCrop(body.crop_id);
     const weather = await fetchWeather(body.lat, body.lng);
-    const shelfHours = predictShelfHours(crop.base_shelf_days, body.ripeness, weather.tempC);
+    const shelfHours = predictShelfHours(
+      crop.base_shelf_days,
+      body.ripeness,
+      weather.tempC,
+      weather.humidity,
+    );
     const pricePerKg = urgentPricePerKg({
       marketPricePerKg: Number(crop.market_price_per_kg),
       baseShelfHours: crop.base_shelf_days * 24,
@@ -58,6 +63,7 @@ lotsRouter.post(
       temp_c: weather.tempC,
       humidity: weather.humidity,
       weather_source: weather.fallback ? 'fallback' : 'live',
+      weather_basis: WEATHER_BASIS,
     });
   }),
 );
@@ -84,7 +90,12 @@ lotsRouter.post(
     const plot = await findOwnedPlot(body.plot_id, farmerId);
     const crop = await findCrop(body.crop_id);
     const weather = await fetchWeather(Number(plot.lat), Number(plot.lng));
-    const shelfHours = predictShelfHours(crop.base_shelf_days, body.ripeness, weather.tempC);
+    const shelfHours = predictShelfHours(
+      crop.base_shelf_days,
+      body.ripeness,
+      weather.tempC,
+      weather.humidity,
+    );
     const createdAt = new Date();
     const expiresAt = new Date(createdAt.getTime() + shelfHours * 60 * 60 * 1000);
     const allowDonation = body.allow_donation === true ? 1 : 0;

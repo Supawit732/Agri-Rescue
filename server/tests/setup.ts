@@ -1,3 +1,4 @@
+import { clearWeatherCache } from '../src/weather/openMeteo';
 import { pool } from '../src/db/pool';
 import { migrate } from '../src/db/migrate';
 import { installWeatherSuccess } from './weatherMock';
@@ -5,6 +6,7 @@ import { installWeatherSuccess } from './weatherMock';
 const TEST_DB = 'agri_rescue_test';
 
 beforeAll(async () => {
+  clearWeatherCache();
   installWeatherSuccess();
   if (process.env.DB_NAME !== TEST_DB) {
     throw new Error(`Tests must use ${TEST_DB}, got ${process.env.DB_NAME ?? ''}`);
@@ -21,6 +23,11 @@ beforeAll(async () => {
     DELETE FROM crops;
     DELETE FROM users;
   `);
+});
+
+beforeEach(() => {
+  clearWeatherCache();
+  installWeatherSuccess();
 });
 
 afterAll(async () => {

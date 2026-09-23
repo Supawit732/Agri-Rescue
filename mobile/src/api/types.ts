@@ -39,6 +39,7 @@ export interface EstimateResponse {
   temp_c: number;
   humidity: number;
   weather_source: 'live' | 'fallback';
+  weather_basis: 'forecast_72h_daytime_avg';
 }
 
 export interface MyLot {

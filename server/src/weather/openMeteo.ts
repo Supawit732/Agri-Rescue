@@ -1,40 +1,149 @@
 import { PLAN_WEATHER_FALLBACK } from '../db/seedData';
 
 export const WEATHER_TIMEOUT_MS = 3000;
+export const WEATHER_CACHE_TTL_MS = 60 * 60 * 1000;
+export const FORECAST_HOURS = 72;
+export const DAYTIME_START_HOUR = 10;
+export const DAYTIME_END_HOUR = 17;
+export const WEATHER_BASIS = 'forecast_72h_daytime_avg' as const;
+export const WEATHER_TIMEZONE = 'Asia/Bangkok';
 
 export interface WeatherReading {
   tempC: number;
   humidity: number;
   fallback: boolean;
+  basis: typeof WEATHER_BASIS;
 }
 
-export async function fetchWeather(lat: number, lng: number): Promise<WeatherReading> {
+interface CacheEntry {
+  reading: WeatherReading;
+  expiresAt: number;
+}
+
+const weatherCache = new Map<string, CacheEntry>();
+
+/** Round plot coordinates to 2 decimal places for the in-memory forecast cache key. */
+export function weatherCacheKey(lat: number, lng: number): string {
+  return `${lat.toFixed(2)},${lng.toFixed(2)}`;
+}
+
+export function clearWeatherCache(): void {
+  weatherCache.clear();
+}
+
+interface HourlyPayload {
+  time?: unknown;
+  temperature_2m?: unknown;
+  relative_humidity_2m?: unknown;
+}
+
+function round1(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+/** Parse local hour from Open-Meteo time string such as 2026-09-23T14:00. */
+export function localHourFromForecastTime(isoLocal: string): number {
+  const match = /T(\d{2})/.exec(isoLocal);
+  if (match === null) {
+    throw new Error(`Open-Meteo time missing hour: ${isoLocal}`);
+  }
+  return Number(match[1]);
+}
+
+/** Average temperature and humidity for local hours 10:00–17:00 inclusive. */
+export function averageDaytimeForecast(
+  times: string[],
+  temperatures: number[],
+  humidities: number[],
+): { tempC: number; humidity: number } {
+  if (times.length === 0 || times.length !== temperatures.length || times.length !== humidities.length) {
+    throw new Error('Open-Meteo hourly arrays mismatch');
+  }
+  let tempSum = 0;
+  let humiditySum = 0;
+  let count = 0;
+  for (let index = 0; index < times.length; index += 1) {
+    const hour = localHourFromForecastTime(times[index] ?? '');
+    if (hour < DAYTIME_START_HOUR || hour > DAYTIME_END_HOUR) {
+      continue;
+    }
+    const tempC = temperatures[index];
+    const humidity = humidities[index];
+    if (typeof tempC !== 'number' || typeof humidity !== 'number') {
+      throw new Error('Open-Meteo daytime sample is not numeric');
+    }
+    tempSum += tempC;
+    humiditySum += humidity;
+    count += 1;
+  }
+  if (count === 0) {
+    throw new Error('Open-Meteo daytime hours missing');
+  }
+  return { tempC: round1(tempSum / count), humidity: round1(humiditySum / count) };
+}
+
+function asNumberArray(value: unknown, label: string): number[] {
+  if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'number')) {
+    throw new Error(`Open-Meteo payload missing ${label}`);
+  }
+  return value as number[];
+}
+
+function asStringArray(value: unknown, label: string): string[] {
+  if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'string')) {
+    throw new Error(`Open-Meteo payload missing ${label}`);
+  }
+  return value as string[];
+}
+
+export async function fetchWeather(lat: number, lng: number, now = Date.now()): Promise<WeatherReading> {
+  const key = weatherCacheKey(lat, lng);
+  const cached = weatherCache.get(key);
+  if (cached !== undefined && cached.expiresAt > now) {
+    return cached.reading;
+  }
+
+  const reading = await fetchWeatherUncached(lat, lng);
+  if (!reading.fallback) {
+    weatherCache.set(key, { reading, expiresAt: now + WEATHER_CACHE_TTL_MS });
+  } else {
+    weatherCache.delete(key);
+  }
+  return reading;
+}
+
+async function fetchWeatherUncached(lat: number, lng: number): Promise<WeatherReading> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), WEATHER_TIMEOUT_MS);
   try {
     const url = new URL('https://api.open-meteo.com/v1/forecast');
     url.searchParams.set('latitude', String(lat));
     url.searchParams.set('longitude', String(lng));
-    url.searchParams.set('current', 'temperature_2m,relative_humidity_2m');
+    url.searchParams.set('hourly', 'temperature_2m,relative_humidity_2m');
+    url.searchParams.set('forecast_hours', String(FORECAST_HOURS));
+    url.searchParams.set('timezone', WEATHER_TIMEZONE);
     const response = await fetch(url, { signal: controller.signal });
     if (!response.ok) {
       throw new Error(`Open-Meteo status ${response.status}`);
     }
-    const body = (await response.json()) as {
-      current?: { temperature_2m?: unknown; relative_humidity_2m?: unknown };
-    };
-    const tempC = body.current?.temperature_2m;
-    const humidity = body.current?.relative_humidity_2m;
-    if (typeof tempC !== 'number' || typeof humidity !== 'number') {
-      throw new Error('Open-Meteo payload missing current weather');
+    const body = (await response.json()) as { hourly?: HourlyPayload };
+    const hourly = body.hourly;
+    if (hourly === undefined) {
+      throw new Error('Open-Meteo payload missing hourly');
     }
-    return { tempC, humidity, fallback: false };
+    const average = averageDaytimeForecast(
+      asStringArray(hourly.time, 'hourly.time'),
+      asNumberArray(hourly.temperature_2m, 'hourly.temperature_2m'),
+      asNumberArray(hourly.relative_humidity_2m, 'hourly.relative_humidity_2m'),
+    );
+    return { ...average, fallback: false, basis: WEATHER_BASIS };
   } catch (error) {
     console.warn('Open-Meteo unavailable, using fallback 32°C / 75%', error);
     return {
       tempC: PLAN_WEATHER_FALLBACK.tempC,
       humidity: PLAN_WEATHER_FALLBACK.humidity,
       fallback: true,
+      basis: WEATHER_BASIS,
     };
   } finally {
     clearTimeout(timer);
