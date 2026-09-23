@@ -1,9 +1,9 @@
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { ApiError } from '../src/api/client';
-import type { ApplicationKind, DocCategory, OrgType, RecipientGroup } from '../src/api/types';
+import type { ApplicationKind, DocCategory, OrgStatus, OrgType, RecipientGroup } from '../src/api/types';
 import { LocationPicker, type LatLng } from '../src/components/LocationPicker';
 import {
   ChipGroup,
@@ -14,6 +14,16 @@ import {
 } from '../src/components/form';
 import { Body, PrimaryButton, Screen, SecondaryButton, TopBar } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
+import {
+  labelApplicationKind,
+  labelOrgStatus,
+  labelOrgType,
+  labelRecipientGroups,
+  labelReviewAction,
+  OPEN_ORG_STATUSES,
+  ORG_TYPE_TH,
+  RECIPIENT_GROUP_TH,
+} from '../src/donorLabels';
 import { C } from '../src/theme';
 
 type LocalDoc = {
@@ -22,24 +32,16 @@ type LocalDoc = {
   mime: 'application/pdf' | 'image/jpeg' | 'image/png';
   base64: string;
   doc_category: DocCategory;
+  existingId?: number;
 };
 
-const ORG_TYPES: { key: OrgType; label: string }[] = [
-  { key: 'foundation', label: 'มูลนิธิ' },
-  { key: 'association', label: 'สมาคม' },
-  { key: 'shelter', label: 'สถานสงเคราะห์' },
-  { key: 'community_kitchen', label: 'โรงครัวชุมชน' },
-  { key: 'community_enterprise', label: 'วิสาหกิจชุมชน' },
-  { key: 'other', label: 'อื่น ๆ' },
-];
+const ORG_TYPES: { key: OrgType; label: string }[] = (
+  Object.entries(ORG_TYPE_TH) as [OrgType, string][]
+).map(([key, label]) => ({ key, label }));
 
-const RECIPIENT_OPTS: { key: RecipientGroup; label: string }[] = [
-  { key: 'elderly', label: 'ผู้สูงอายุ' },
-  { key: 'children', label: 'เด็ก' },
-  { key: 'community', label: 'ชุมชน' },
-  { key: 'temple', label: 'วัด' },
-  { key: 'other', label: 'อื่น ๆ' },
-];
+const RECIPIENT_OPTS: { key: RecipientGroup; label: string }[] = (
+  Object.entries(RECIPIENT_GROUP_TH) as [RecipientGroup, string][]
+).map(([key, label]) => ({ key, label }));
 
 function ProgressBar({ step, total }: { step: number; total: number }): React.ReactElement {
   const pct = Math.round(((step + 1) / total) * 100);
@@ -51,6 +53,53 @@ function ProgressBar({ step, total }: { step: number; total: number }): React.Re
       <Text style={styles.progressLabel}>
         ขั้นที่ {step + 1} / {total}
       </Text>
+    </View>
+  );
+}
+
+function StatusBanner({
+  orgStatus,
+  applicationKind,
+  adminMessages,
+  onEditDocs,
+  onWithdraw,
+  onSwitchIndividual,
+  busy,
+}: {
+  orgStatus: OrgStatus;
+  applicationKind: ApplicationKind | null;
+  adminMessages: { action: string; reason: string | null; application_kind?: ApplicationKind | null }[];
+  onEditDocs: () => void;
+  onWithdraw: () => void;
+  onSwitchIndividual: () => void;
+  busy: boolean;
+}): React.ReactElement | null {
+  if (!OPEN_ORG_STATUSES.has(orgStatus) && orgStatus !== 'rejected') {
+    return null;
+  }
+  return (
+    <View style={styles.statusBanner}>
+      <Text style={styles.statusTitle}>
+        คำขอ{labelApplicationKind(applicationKind)} · สถานะ {labelOrgStatus(orgStatus)}
+      </Text>
+      {adminMessages.map((msg, index) => (
+        <Text key={`${msg.action}-${index}`} style={styles.statusAdmin}>
+          ข้อความจากผู้ดูแล ({labelReviewAction(msg.action)}
+          {msg.application_kind !== undefined && msg.application_kind !== null
+            ? ` · คำขอ${labelApplicationKind(msg.application_kind)}`
+            : ''}
+          ): {msg.reason ?? '—'}
+        </Text>
+      ))}
+      {OPEN_ORG_STATUSES.has(orgStatus) ? (
+        <View style={styles.statusActions}>
+          <PrimaryButton label="ส่งเอกสารเพิ่ม/แก้ไข" onPress={onEditDocs} disabled={busy} />
+          {applicationKind === 'organization' ? (
+            <SecondaryButton label="เปลี่ยนเป็นบุคคล" onPress={onSwitchIndividual} disabled={busy} />
+          ) : null}
+          <SecondaryButton label="ถอนคำขอ" onPress={onWithdraw} disabled={busy} />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -94,8 +143,15 @@ export default function DonorApplyScreen(): React.ReactElement {
   const [redistributePlace, setRedistributePlace] = useState('');
   const [redistributeFrequency, setRedistributeFrequency] = useState('');
   const [docs, setDocs] = useState<LocalDoc[]>([]);
+  const [adminMessages, setAdminMessages] = useState<
+    { action: string; reason: string | null; application_kind?: ApplicationKind | null }[]
+  >([]);
+  const [conflictExistingId, setConflictExistingId] = useState<number | null>(null);
+  const [hydrated, setHydrated] = useState(false);
 
   const requested = useMemo(() => new Set(user?.requested_fields ?? []), [user?.requested_fields]);
+  const hasOpenApplication =
+    user !== null && OPEN_ORG_STATUSES.has(user.org_status);
   const fieldErr = (name: string): string | null => {
     if (errors[name]) {
       return errors[name] ?? null;
@@ -126,10 +182,82 @@ export default function DonorApplyScreen(): React.ReactElement {
   }, [api]);
 
   useEffect(() => {
-    if (user?.draft_step !== null && user?.draft_step !== undefined && user.draft_step > 0 && kind !== null) {
+    if (user === null || hydrated) {
+      return;
+    }
+    void (async () => {
+      try {
+        const mine = await api.getMyDonorApplication();
+        setAdminMessages(mine.admin_messages ?? []);
+        const sections = mine.sections;
+        if (sections?.organization !== null && sections?.organization !== undefined) {
+          const org = sections.organization;
+          if (typeof org.registered === 'boolean') {
+            setRegistered(org.registered);
+          }
+          if (typeof org.registration_number === 'string') {
+            setRegistrationNumber(org.registration_number);
+          }
+          if (typeof org.registered_address === 'string') {
+            setRegisteredAddress(org.registered_address);
+          }
+        }
+        if (sections?.contact !== null && sections?.contact !== undefined) {
+          const contact = sections.contact;
+          if (typeof contact.contact_title === 'string') {
+            setContactTitle(contact.contact_title);
+          }
+        }
+        if (sections?.beneficiaries !== null && sections?.beneficiaries !== undefined) {
+          const b = sections.beneficiaries;
+          if (typeof b.redistribute_place === 'string') {
+            setRedistributePlace(b.redistribute_place);
+          }
+          if (typeof b.redistribute_frequency === 'string') {
+            setRedistributeFrequency(b.redistribute_frequency);
+          }
+        }
+        if (mine.documents.length > 0) {
+          setDocs(
+            mine.documents.map((doc) => ({
+              id: `existing-${doc.id}`,
+              name: doc.original_name,
+              mime: (doc.mime === 'image/png' ? 'image/png' : doc.mime === 'application/pdf' ? 'application/pdf' : 'image/jpeg') as LocalDoc['mime'],
+              base64: '',
+              doc_category: (doc.doc_category as DocCategory) ?? 'other',
+              existingId: doc.id,
+            })),
+          );
+        }
+        if (
+          mine.user.application_kind !== null &&
+          OPEN_ORG_STATUSES.has(mine.user.org_status)
+        ) {
+          setKind(mine.user.application_kind);
+          if (mine.user.draft_step !== null && mine.user.draft_step !== undefined) {
+            const maxStep = mine.user.application_kind === 'individual' ? 2 : 4;
+            setStep(Math.min(Math.max(mine.user.draft_step, 0), maxStep));
+          }
+        }
+      } catch {
+        // fall back to user fields already hydrated
+      } finally {
+        setHydrated(true);
+      }
+    })();
+  }, [api, user, hydrated]);
+
+  useEffect(() => {
+    if (
+      hydrated &&
+      user?.draft_step !== null &&
+      user?.draft_step !== undefined &&
+      user.draft_step > 0 &&
+      kind !== null
+    ) {
       setStep(Math.min(user.draft_step, totalSteps - 1));
     }
-  }, [user?.draft_step, kind, totalSteps]);
+  }, [user?.draft_step, kind, totalSteps, hydrated]);
 
   const pickImage = async (category: DocCategory): Promise<void> => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -191,15 +319,17 @@ export default function DonorApplyScreen(): React.ReactElement {
         distribution_mode: distributionMode,
         redistribute_place: redistributePlace.trim() || null,
         redistribute_frequency: redistributeFrequency.trim() || null,
-        ...(docs.length > 0
+        ...(docs.some((d) => d.base64 !== '')
           ? {
-              replace_documents: true,
-              documents: docs.map((d) => ({
-                filename: d.name,
-                mime: d.mime,
-                base64: d.base64,
-                doc_category: d.doc_category,
-              })),
+              replace_documents: false,
+              documents: docs
+                .filter((d) => d.base64 !== '')
+                .map((d) => ({
+                  filename: d.name,
+                  mime: d.mime,
+                  base64: d.base64,
+                  doc_category: d.doc_category,
+                })),
             }
           : {}),
       });
@@ -209,6 +339,9 @@ export default function DonorApplyScreen(): React.ReactElement {
       if (err instanceof ApiError) {
         applyServerFields(err.fields);
         setFormError(err.message);
+        if (err.status === 409 && typeof err.details?.existing_id === 'number') {
+          setConflictExistingId(err.details.existing_id);
+        }
         scrollToField(firstErrorName());
       } else {
         setFormError('บันทึกร่างไม่สำเร็จ');
@@ -290,14 +423,89 @@ export default function DonorApplyScreen(): React.ReactElement {
 
   const goBack = (): void => {
     if (step === 0) {
-      if (kind !== null) {
+      if (kind !== null && !hasOpenApplication) {
         setKind(null);
+        return;
+      }
+      if (kind !== null && hasOpenApplication) {
+        router.back();
         return;
       }
       router.back();
       return;
     }
     setStep((s) => s - 1);
+  };
+
+  const confirmWithdraw = (): void => {
+    Alert.alert('ถอนคำขอ', 'ยืนยันถอนคำขอที่เปิดอยู่? หลังถอนแล้วสมัครแบบอื่นได้', [
+      { text: 'ยกเลิก', style: 'cancel' },
+      {
+        text: 'ถอนคำขอ',
+        style: 'destructive',
+        onPress: () => {
+          void (async () => {
+            setBusy(true);
+            setFormError(null);
+            try {
+              await api.withdrawDonorApplication();
+              setKind(null);
+              setStep(0);
+              setDocs([]);
+              setAdminMessages([]);
+              setHydrated(false);
+              await refreshUser();
+            } catch (err) {
+              setFormError(err instanceof ApiError ? err.message : 'ถอนคำขอไม่สำเร็จ');
+            } finally {
+              setBusy(false);
+            }
+          })();
+        },
+      },
+    ]);
+  };
+
+  const selectKind = (next: ApplicationKind): void => {
+    if (
+      hasOpenApplication &&
+      user?.application_kind === 'organization' &&
+      next === 'individual'
+    ) {
+      Alert.alert(
+        'เปลี่ยนเป็นบุคคล',
+        'จะถอนคำขอองค์กรปัจจุบันแล้วทำต่อเป็นบุคคลในคำขอเดิม ยืนยันหรือไม่?',
+        [
+          { text: 'ยกเลิก', style: 'cancel' },
+          {
+            text: 'ยืนยัน',
+            onPress: () => {
+              void (async () => {
+                setBusy(true);
+                try {
+                  await api.switchDonorApplicationKind('individual');
+                  setKind('individual');
+                  setStep(0);
+                  setDocs([]);
+                  setOrgName('');
+                  setOrgType(null);
+                  clearField('application_kind');
+                  await refreshUser();
+                } catch (err) {
+                  setFormError(err instanceof ApiError ? err.message : 'เปลี่ยนประเภทไม่สำเร็จ');
+                } finally {
+                  setBusy(false);
+                }
+              })();
+            },
+          },
+        ],
+      );
+      return;
+    }
+    setKind(next);
+    clearField('application_kind');
+    setStep(0);
   };
 
   const submit = async (): Promise<void> => {
@@ -310,7 +518,17 @@ export default function DonorApplyScreen(): React.ReactElement {
     }
     setBusy(true);
     setFormError(null);
+    setConflictExistingId(null);
     try {
+      if (user?.org_status === 'needs_more_info' && kind === 'organization') {
+        const ok = await saveDraft(step);
+        if (!ok) {
+          return;
+        }
+        await api.resubmitOrg();
+        router.replace('/profile');
+        return;
+      }
       const payload: Record<string, unknown> = {
         application_kind: kind,
         terms_version: termsVersion,
@@ -324,6 +542,7 @@ export default function DonorApplyScreen(): React.ReactElement {
         purpose_th: purposeTh.trim(),
       };
       if (kind === 'organization') {
+        const freshDocs = docs.filter((d) => d.base64 !== '');
         Object.assign(payload, {
           org_name: orgName.trim(),
           org_type: orgType,
@@ -335,7 +554,7 @@ export default function DonorApplyScreen(): React.ReactElement {
           distribution_mode: distributionMode,
           redistribute_place: redistributePlace.trim() || null,
           redistribute_frequency: redistributeFrequency.trim() || null,
-          documents: docs.map((d) => ({
+          documents: freshDocs.map((d) => ({
             filename: d.name,
             mime: d.mime,
             base64: d.base64,
@@ -349,6 +568,9 @@ export default function DonorApplyScreen(): React.ReactElement {
       if (err instanceof ApiError) {
         applyServerFields(err.fields);
         setFormError(err.message);
+        if (err.status === 409 && typeof err.details?.existing_id === 'number') {
+          setConflictExistingId(err.details.existing_id);
+        }
         const first = err.fields !== undefined ? Object.keys(err.fields)[0] ?? null : null;
         scrollToField(first);
       } else {
@@ -374,11 +596,26 @@ export default function DonorApplyScreen(): React.ReactElement {
       <TopBar title="สมัครรับบริจาค" onLogout={logout} />
       <Body scrollRef={scrollRef}>
         <ProgressBar step={step} total={totalSteps} />
-        {user.org_status === 'needs_more_info' ? (
-          <Text style={styles.warn}>ผู้ดูแลขอข้อมูลเพิ่ม: {user.org_reject_reason ?? '-'}</Text>
+        {user !== null ? (
+          <StatusBanner
+            orgStatus={user.org_status}
+            applicationKind={user.application_kind}
+            adminMessages={adminMessages}
+            onEditDocs={() => {
+              if (kind === 'organization') {
+                setStep(3);
+              } else if (kind === null && user.application_kind === 'organization') {
+                setKind('organization');
+                setStep(3);
+              }
+            }}
+            onWithdraw={confirmWithdraw}
+            onSwitchIndividual={() => selectKind('individual')}
+            busy={busy}
+          />
         ) : null}
 
-        {kind === null ? (
+        {kind === null && !hasOpenApplication ? (
           <ChipGroup
             label="ประเภทผู้รับบริจาค"
             name="application_kind"
@@ -388,13 +625,15 @@ export default function DonorApplyScreen(): React.ReactElement {
             ]}
             value={null}
             onChange={(v) => {
-              setKind(v as ApplicationKind);
-              clearField('application_kind');
-              setStep(0);
+              selectKind(v as ApplicationKind);
             }}
             error={fieldErr('application_kind')}
             fieldRef={registerY}
           />
+        ) : null}
+
+        {kind === null && hasOpenApplication ? (
+          <Text style={styles.muted}>กำลังเปิดคำขอเดิม — ใช้แถบสถานะด้านบนเพื่อแก้ไขหรือถอน</Text>
         ) : null}
 
         {kind === 'individual' && step === 0 ? (
@@ -701,11 +940,16 @@ export default function DonorApplyScreen(): React.ReactElement {
         {((kind === 'individual' && step === 2) || (kind === 'organization' && step === 4)) ? (
           <View>
             <Text style={styles.summaryTitle}>สรุปก่อนส่ง</Text>
-            <Text style={styles.summaryLine}>ประเภท: {kind === 'individual' ? 'บุคคล' : 'องค์กร'}</Text>
+            <Text style={styles.summaryLine}>ประเภท: {labelApplicationKind(kind)}</Text>
             <Text style={styles.summaryLine}>ชื่อ: {contactName}</Text>
             <Text style={styles.summaryLine}>เบอร์: {contactPhone}</Text>
-            {kind === 'organization' ? <Text style={styles.summaryLine}>องค์กร: {orgName}</Text> : null}
-            <Text style={styles.summaryLine}>กลุ่มผู้รับ: {recipientGroups.join(', ') || '-'}</Text>
+            {kind === 'organization' ? (
+              <>
+                <Text style={styles.summaryLine}>องค์กร: {orgName}</Text>
+                <Text style={styles.summaryLine}>ประเภทองค์กร: {labelOrgType(orgType)}</Text>
+              </>
+            ) : null}
+            <Text style={styles.summaryLine}>กลุ่มผู้รับ: {labelRecipientGroups(recipientGroups)}</Text>
             <Pressable
               style={styles.termsRow}
               onPress={() => {
@@ -729,7 +973,25 @@ export default function DonorApplyScreen(): React.ReactElement {
           </View>
         ) : null}
 
-        {formError !== null ? <Text style={styles.formError}>{formError}</Text> : null}
+        {formError !== null ? (
+          <View style={styles.conflictBox}>
+            <Text style={styles.formError}>{formError}</Text>
+            {conflictExistingId !== null ? (
+              <PrimaryButton
+                label="ไปที่คำขอเดิม"
+                onPress={() => {
+                  setConflictExistingId(null);
+                  setFormError(null);
+                  if (user?.application_kind !== null && user?.application_kind !== undefined) {
+                    setKind(user.application_kind);
+                    setStep(0);
+                  }
+                  setHydrated(false);
+                }}
+              />
+            ) : null}
+          </View>
+        ) : null}
 
         <View style={styles.actions}>
           <SecondaryButton label="ย้อนกลับ" onPress={goBack} />
@@ -737,7 +999,11 @@ export default function DonorApplyScreen(): React.ReactElement {
             <PrimaryButton label="ถัดไป (บันทึกร่าง)" onPress={() => void goNext()} loading={busy} />
           ) : null}
           {kind !== null && step === totalSteps - 1 ? (
-            <PrimaryButton label="ส่งคำขอ" onPress={() => void submit()} loading={busy} />
+            <PrimaryButton
+              label={user?.org_status === 'needs_more_info' ? 'ส่งตรวจอีกครั้ง' : 'ส่งคำขอ'}
+              onPress={() => void submit()}
+              loading={busy}
+            />
           ) : null}
         </View>
       </Body>
@@ -750,10 +1016,21 @@ const styles = StyleSheet.create({
   progressTrack: { height: 8, backgroundColor: C.line, borderRadius: 4, overflow: 'hidden' },
   progressFill: { height: 8, backgroundColor: C.leaf },
   progressLabel: { color: C.mute, marginTop: 6, fontSize: 13 },
-  muted: { color: C.mute },
+  muted: { color: C.mute, marginBottom: 12 },
   warn: { color: C.chili, marginBottom: 12 },
   fieldError: { color: C.chili, marginTop: 4, marginBottom: 8 },
   formError: { color: C.chili, marginVertical: 8 },
+  conflictBox: { gap: 8, marginVertical: 8 },
+  statusBanner: {
+    backgroundColor: C.leafSoft,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    gap: 8,
+  },
+  statusTitle: { color: C.ink, fontWeight: '700', fontSize: 15 },
+  statusAdmin: { color: C.chili, lineHeight: 20 },
+  statusActions: { gap: 8, marginTop: 4 },
   actions: { gap: 8, marginTop: 16, marginBottom: 40 },
   summaryTitle: { fontSize: 18, fontWeight: '800', color: C.ink, marginBottom: 8 },
   summaryLine: { color: C.ink, marginBottom: 4 },

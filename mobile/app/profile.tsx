@@ -6,6 +6,11 @@ import { DonorIntroModal, type DonorIntroChoice } from '../components/DonorIntro
 import { ApiError } from '../src/api/client';
 import { Body, Chip, Field, PrimaryButton, Screen, SectionTitle, SecondaryButton, TopBar } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
+import {
+  labelApplicationKind,
+  labelDonorTier,
+  labelOrgStatus,
+} from '../src/donorLabels';
 import { C } from '../src/theme';
 import type { BuyerType } from '../src/api/types';
 
@@ -175,26 +180,38 @@ export default function ProfileScreen(): React.ReactElement {
         </Text>
         {user.can_buy ? (
           <Text style={styles.muted}>
-            ประเภทผู้ซื้อ: {user.buyer_type ?? '-'}
-            {user.donor_tier !== null ? ` · ระดับผู้รับ ${user.donor_tier}` : ''}
+            ประเภทผู้ซื้อ:{' '}
+            {buyerTypes.find((t) => t.key === user.buyer_type)?.label ?? '-'}
+            {user.donor_tier !== null ? ` · ระดับผู้รับ ${labelDonorTier(user.donor_tier)}` : ''}
             {user.donation_suspended ? ' · ระงับสิทธิ์รับบริจาค' : ''}
           </Text>
         ) : null}
 
         {user.org_status === 'draft' ? (
           <View style={styles.banner}>
-            <Text style={styles.bannerTitle}>คำขอรับบริจาคยังไม่ครบ</Text>
+            <Text style={styles.bannerTitle}>
+              คำขอ{labelApplicationKind(user.application_kind)} · สถานะ {labelOrgStatus('draft')}
+            </Text>
             <Text style={styles.bannerText}>ยังรับบริจาคไม่ได้จนกว่าจะส่งคำขอครบ (บุคคล) หรือได้รับอนุมัติ (องค์กร)</Text>
             <PrimaryButton label="กรอกคำขอต่อ" onPress={() => router.push('/donor-apply')} />
           </View>
         ) : null}
 
         {user.org_status === 'pending' ? (
-          <Text style={styles.muted}>คำขอองค์กร: รอผู้ดูแลอนุมัติ</Text>
+          <View style={styles.banner}>
+            <Text style={styles.bannerTitle}>
+              คำขอ{labelApplicationKind(user.application_kind)} · สถานะ {labelOrgStatus('pending')}
+            </Text>
+            <Text style={styles.bannerText}>รอผู้ดูแลตรวจ — เปิดคำขอเดิมเพื่อส่งเอกสารเพิ่มหรือถอนได้</Text>
+            <PrimaryButton label="เปิดคำขอเดิม" onPress={() => router.push('/donor-apply')} />
+          </View>
         ) : null}
         {user.org_status === 'needs_more_info' ? (
           <>
-            <Text style={styles.error}>ขอเอกสารเพิ่ม: {user.org_reject_reason ?? '-'}</Text>
+            <Text style={styles.error}>
+              คำขอ{labelApplicationKind(user.application_kind)} · {labelOrgStatus('needs_more_info')}:{' '}
+              {user.org_reject_reason ?? '-'}
+            </Text>
             <PrimaryButton label="แก้ไขคำขอ / อัปโหลดเอกสาร" onPress={() => router.push('/donor-apply')} />
             <PrimaryButton
               label="อัปโหลดเอกสารเพิ่ม (รูป)"
@@ -262,15 +279,20 @@ export default function ProfileScreen(): React.ReactElement {
         ) : null}
         {user.org_status === 'rejected' ? (
           <>
-            <Text style={styles.error}>คำขอองค์กรถูกปฏิเสธ: {user.org_reject_reason ?? '-'}</Text>
+            <Text style={styles.error}>
+              คำขอ{labelApplicationKind(user.application_kind)} {labelOrgStatus('rejected')}:{' '}
+              {user.org_reject_reason ?? '-'}
+            </Text>
             <PrimaryButton label="สมัครใหม่" onPress={() => router.push('/donor-apply')} />
           </>
         ) : null}
         {user.org_status === 'approved' && user.application_kind === 'organization' ? (
-          <Text style={styles.ok}>องค์กรที่ยืนยันแล้ว: {user.org_name ?? '-'}</Text>
+          <Text style={styles.ok}>
+            คำขอองค์กร · {labelOrgStatus('approved')}: {user.org_name ?? '-'}
+          </Text>
         ) : null}
         {user.org_status === 'approved' && user.application_kind === 'individual' ? (
-          <Text style={styles.ok}>จิตอาสาพร้อมรับบริจาค</Text>
+          <Text style={styles.ok}>คำขอบุคคล · {labelOrgStatus('approved')} · พร้อมรับบริจาค</Text>
         ) : null}
 
         <SectionTitle>LINE ID</SectionTitle>

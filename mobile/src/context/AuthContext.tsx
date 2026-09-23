@@ -20,6 +20,7 @@ import type {
   Grade,
   ImpactSummary,
   MarketLot,
+  MyDonorApplication,
   MyLot,
   Order,
   OrgApplication,
@@ -106,8 +107,11 @@ interface Api {
   ) => Promise<{ order: Order }>;
   becomeVolunteer: () => Promise<AuthResponse>;
   getDonorTerms: () => Promise<DonorTermsMeta>;
+  getMyDonorApplication: () => Promise<MyDonorApplication>;
   saveDonorDraft: (input: Record<string, unknown>) => Promise<AuthResponse>;
   applyOrg: (input: Record<string, unknown>) => Promise<AuthResponse>;
+  withdrawDonorApplication: (reason?: string) => Promise<AuthResponse>;
+  switchDonorApplicationKind: (application_kind: 'individual' | 'organization') => Promise<AuthResponse>;
   listOrgApplications: () => Promise<OrgApplication[]>;
   approveOrg: (userId: number) => Promise<User>;
   rejectOrg: (userId: number, reason: string) => Promise<User>;
@@ -313,6 +317,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
         return { token: token ?? '', user: res.user };
       },
       getDonorTerms: () => apiRequest<DonorTermsMeta>({ method: 'GET', path: '/api/donors/terms' }),
+      getMyDonorApplication: () => authed<MyDonorApplication>('GET', '/api/donors/org-applications/mine'),
       saveDonorDraft: async (input) => {
         const res = await authed<{ user: User }>('POST', '/api/donors/org-applications/draft', input);
         setUser(res.user);
@@ -320,6 +325,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
       },
       applyOrg: async (input) => {
         const res = await authed<{ user: User }>('POST', '/api/donors/org-applications', input);
+        setUser(res.user);
+        return { token: token ?? '', user: res.user };
+      },
+      withdrawDonorApplication: async (reason) => {
+        const res = await authed<{ user: User }>('POST', '/api/donors/org-applications/withdraw', {
+          ...(reason !== undefined ? { reason } : {}),
+        });
+        setUser(res.user);
+        return { token: token ?? '', user: res.user };
+      },
+      switchDonorApplicationKind: async (application_kind) => {
+        const res = await authed<{ user: User }>('POST', '/api/donors/org-applications/switch-kind', {
+          application_kind,
+        });
         setUser(res.user);
         return { token: token ?? '', user: res.user };
       },

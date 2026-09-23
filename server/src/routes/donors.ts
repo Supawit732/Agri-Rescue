@@ -140,6 +140,10 @@ const orgApplySchema = orgApplyBase.superRefine((body, ctx) => {
     }
   }
   const docs = body.documents ?? [];
+  if (docs.length === 0) {
+    // Allow empty when documents already stored on the open application; route validates DB.
+    return;
+  }
   const certs = docs.filter((d) => d.doc_category === 'registration_cert' || d.doc_category === 'community_cert');
   const photos = docs.filter((d) => d.doc_category === 'site_photo');
   if (certs.length < 1) {
@@ -248,7 +252,7 @@ async function writeReviewLog(
   input: {
     userId: number;
     adminId: number;
-    action: 'approved' | 'rejected' | 'needs_more_info' | 'checklist_saved';
+    action: 'approved' | 'rejected' | 'needs_more_info' | 'checklist_saved' | 'withdrawn';
     reason: string | null;
     checklistJson?: string | null;
     requestedFieldsJson?: string | null;
@@ -266,6 +270,25 @@ async function writeReviewLog(
       input.requestedFieldsJson ?? null,
     ],
   );
+}
+
+function throwOpenApplicationConflict(row: {
+  user_id: number | string;
+  org_status: unknown;
+  application_kind?: unknown;
+}): never {
+  throw new HttpError(409, 'CONFLICT', 'มีคำขอที่ยังไม่ปิด', undefined, {
+    existing_id: Number(row.user_id),
+    org_status: String(row.org_status),
+    application_kind:
+      row.application_kind === null || row.application_kind === undefined
+        ? null
+        : String(row.application_kind),
+  });
+}
+
+function isOpenApplicationStatus(status: unknown): boolean {
+  return status === 'draft' || status === 'pending' || status === 'needs_more_info';
 }
 
 type ReviewLog = {
@@ -432,13 +455,18 @@ donorsRouter.post(
            VALUES (?, 'vendor', 1, 'volunteer', ?, 'none')`,
           [userId, body.distribution_mode],
         );
-      } else if (
-        profile.donor_tier === 'verified_org' ||
-        profile.org_status === 'pending' ||
-        profile.org_status === 'needs_more_info' ||
-        profile.org_status === 'draft'
-      ) {
-        throw new HttpError(409, 'CONFLICT', 'บัญชีนี้อยู่ในสถานะองค์กรแล้ว');
+      } else if (profile.donor_tier === 'verified_org') {
+        throw new HttpError(409, 'CONFLICT', 'เป็นองค์กรที่ยืนยันแล้วอยู่แล้ว', undefined, {
+          existing_id: userId,
+          org_status: 'approved',
+          application_kind: 'organization',
+        });
+      } else if (isOpenApplicationStatus(profile.org_status)) {
+        throwOpenApplicationConflict({
+          user_id: userId,
+          org_status: profile.org_status,
+          application_kind: null,
+        });
       } else if (profile.donor_tier !== 'trusted_volunteer' && profile.donor_tier !== 'volunteer') {
         await connection.query(
           `UPDATE buyer_profiles
@@ -470,13 +498,11 @@ donorsRouter.post(
     try {
       await connection.beginTransaction();
       const [existing] = await connection.query<RowDataPacket[]>(
-        'SELECT user_id, org_status, donor_tier FROM buyer_profiles WHERE user_id = ? FOR UPDATE',
+        'SELECT user_id, org_status, donor_tier, application_kind FROM buyer_profiles WHERE user_id = ? FOR UPDATE',
         [userId],
       );
       const row = existing[0];
-      if (row?.org_status === 'pending') {
-        throw new HttpError(409, 'CONFLICT', 'มีคำขอที่รอตรวจอยู่แล้ว');
-      }
+      // Allow editing open applications (draft / pending / needs_more_info); block closed approved verified_org.
       if (row?.donor_tier === 'verified_org' && row.org_status === 'approved') {
         throw new HttpError(409, 'CONFLICT', 'เป็นองค์กรที่ยืนยันแล้วอยู่แล้ว');
       }
@@ -524,11 +550,15 @@ donorsRouter.post(
           throw new HttpError(409, 'CONFLICT', 'บัญชีนี้พร้อมรับบริจาคแล้ว');
         }
         const nextStatus =
-          row.org_status === 'needs_more_info' ? 'needs_more_info' : 'draft';
+          row.org_status === 'needs_more_info'
+            ? 'needs_more_info'
+            : row.org_status === 'pending'
+              ? 'pending'
+              : 'draft';
         await connection.query(
           `UPDATE buyer_profiles SET
              buyer_type = 'charity', charity_approved = 0,
-             donor_tier = CASE WHEN ? = 'needs_more_info' THEN donor_tier ELSE NULL END,
+             donor_tier = CASE WHEN ? IN ('needs_more_info', 'pending') THEN donor_tier ELSE NULL END,
              org_status = ?,
              application_kind = COALESCE(?, application_kind),
              draft_step = COALESCE(?, draft_step),
@@ -612,15 +642,23 @@ donorsRouter.post(
     try {
       await connection.beginTransaction();
       const [existing] = await connection.query<RowDataPacket[]>(
-        'SELECT user_id, org_status, donor_tier FROM buyer_profiles WHERE user_id = ? FOR UPDATE',
+        'SELECT user_id, org_status, donor_tier, application_kind FROM buyer_profiles WHERE user_id = ? FOR UPDATE',
         [userId],
       );
       const row = existing[0];
-      if (row?.org_status === 'pending' || row?.org_status === 'needs_more_info') {
-        throw new HttpError(409, 'CONFLICT', 'มีคำขอองค์กรที่ยังไม่ปิดอยู่แล้ว — ส่งเอกสารเพิ่มหรือรอตรวจ');
+      if (row !== undefined && (row.org_status === 'pending' || row.org_status === 'needs_more_info')) {
+        throwOpenApplicationConflict({
+          user_id: Number(row.user_id),
+          org_status: row.org_status,
+          application_kind: row.application_kind,
+        });
       }
       if (row?.donor_tier === 'verified_org' && row.org_status === 'approved') {
-        throw new HttpError(409, 'CONFLICT', 'เป็นองค์กรที่ยืนยันแล้วอยู่แล้ว');
+        throw new HttpError(409, 'CONFLICT', 'เป็นองค์กรที่ยืนยันแล้วอยู่แล้ว', undefined, {
+          existing_id: Number(row.user_id),
+          org_status: 'approved',
+          application_kind: 'organization',
+        });
       }
 
       const recipientJson = JSON.stringify(body.recipient_groups);
@@ -675,6 +713,11 @@ donorsRouter.post(
            )`,
           [userId, ...profileFields],
         );
+        if (!isIndividual && (body.documents === undefined || body.documents.length === 0)) {
+          throw new HttpError(400, 'VALIDATION', 'ต้องแนบเอกสารประกอบคำขอองค์กร', {
+            documents: 'ต้องมีหนังสือรับรองและรูปสถานที่',
+          });
+        }
       } else {
         await connection.query(
           `UPDATE buyer_profiles SET
@@ -690,11 +733,22 @@ donorsRouter.post(
            WHERE user_id = ?`,
           [...profileFields, userId],
         );
-        await connection.query('DELETE FROM org_application_docs WHERE user_id = ?', [userId]);
+        if (!isIndividual && body.documents !== undefined && body.documents.length > 0) {
+          await connection.query('DELETE FROM org_application_docs WHERE user_id = ?', [userId]);
+        } else if (isIndividual) {
+          await connection.query('DELETE FROM org_application_docs WHERE user_id = ?', [userId]);
+        }
       }
 
       if (!isIndividual && body.documents !== undefined && body.documents.length > 0) {
         await insertDocs(connection, userId, body.documents);
+      } else if (!isIndividual) {
+        const existingDocs = await countOrgDocs(connection, userId);
+        if (existingDocs < 1) {
+          throw new HttpError(400, 'VALIDATION', 'ต้องมีเอกสารอย่างน้อย 1 ไฟล์', {
+            documents: 'ต้องมีหนังสือรับรองและรูปสถานที่',
+          });
+        }
       }
       await connection.query('UPDATE users SET can_buy = 1 WHERE id = ?', [userId]);
       await connection.commit();
@@ -705,6 +759,148 @@ donorsRouter.post(
       connection.release();
     }
     res.status(201).json({ user: await loadPublicUser(userId) });
+  }),
+);
+
+donorsRouter.post(
+  '/org-applications/withdraw',
+  requireAuth,
+  requireCapability('buy'),
+  asyncHandler(async (req, res) => {
+    const body = z
+      .object({ reason: z.string().trim().max(512).optional() })
+      .parse(req.body ?? {});
+    const userId = req.auth?.id ?? 0;
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [rows] = await connection.query<RowDataPacket[]>(
+        `SELECT user_id, org_status, application_kind FROM buyer_profiles WHERE user_id = ? FOR UPDATE`,
+        [userId],
+      );
+      const row = rows[0];
+      if (row === undefined || !isOpenApplicationStatus(row.org_status)) {
+        throw new HttpError(409, 'CONFLICT', 'ไม่มีคำขอที่เปิดอยู่ให้ถอน');
+      }
+      const kindLabel =
+        row.application_kind === 'individual'
+          ? 'บุคคล'
+          : row.application_kind === 'organization'
+            ? 'องค์กร'
+            : 'ไม่ระบุประเภท';
+      await writeReviewLog(connection, {
+        userId,
+        adminId: userId,
+        action: 'withdrawn',
+        reason:
+          body.reason ??
+          `ผู้ใช้ถอนคำขอประเภท${kindLabel} (สถานะเดิม: ${String(row.org_status)})`,
+      });
+      await connection.query('DELETE FROM org_application_docs WHERE user_id = ?', [userId]);
+      await connection.query(
+        `UPDATE buyer_profiles SET
+           org_status = 'none',
+           application_kind = NULL,
+           draft_step = NULL,
+           org_name = NULL,
+           org_type = NULL,
+           registered = NULL,
+           registration_number = NULL,
+           registered_address = NULL,
+           contact_title = NULL,
+           contact_email = NULL,
+           beneficiary_count = NULL,
+           recipient_groups_json = NULL,
+           purpose_th = NULL,
+           redistribute_place = NULL,
+           redistribute_frequency = NULL,
+           org_reject_reason = NULL,
+           requested_fields_json = NULL,
+           org_reviewed_at = NULL,
+           donor_terms_version = NULL,
+           donor_terms_accepted_at = NULL,
+           charity_approved = 0,
+           donor_tier = NULL
+         WHERE user_id = ?`,
+        [userId],
+      );
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+    res.json({ user: await loadPublicUser(userId) });
+  }),
+);
+
+donorsRouter.post(
+  '/org-applications/switch-kind',
+  requireAuth,
+  requireCapability('buy'),
+  asyncHandler(async (req, res) => {
+    const body = z
+      .object({ application_kind: z.enum(['individual', 'organization']) })
+      .parse(req.body ?? {});
+    const userId = req.auth?.id ?? 0;
+    if (body.application_kind !== 'individual') {
+      throw new HttpError(400, 'VALIDATION', 'ตอนนี้รองรับเฉพาะการเปลี่ยนเป็นบุคคล');
+    }
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [rows] = await connection.query<RowDataPacket[]>(
+        `SELECT user_id, org_status, application_kind FROM buyer_profiles WHERE user_id = ? FOR UPDATE`,
+        [userId],
+      );
+      const row = rows[0];
+      if (row === undefined || !isOpenApplicationStatus(row.org_status)) {
+        throw new HttpError(409, 'CONFLICT', 'ไม่มีคำขอที่เปิดอยู่ให้เปลี่ยนประเภท');
+      }
+      if (row.application_kind === 'individual') {
+        await connection.commit();
+        res.json({ user: await loadPublicUser(userId) });
+        return;
+      }
+      await writeReviewLog(connection, {
+        userId,
+        adminId: userId,
+        action: 'withdrawn',
+        reason: `ถอนคำขอองค์กรเพื่อเปลี่ยนเป็นบุคคล (สถานะเดิม: ${String(row.org_status)})`,
+      });
+      await connection.query('DELETE FROM org_application_docs WHERE user_id = ?', [userId]);
+      await connection.query(
+        `UPDATE buyer_profiles SET
+           application_kind = 'individual',
+           org_status = 'draft',
+           draft_step = 0,
+           org_name = NULL,
+           org_type = NULL,
+           registered = NULL,
+           registration_number = NULL,
+           registered_address = NULL,
+           contact_title = NULL,
+           beneficiary_count = NULL,
+           distribution_mode = 'redistribute',
+           redistribute_place = NULL,
+           redistribute_frequency = NULL,
+           org_reject_reason = NULL,
+           requested_fields_json = NULL,
+           org_reviewed_at = NULL,
+           charity_approved = 0,
+           donor_tier = NULL
+         WHERE user_id = ?`,
+        [userId],
+      );
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+    res.json({ user: await loadPublicUser(userId) });
   }),
 );
 
@@ -790,11 +986,33 @@ donorsRouter.get(
   asyncHandler(async (req, res) => {
     const userId = req.auth?.id ?? 0;
     const docs = await loadDocs(userId);
+    const [profileRows] = await pool.query<RowDataPacket[]>(
+      `SELECT * FROM buyer_profiles WHERE user_id = ?`,
+      [userId],
+    );
+    const profile = profileRows[0];
+    const logs = await loadReviewLogs(userId);
+    const kind =
+      profile === undefined || profile.application_kind === null || profile.application_kind === undefined
+        ? null
+        : String(profile.application_kind);
+    const status = profile === undefined ? 'none' : String(profile.org_status);
+    const showAdminMessages = status === 'needs_more_info' || status === 'rejected';
+    const adminMessages = showAdminMessages
+      ? logs
+          .filter((log) => log.action === 'rejected' || log.action === 'needs_more_info' || log.action === 'approved')
+          .map((log) => ({
+            ...log,
+            application_kind: kind,
+          }))
+      : [];
     res.json({
       user: await loadPublicUser(userId),
       documents: docs,
       documents_by_category: groupDocsByCategory(docs),
-      review_logs: await loadReviewLogs(userId),
+      review_logs: logs,
+      admin_messages: adminMessages,
+      sections: profile === undefined ? null : applicationSections(profile),
     });
   }),
 );

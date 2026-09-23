@@ -16,6 +16,12 @@ import {
 } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
 import { useApiData } from '../src/hooks/useApiData';
+import {
+  labelApplicationKind,
+  labelDistributionMode,
+  labelOrgStatus,
+  labelOrgType,
+} from '../src/donorLabels';
 import { C } from '../src/theme';
 import type {
   DitCrop,
@@ -207,7 +213,8 @@ function OrgApplicationsPanel(): React.ReactElement {
                 <Card key={entry.user_id}>
                   <Text style={styles.name}>{entry.org_name ?? entry.contact_name ?? entry.name}</Text>
                   <Text style={styles.meta}>
-                    สถานะ {entry.org_status ?? 'pending'} · {entry.application_kind ?? '-'} · {entry.org_type ?? '-'}
+                    สถานะ {labelOrgStatus(entry.org_status ?? 'pending')} ·{' '}
+                    {labelApplicationKind(entry.application_kind ?? null)} · {labelOrgType(entry.org_type)}
                   </Text>
                   <Text style={styles.meta}>
                     ผู้สมัคร {entry.name} · {entry.phone}
@@ -239,7 +246,8 @@ function OrgApplicationsPanel(): React.ReactElement {
 
                   <Text style={styles.section}>ผู้รับประโยชน์</Text>
                   <Text style={styles.meta}>
-                    จำนวน {entry.beneficiary_count ?? '-'} · รูปแบบ {entry.distribution_mode ?? '-'}
+                    จำนวน {entry.beneficiary_count ?? '-'} · รูปแบบ{' '}
+                    {labelDistributionMode(entry.distribution_mode)}
                   </Text>
 
                   <Text style={styles.section}>เอกสารตามประเภท</Text>

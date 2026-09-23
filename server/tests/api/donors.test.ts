@@ -542,4 +542,126 @@ describe('donors 6.1d formal apply', () => {
     expect(saved.body.checklist.name_matches_docs).toBe(true);
     expect(saved.body.review_logs.some((l: { action: string }) => l.action === 'checklist_saved')).toBe(true);
   });
+
+  it('withdraw then re-apply works; duplicate submit returns 409 with existing_id', async () => {
+    const buyer = await registerUser(app, { role: 'buyer', buyer_type: 'shop' });
+    const orgPayload = {
+      application_kind: 'organization' as const,
+      terms_version: DONOR_TERMS_VERSION,
+      terms_accepted: true as const,
+      org_name: 'มูลนิธิทดสอบถอน',
+      org_type: 'foundation' as const,
+      registered: true,
+      registered_address: 'กทม',
+      contact_name: 'เอ',
+      contact_title: 'ผอ',
+      contact_phone: '0894444444',
+      org_lat: 13.7,
+      org_lng: 100.5,
+      beneficiary_count: 12,
+      recipient_groups: ['community' as const],
+      distribution_mode: 'self_use' as const,
+      documents: [
+        {
+          filename: 'cert.pdf',
+          mime: 'application/pdf' as const,
+          base64: Buffer.from('%PDF').toString('base64'),
+          doc_category: 'registration_cert' as const,
+        },
+        {
+          filename: 'site.jpg',
+          mime: 'image/jpeg' as const,
+          base64: tinyPng,
+          doc_category: 'site_photo' as const,
+        },
+      ],
+    };
+    const first = await request(app)
+      .post('/api/donors/org-applications')
+      .set(bearer(buyer.token))
+      .send(orgPayload);
+    expect(first.status).toBe(201);
+    expect(first.body.user.org_status).toBe('pending');
+
+    const dup = await request(app)
+      .post('/api/donors/org-applications')
+      .set(bearer(buyer.token))
+      .send(orgPayload);
+    expect(dup.status).toBe(409);
+    expect(dup.body.error.message).toContain('มีคำขอที่ยังไม่ปิด');
+    expect(dup.body.error.details.existing_id).toBe(buyer.user.id);
+
+    const withdrawn = await request(app)
+      .post('/api/donors/org-applications/withdraw')
+      .set(bearer(buyer.token))
+      .send({});
+    expect(withdrawn.status).toBe(200);
+    expect(withdrawn.body.user.org_status).toBe('none');
+
+    const mine = await request(app)
+      .get('/api/donors/org-applications/mine')
+      .set(bearer(buyer.token));
+    expect(mine.status).toBe(200);
+    expect(mine.body.review_logs.some((l: { action: string }) => l.action === 'withdrawn')).toBe(true);
+
+    const again = await request(app)
+      .post('/api/donors/org-applications')
+      .set(bearer(buyer.token))
+      .send({
+        ...orgPayload,
+        org_name: 'มูลนิธิรอบสอง',
+        contact_phone: '0895555555',
+      });
+    expect(again.status).toBe(201);
+    expect(again.body.user.org_status).toBe('pending');
+    expect(again.body.user.org_name).toBe('มูลนิธิรอบสอง');
+  });
+
+  it('switches organization open application to individual and activates volunteer on submit', async () => {
+    const buyer = await registerUser(app, { role: 'buyer', buyer_type: 'shop' });
+    const draft = await request(app)
+      .post('/api/donors/org-applications/draft')
+      .set(bearer(buyer.token))
+      .send({
+        application_kind: 'organization',
+        draft_step: 1,
+        org_name: 'องค์กรจะเปลี่ยน',
+        org_type: 'association',
+      });
+    expect(draft.status).toBe(200);
+    expect(draft.body.user.application_kind).toBe('organization');
+
+    const switched = await request(app)
+      .post('/api/donors/org-applications/switch-kind')
+      .set(bearer(buyer.token))
+      .send({ application_kind: 'individual' });
+    expect(switched.status).toBe(200);
+    expect(switched.body.user.application_kind).toBe('individual');
+    expect(switched.body.user.org_status).toBe('draft');
+    expect(switched.body.user.org_name).toBeNull();
+
+    const logs = await request(app)
+      .get('/api/donors/org-applications/mine')
+      .set(bearer(buyer.token));
+    expect(logs.body.review_logs.some((l: { action: string }) => l.action === 'withdrawn')).toBe(true);
+
+    const submit = await request(app)
+      .post('/api/donors/org-applications')
+      .set(bearer(buyer.token))
+      .send({
+        application_kind: 'individual',
+        terms_version: DONOR_TERMS_VERSION,
+        terms_accepted: true,
+        contact_name: 'สมชาย เปลี่ยนแล้ว',
+        contact_phone: '0896666666',
+        org_lat: 13.8,
+        org_lng: 100.6,
+        recipient_groups: ['children'],
+        purpose_th: 'ช่วยเด็กในชุมชน',
+      });
+    expect(submit.status).toBe(201);
+    expect(submit.body.user.donor_tier).toBe('volunteer');
+    expect(submit.body.user.org_status).toBe('approved');
+    expect(submit.body.user.application_kind).toBe('individual');
+  });
 });

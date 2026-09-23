@@ -73,6 +73,22 @@ export interface OrgReviewLog {
   checklist?: Record<string, unknown> | null;
   requested_fields?: string[];
   created_at: string;
+  application_kind?: ApplicationKind | null;
+}
+
+export interface MyDonorApplication {
+  user: User;
+  documents: OrgApplicationDoc[];
+  documents_by_category: Record<string, OrgApplicationDoc[]>;
+  review_logs: OrgReviewLog[];
+  admin_messages: OrgReviewLog[];
+  sections: {
+    kind: string | null;
+    individual: Record<string, unknown> | null;
+    organization: Record<string, unknown> | null;
+    contact: Record<string, unknown>;
+    beneficiaries: Record<string, unknown>;
+  } | null;
 }
 
 export interface OrgChecklist {

@@ -10,6 +10,7 @@ export function errorHandler(error: unknown, _req: Request, res: Response, _next
         code: error.code,
         message: error.message,
         ...(error.fields !== undefined ? { fields: error.fields } : {}),
+        ...(error.details !== undefined ? { details: error.details } : {}),
       },
     });
     return;
