@@ -2,15 +2,14 @@ import type { ResultSetHeader, RowDataPacket } from 'mysql2';
 import type { PoolConnection } from 'mysql2/promise';
 import {
   DONOR_CONFIG,
-  canBookDonationAudience,
+  evaluateDonationRequest,
   proofDueAt,
-  remainingWeeklyKg,
   shouldPromoteToTrusted,
   shouldSuspend,
   weekStartBangkok,
-  weeklyCapKg,
   type DonationAudience,
   type DonorTier,
+  type OrgStatus,
 } from '../domain/donorRules';
 import { HttpError } from '../http/errors';
 import { pool } from '../db/pool';
@@ -24,7 +23,7 @@ export interface DonorProfile extends RowDataPacket {
   distribution_mode: 'self_use' | 'redistribute' | null;
   donation_suspended: number | boolean;
   trusted_proof_count: number;
-  org_status: 'none' | 'pending' | 'approved' | 'rejected';
+  org_status: OrgStatus;
   org_reject_reason: string | null;
   org_name: string | null;
 }
@@ -61,28 +60,24 @@ export function assertMayRequestDonation(input: {
   audience: DonationAudience;
   lotWeightKg: number;
   usedKg: number;
+  allowDonation: boolean;
   distributionPlace: string | null | undefined;
   distributionAt: Date | null | undefined;
 }): void {
-  if (Number(input.profile.donation_suspended) === 1) {
-    throw new HttpError(403, 'FORBIDDEN', 'สิทธิ์รับบริจาคถูกระงับ กรุณาติดต่อผู้ดูแล');
+  const verdict = evaluateDonationRequest({
+    allowDonation: input.allowDonation,
+    audience: input.audience,
+    lotWeightKg: input.lotWeightKg,
+    usedKg: input.usedKg,
+    donor_tier: input.profile.donor_tier,
+    org_status: input.profile.org_status,
+    donation_suspended: input.profile.donation_suspended,
+    beneficiary_count: input.profile.beneficiary_count,
+  });
+  if (!verdict.ok) {
+    throw new HttpError(403, 'FORBIDDEN', verdict.message);
   }
-  const tier = input.profile.donor_tier;
-  if (tier === null) {
-    throw new HttpError(403, 'FORBIDDEN', 'ต้องเป็นผู้รับบริจาคที่ลงทะเบียนแล้ว');
-  }
-  if (!canBookDonationAudience(tier, input.audience)) {
-    throw new HttpError(403, 'FORBIDDEN', 'ล็อตนี้เปิดรับเฉพาะองค์กรที่ยืนยันแล้ว');
-  }
-  const cap = weeklyCapKg(tier, input.profile.beneficiary_count);
-  const remaining = remainingWeeklyKg(cap, input.usedKg);
-  if (input.lotWeightKg > remaining) {
-    throw new HttpError(
-      403,
-      'FORBIDDEN',
-      `น้ำหนักเกินเพดานสัปดาห์ คงเหลือ ${remaining} กก. จากเพดาน ${cap} กก.`,
-    );
-  }
+  const tier = verdict.tier;
   const needsPlace =
     tier === 'volunteer' ||
     tier === 'trusted_volunteer' ||

@@ -1,18 +1,20 @@
 import { useCallback, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { ApiError } from '../src/api/client';
-import { Body, Card, DataState, Field, PrimaryButton, Screen, SecondaryButton, TopBar } from '../src/components/ui';
+import { Body, Card, Chip, DataState, Field, PrimaryButton, Screen, SecondaryButton, TopBar } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
 import { useApiData } from '../src/hooks/useApiData';
 import { C } from '../src/theme';
 import type { OrgApplication } from '../src/api/types';
 
+const QUICK_REASONS = ['ขอหนังสือรับรองฉบับล่าสุด', 'เอกสารไม่ชัด', 'ชื่อองค์กรไม่ตรงกับเอกสาร'] as const;
+
 export default function AdminScreen(): React.ReactElement {
   const { api, logout, user } = useAuth();
   const [refreshKey, setRefreshKey] = useState(0);
   const [actingId, setActingId] = useState<number | null>(null);
-  const [rejectReason, setRejectReason] = useState('');
-  const [rejectingId, setRejectingId] = useState<number | null>(null);
+  const [reason, setReason] = useState('');
+  const [actionMode, setActionMode] = useState<{ userId: number; kind: 'reject' | 'more' } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const { data, loading, error: loadError, reload } = useApiData(() => api.listOrgApplications(), [api, refreshKey]);
@@ -31,20 +33,27 @@ export default function AdminScreen(): React.ReactElement {
     }
   };
 
-  const reject = async (userId: number): Promise<void> => {
-    if (rejectReason.trim() === '') {
-      setError('กรุณาระบุเหตุผลเมื่อปฏิเสธ');
+  const submitReasoned = async (): Promise<void> => {
+    if (actionMode === null) {
       return;
     }
-    setActingId(userId);
+    if (reason.trim() === '') {
+      setError('กรุณาระบุเหตุผลเมื่อปฏิเสธหรือขอเอกสารเพิ่ม');
+      return;
+    }
+    setActingId(actionMode.userId);
     setError(null);
     try {
-      await api.rejectOrg(userId, rejectReason.trim());
-      setRejectingId(null);
-      setRejectReason('');
+      if (actionMode.kind === 'reject') {
+        await api.rejectOrg(actionMode.userId, reason.trim());
+      } else {
+        await api.requestMoreOrgInfo(actionMode.userId, reason.trim());
+      }
+      setActionMode(null);
+      setReason('');
       bump();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'ปฏิเสธไม่สำเร็จ');
+      setError(err instanceof ApiError ? err.message : 'บันทึกไม่สำเร็จ');
     } finally {
       setActingId(null);
     }
@@ -71,7 +80,7 @@ export default function AdminScreen(): React.ReactElement {
                 <Card key={entry.user_id}>
                   <Text style={styles.name}>{entry.org_name}</Text>
                   <Text style={styles.meta}>
-                    {entry.org_type} · ผู้รับ {entry.beneficiary_count} คน · {entry.distribution_mode}
+                    สถานะ {entry.org_status ?? 'pending'} · {entry.org_type} · ผู้รับ {entry.beneficiary_count} คน
                   </Text>
                   <Text style={styles.meta}>
                     ผู้ติดต่อ {entry.contact_name} ({entry.contact_title}) {entry.contact_phone}
@@ -85,39 +94,77 @@ export default function AdminScreen(): React.ReactElement {
                       · {doc.original_name} ({Math.round(doc.size_bytes / 1024)} KB)
                     </Text>
                   ))}
-                  {rejectingId === entry.user_id ? (
+                  {(entry.review_logs ?? []).length > 0 ? (
                     <>
-                      <Field label="เหตุผลที่ปฏิเสธ" value={rejectReason} onChangeText={setRejectReason} />
+                      <Text style={styles.historyTitle}>ประวัติการตัดสิน</Text>
+                      {(entry.review_logs ?? []).map((log) => (
+                        <Text key={log.id} style={styles.meta}>
+                          · {log.action}
+                          {log.reason ? `: ${log.reason}` : ''} ({new Date(log.created_at).toLocaleString('th-TH')})
+                        </Text>
+                      ))}
+                    </>
+                  ) : null}
+                  {actionMode?.userId === entry.user_id ? (
+                    <>
+                      <Field
+                        label={actionMode.kind === 'reject' ? 'เหตุผลที่ปฏิเสธ' : 'เหตุผลที่ขอเอกสารเพิ่ม'}
+                        value={reason}
+                        onChangeText={setReason}
+                      />
+                      <View style={styles.row}>
+                        {QUICK_REASONS.map((item) => (
+                          <Chip key={item} label={item} selected={reason === item} onPress={() => setReason(item)} />
+                        ))}
+                      </View>
                       <View style={styles.actions}>
                         <View style={styles.slot}>
                           <PrimaryButton
-                            label="ยืนยันปฏิเสธ"
-                            tone="chili"
-                            onPress={() => void reject(entry.user_id)}
+                            label="ยืนยัน"
+                            tone={actionMode.kind === 'reject' ? 'chili' : 'turmeric'}
+                            onPress={() => void submitReasoned()}
                             loading={actingId === entry.user_id}
                           />
                         </View>
                         <View style={styles.slot}>
-                          <SecondaryButton label="ยกเลิก" onPress={() => setRejectingId(null)} />
+                          <SecondaryButton
+                            label="ยกเลิก"
+                            onPress={() => {
+                              setActionMode(null);
+                              setReason('');
+                            }}
+                          />
                         </View>
                       </View>
                     </>
                   ) : (
                     <View style={styles.actions}>
+                      {entry.org_status !== 'needs_more_info' ? (
+                        <View style={styles.slot}>
+                          <PrimaryButton
+                            label="อนุมัติ"
+                            onPress={() => void approve(entry.user_id)}
+                            loading={actingId === entry.user_id}
+                            disabled={actingId !== null}
+                          />
+                        </View>
+                      ) : null}
                       <View style={styles.slot}>
-                        <PrimaryButton
-                          label="อนุมัติ"
-                          onPress={() => void approve(entry.user_id)}
-                          loading={actingId === entry.user_id}
-                          disabled={actingId !== null}
+                        <SecondaryButton
+                          label="ขอเอกสารเพิ่ม"
+                          onPress={() => {
+                            setActionMode({ userId: entry.user_id, kind: 'more' });
+                            setReason('');
+                          }}
+                          disabled={actingId !== null || entry.org_status === 'needs_more_info'}
                         />
                       </View>
                       <View style={styles.slot}>
                         <SecondaryButton
                           label="ปฏิเสธ"
                           onPress={() => {
-                            setRejectingId(entry.user_id);
-                            setRejectReason('');
+                            setActionMode({ userId: entry.user_id, kind: 'reject' });
+                            setReason('');
                           }}
                           disabled={actingId !== null}
                         />
@@ -138,8 +185,10 @@ const styles = StyleSheet.create({
   lead: { fontSize: 18, fontWeight: '800', color: C.ink, marginBottom: 4 },
   name: { fontSize: 16, fontWeight: '700', color: C.ink },
   meta: { color: C.mute, marginTop: 2, marginBottom: 2 },
+  historyTitle: { marginTop: 8, fontWeight: '700', color: C.ink },
   doc: { color: C.ink, marginTop: 2 },
   error: { color: C.chili, marginBottom: 8 },
-  actions: { flexDirection: 'row', gap: 8, marginTop: 10 },
-  slot: { flex: 1 },
+  row: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 8, marginBottom: 4 },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  slot: { flexGrow: 1, flexBasis: '30%', minWidth: 100 },
 });

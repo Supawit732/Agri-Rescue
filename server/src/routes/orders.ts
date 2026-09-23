@@ -96,9 +96,6 @@ ordersRouter.post(
       let distributionPlace: string | null = null;
       let distributionAt: Date | null = null;
       if (donation) {
-        if (Number(lot.allow_donation) !== 1) {
-          throw new HttpError(403, 'FORBIDDEN', 'ล็อตนี้ไม่เปิดรับบริจาค');
-        }
         const profile = await loadDonorProfile(connection, buyerId);
         if (profile === null) {
           throw new HttpError(403, 'FORBIDDEN', 'ต้องเป็นผู้รับบริจาคที่ลงทะเบียนแล้ว');
@@ -111,6 +108,7 @@ ordersRouter.post(
           audience: lot.donation_audience,
           lotWeightKg: Number(lot.weight_kg),
           usedKg,
+          allowDonation: Number(lot.allow_donation) === 1,
           distributionPlace,
           distributionAt,
         });

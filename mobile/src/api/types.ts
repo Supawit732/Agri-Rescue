@@ -20,9 +20,11 @@ export interface User {
   distribution_mode: 'self_use' | 'redistribute' | null;
   donation_suspended: boolean;
   trusted_proof_count: number;
-  org_status: 'none' | 'pending' | 'approved' | 'rejected';
+  org_status: 'none' | 'pending' | 'approved' | 'rejected' | 'needs_more_info';
   org_reject_reason: string | null;
   org_name: string | null;
+  donation_weekly_cap_kg: number | null;
+  donation_remaining_kg: number | null;
   line_id: string | null;
   lat: number | null;
   lng: number | null;
@@ -54,8 +56,11 @@ export interface OrgApplication {
   org_lng: number;
   beneficiary_count: number;
   distribution_mode: string;
+  org_status?: string;
+  org_reject_reason?: string | null;
   created_at: string;
   documents: OrgApplicationDoc[];
+  review_logs?: { id: number; admin_id: number; action: string; reason: string | null; created_at: string }[];
 }
 
 export interface Crop {

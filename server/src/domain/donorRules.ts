@@ -1,5 +1,6 @@
 export type DonorTier = 'volunteer' | 'trusted_volunteer' | 'verified_org';
 export type DonationAudience = 'verified_org_only' | 'all_donors';
+export type OrgStatus = 'none' | 'pending' | 'approved' | 'rejected' | 'needs_more_info';
 
 /** Config for Phase 6.1b — mirrored in docs/DECISIONS.md D019 */
 export const DONOR_CONFIG = {
@@ -11,9 +12,15 @@ export const DONOR_CONFIG = {
   suspendWindowDays: 60,
   proofDeadlineHours: 48,
   orgDocMaxBytes: 5 * 1024 * 1024,
-  orgDocMaxFiles: 3,
+  orgDocMaxFiles: 10,
   orgDocAllowedMimes: ['application/pdf', 'image/jpeg', 'image/png'] as const,
 } as const;
+
+export const ORG_REVIEW_QUICK_REASONS = [
+  'ขอหนังสือรับรองฉบับล่าสุด',
+  'เอกสารไม่ชัด',
+  'ชื่อองค์กรไม่ตรงกับเอกสาร',
+] as const;
 
 export function weeklyCapKg(tier: DonorTier, beneficiaryCount: number | null): number {
   if (tier === 'volunteer') {
@@ -26,11 +33,102 @@ export function weeklyCapKg(tier: DonorTier, beneficiaryCount: number | null): n
   return Math.max(0, count * DONOR_CONFIG.verifiedOrgKgPerBeneficiary);
 }
 
+/** Active donation tier — pending/rejected/needs_more_info orgs have no donate rights. */
+export function activeDonorTier(input: {
+  donor_tier: DonorTier | null;
+  org_status: OrgStatus | string | null | undefined;
+}): DonorTier | null {
+  const status = input.org_status ?? 'none';
+  if (status === 'pending' || status === 'rejected' || status === 'needs_more_info') {
+    return null;
+  }
+  if (input.donor_tier === 'verified_org' && status !== 'approved') {
+    return null;
+  }
+  return input.donor_tier;
+}
+
 export function canBookDonationAudience(tier: DonorTier, audience: DonationAudience): boolean {
   if (audience === 'all_donors') {
-    return true;
+    return tier === 'verified_org' || tier === 'volunteer' || tier === 'trusted_volunteer';
   }
   return tier === 'verified_org';
+}
+
+export type DonationBlockReason =
+  | 'lot_closed'
+  | 'not_registered'
+  | 'pending_org'
+  | 'needs_more_info'
+  | 'rejected_org'
+  | 'suspended'
+  | 'audience'
+  | 'over_cap';
+
+export function donationBlockMessage(reason: DonationBlockReason, remainingKg?: number, capKg?: number): string {
+  switch (reason) {
+    case 'lot_closed':
+      return 'ล็อตนี้ไม่เปิดรับบริจาค';
+    case 'not_registered':
+      return 'ต้องเป็นผู้รับบริจาคที่ลงทะเบียนแล้ว';
+    case 'pending_org':
+      return 'รอการอนุมัติองค์กร';
+    case 'needs_more_info':
+      return 'ต้องส่งเอกสารเพิ่มก่อนขอรับบริจาค';
+    case 'rejected_org':
+      return 'คำขอองค์กรถูกปฏิเสธ กรุณาสมัครใหม่';
+    case 'suspended':
+      return 'สิทธิ์รับบริจาคถูกระงับ กรุณาติดต่อผู้ดูแล';
+    case 'audience':
+      return 'ล็อตนี้เปิดรับเฉพาะองค์กรที่ยืนยันแล้ว';
+    case 'over_cap':
+      return `เกินเพดานสัปดาห์นี้ คงเหลือ ${remainingKg ?? 0} กก. จากเพดาน ${capKg ?? 0} กก.`;
+  }
+}
+
+export function evaluateDonationRequest(input: {
+  allowDonation: boolean;
+  audience: DonationAudience;
+  lotWeightKg: number;
+  usedKg: number;
+  donor_tier: DonorTier | null;
+  org_status: OrgStatus | string | null | undefined;
+  donation_suspended: boolean | number;
+  beneficiary_count: number | null;
+}): { ok: true; tier: DonorTier; capKg: number; remainingKg: number } | { ok: false; reason: DonationBlockReason; message: string } {
+  if (!input.allowDonation) {
+    return { ok: false, reason: 'lot_closed', message: donationBlockMessage('lot_closed') };
+  }
+  if (Number(input.donation_suspended) === 1) {
+    return { ok: false, reason: 'suspended', message: donationBlockMessage('suspended') };
+  }
+  const orgStatus = (input.org_status ?? 'none') as OrgStatus;
+  if (orgStatus === 'pending') {
+    return { ok: false, reason: 'pending_org', message: donationBlockMessage('pending_org') };
+  }
+  if (orgStatus === 'needs_more_info') {
+    return { ok: false, reason: 'needs_more_info', message: donationBlockMessage('needs_more_info') };
+  }
+  if (orgStatus === 'rejected') {
+    return { ok: false, reason: 'rejected_org', message: donationBlockMessage('rejected_org') };
+  }
+  const tier = activeDonorTier({ donor_tier: input.donor_tier, org_status: orgStatus });
+  if (tier === null) {
+    return { ok: false, reason: 'not_registered', message: donationBlockMessage('not_registered') };
+  }
+  if (!canBookDonationAudience(tier, input.audience)) {
+    return { ok: false, reason: 'audience', message: donationBlockMessage('audience') };
+  }
+  const capKg = weeklyCapKg(tier, input.beneficiary_count);
+  const remainingKg = remainingWeeklyKg(capKg, input.usedKg);
+  if (input.lotWeightKg > remainingKg) {
+    return {
+      ok: false,
+      reason: 'over_cap',
+      message: donationBlockMessage('over_cap', remainingKg, capKg),
+    };
+  }
+  return { ok: true, tier, capKg, remainingKg };
 }
 
 export function remainingWeeklyKg(capKg: number, usedKg: number): number {

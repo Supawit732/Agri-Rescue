@@ -31,11 +31,10 @@ describe('donors 6.1b', () => {
     });
   }
 
-  it('rejects non-admin org doc download with 403', async () => {
-    const buyer = await registerUser(app, { role: 'buyer', buyer_type: 'shop' });
+  async function applyOrg(token: string): Promise<void> {
     const apply = await request(app)
       .post('/api/donors/org-applications')
-      .set(bearer(buyer.token))
+      .set(bearer(token))
       .send({
         org_name: 'มูลนิธิทดสอบ',
         org_type: 'foundation',
@@ -49,6 +48,11 @@ describe('donors 6.1b', () => {
         documents: [{ filename: 'cert.pdf', mime: 'application/pdf', base64: Buffer.from('%PDF-1.4').toString('base64') }],
       });
     expect(apply.status).toBe(201);
+  }
+
+  it('rejects non-admin org doc download with 403', async () => {
+    const buyer = await registerUser(app, { role: 'buyer', buyer_type: 'shop' });
+    await applyOrg(buyer.token);
     const [docs] = await pool.query<RowDataPacket[]>('SELECT id FROM org_application_docs WHERE user_id = ?', [
       buyer.user.id,
     ]);
@@ -60,6 +64,50 @@ describe('donors 6.1b', () => {
     const ok = await request(app).get(`/api/donors/admin/org-docs/${docId}`).set(bearer(admin.token));
     expect(ok.status).toBe(200);
     expect(ok.headers['content-type']).toContain('application/pdf');
+  });
+
+  it('blocks pending org, volunteer on verified_org_only, and suspended donors with 403', async () => {
+    const pending = await registerUser(app, { role: 'buyer', buyer_type: 'shop', name: 'รออนุมัติ' });
+    await applyOrg(pending.token);
+    const orgOnly = await openDonationLot({ audience: 'verified_org_only', weightKg: 5 });
+    const pendingBlocked = await request(app)
+      .post('/api/orders')
+      .set(bearer(pending.token))
+      .send({
+        lot_id: orgOnly,
+        donation: true,
+        distribution_place: 'จุดแจก',
+        distribution_at: new Date(Date.now() + 86400000).toISOString(),
+      });
+    expect(pendingBlocked.status).toBe(403);
+    expect(pendingBlocked.body.error.message).toContain('อนุมัติ');
+
+    const volunteer = await registerUser(app, { role: 'buyer', buyer_type: 'vendor' });
+    await request(app).post('/api/donors/volunteer').set(bearer(volunteer.token)).send({});
+    const volBlocked = await request(app)
+      .post('/api/orders')
+      .set(bearer(volunteer.token))
+      .send({
+        lot_id: orgOnly,
+        donation: true,
+        distribution_place: 'ตลาดชุมชน',
+        distribution_at: new Date(Date.now() + 86400000).toISOString(),
+      });
+    expect(volBlocked.status).toBe(403);
+
+    await pool.query(`UPDATE buyer_profiles SET donation_suspended = 1 WHERE user_id = ?`, [volunteer.user.id]);
+    const openLot = await openDonationLot({ audience: 'all_donors', weightKg: 1 });
+    const suspended = await request(app)
+      .post('/api/orders')
+      .set(bearer(volunteer.token))
+      .send({
+        lot_id: openLot,
+        donation: true,
+        distribution_place: 'ตลาดชุมชน',
+        distribution_at: new Date(Date.now() + 86400000).toISOString(),
+      });
+    expect(suspended.status).toBe(403);
+    expect(suspended.body.error.message).toContain('ระงับ');
   });
 
   it('enforces weekly caps and audience by tier', async () => {
@@ -101,6 +149,49 @@ describe('donors 6.1b', () => {
       });
     expect(overCap.status).toBe(403);
     expect(overCap.body.error.message).toContain('เพดาน');
+  });
+
+  it('needs_more_info then resubmit returns to pending; reject without reason is 400', async () => {
+    const buyer = await registerUser(app, { role: 'buyer', buyer_type: 'shop' });
+    await applyOrg(buyer.token);
+    const admin = await loginStaff(app, 'coordinator', 'แอดมินตรวจเอกสาร');
+
+    const noReason = await request(app)
+      .post(`/api/donors/admin/org-applications/${buyer.user.id}/reject`)
+      .set(bearer(admin.token))
+      .send({});
+    expect(noReason.status).toBe(400);
+
+    const askMore = await request(app)
+      .post(`/api/donors/admin/org-applications/${buyer.user.id}/needs-more-info`)
+      .set(bearer(admin.token))
+      .send({ reason: 'เอกสารไม่ชัด' });
+    expect(askMore.status).toBe(200);
+    expect(askMore.body.user.org_status).toBe('needs_more_info');
+    expect(askMore.body.user.org_reject_reason).toBe('เอกสารไม่ชัด');
+
+    const addDoc = await request(app)
+      .post('/api/donors/org-applications/documents')
+      .set(bearer(buyer.token))
+      .send({
+        documents: [
+          { filename: 'cert2.pdf', mime: 'application/pdf', base64: Buffer.from('%PDF-1.5').toString('base64') },
+        ],
+      });
+    expect(addDoc.status).toBe(201);
+
+    const resubmit = await request(app)
+      .post('/api/donors/org-applications/resubmit')
+      .set(bearer(buyer.token))
+      .send({});
+    expect(resubmit.status).toBe(200);
+    expect(resubmit.body.user.org_status).toBe('pending');
+
+    const listed = await request(app).get('/api/donors/admin/org-applications').set(bearer(admin.token));
+    const entry = listed.body.applications.find((a: { user_id: number }) => a.user_id === buyer.user.id);
+    expect(entry).toBeDefined();
+    expect(entry.review_logs.length).toBeGreaterThanOrEqual(1);
+    expect(entry.review_logs.some((l: { action: string }) => l.action === 'needs_more_info')).toBe(true);
   });
 
   it('promotes volunteer after 5 matching proofs and suspends after 3 fails', async () => {

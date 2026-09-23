@@ -77,6 +77,9 @@ interface Api {
   listOrgApplications: () => Promise<OrgApplication[]>;
   approveOrg: (userId: number) => Promise<User>;
   rejectOrg: (userId: number, reason: string) => Promise<User>;
+  requestMoreOrgInfo: (userId: number, reason: string) => Promise<User>;
+  addOrgDocuments: (documents: { filename: string; mime: string; base64: string }[]) => Promise<AuthResponse>;
+  resubmitOrg: () => Promise<AuthResponse>;
   unlockDonor: (userId: number) => Promise<User>;
   getDrivers: () => Promise<Driver[]>;
   getBatches: () => Promise<Batch[]>;
@@ -274,6 +277,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
         authed<{ user: User }>('POST', `/api/donors/admin/org-applications/${userId}/approve`).then((r) => r.user),
       rejectOrg: (userId, reason) =>
         authed<{ user: User }>('POST', `/api/donors/admin/org-applications/${userId}/reject`, { reason }).then((r) => r.user),
+      requestMoreOrgInfo: (userId, reason) =>
+        authed<{ user: User }>('POST', `/api/donors/admin/org-applications/${userId}/needs-more-info`, { reason }).then(
+          (r) => r.user,
+        ),
+      addOrgDocuments: async (documents) => {
+        const res = await authed<{ user: User }>('POST', '/api/donors/org-applications/documents', { documents });
+        setUser(res.user);
+        return { token: token ?? '', user: res.user };
+      },
+      resubmitOrg: async () => {
+        const res = await authed<{ user: User }>('POST', '/api/donors/org-applications/resubmit', {});
+        setUser(res.user);
+        return { token: token ?? '', user: res.user };
+      },
       unlockDonor: (userId) =>
         authed<{ user: User }>('POST', `/api/donors/admin/donors/${userId}/unlock`).then((r) => r.user),
       getMyOrders: () => authed<{ orders: Order[] }>('GET', '/api/orders/mine').then((r) => r.orders),

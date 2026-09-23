@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import type { ResultSetHeader, RowDataPacket } from 'mysql2';
+import type { PoolConnection } from 'mysql2/promise';
 import { z } from 'zod';
 import { assessRipenessFromPhoto } from '../ai/vision';
 import { pool } from '../db/pool';
-import { DONOR_CONFIG } from '../domain/donorRules';
+import { DONOR_CONFIG, ORG_REVIEW_QUICK_REASONS } from '../domain/donorRules';
 import { unlockDonorSuspension, recordProofResult } from '../donors/donationService';
 import { asyncHandler } from '../http/asyncHandler';
 import { HttpError } from '../http/errors';
@@ -14,6 +15,12 @@ import { readPrivateUpload, savePrivateUpload } from '../storage/privateUploads'
 export const donorsRouter = Router();
 
 const orgTypeSchema = z.enum(['foundation', 'association', 'shelter', 'community_kitchen', 'other']);
+
+const docSchema = z.object({
+  filename: z.string().min(1).max(255),
+  mime: z.enum(['application/pdf', 'image/jpeg', 'image/png']),
+  base64: z.string().min(1),
+});
 
 const becomeVolunteerSchema = z.object({
   distribution_mode: z.enum(['self_use', 'redistribute']).default('redistribute'),
@@ -29,26 +36,87 @@ const orgApplySchema = z.object({
   org_lng: z.number().gte(-180).lte(180),
   beneficiary_count: z.number().int().positive(),
   distribution_mode: z.enum(['self_use', 'redistribute']),
-  documents: z
-    .array(
-      z.object({
-        filename: z.string().min(1).max(255),
-        mime: z.enum(['application/pdf', 'image/jpeg', 'image/png']),
-        base64: z.string().min(1),
-      }),
-    )
-    .min(1)
-    .max(DONOR_CONFIG.orgDocMaxFiles),
+  documents: z.array(docSchema).min(1).max(DONOR_CONFIG.orgDocMaxFiles),
 });
 
-const rejectSchema = z.object({
-  reason: z.string().trim().min(1).max(512),
+const reasonSchema = z.object({
+  reason: z.string().trim().min(1, 'กรุณาระบุเหตุผล').max(512),
+});
+
+const addDocsSchema = z.object({
+  documents: z.array(docSchema).min(1).max(DONOR_CONFIG.orgDocMaxFiles),
 });
 
 const proofSchema = z.object({
   image_base64: z.string().min(1),
   mime: z.enum(['image/jpeg', 'image/png']),
 });
+
+async function countOrgDocs(connection: PoolConnection, userId: number): Promise<number> {
+  const [rows] = await connection.query<RowDataPacket[]>(
+    'SELECT COUNT(*) AS c FROM org_application_docs WHERE user_id = ?',
+    [userId],
+  );
+  return Number(rows[0]?.c ?? 0);
+}
+
+async function insertDocs(
+  connection: PoolConnection,
+  userId: number,
+  documents: z.infer<typeof docSchema>[],
+): Promise<void> {
+  for (const doc of documents) {
+    const saved = await savePrivateUpload({
+      userId,
+      originalName: doc.filename,
+      mime: doc.mime,
+      base64: doc.base64,
+    });
+    await connection.query(
+      `INSERT INTO org_application_docs (user_id, stored_name, original_name, mime, size_bytes)
+       VALUES (?, ?, ?, ?, ?)`,
+      [userId, saved.storedName, doc.filename, doc.mime, saved.sizeBytes],
+    );
+  }
+}
+
+async function writeReviewLog(
+  connection: PoolConnection,
+  input: { userId: number; adminId: number; action: 'approved' | 'rejected' | 'needs_more_info'; reason: string | null },
+): Promise<void> {
+  await connection.query(
+    `INSERT INTO org_review_logs (user_id, admin_id, action, reason) VALUES (?, ?, ?, ?)`,
+    [input.userId, input.adminId, input.action, input.reason],
+  );
+}
+
+async function loadReviewLogs(userId: number): Promise<
+  { id: number; admin_id: number; action: string; reason: string | null; created_at: string }[]
+> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT id, admin_id, action, reason, created_at FROM org_review_logs WHERE user_id = ? ORDER BY id DESC`,
+    [userId],
+  );
+  return rows.map((row) => ({
+    id: Number(row.id),
+    admin_id: Number(row.admin_id),
+    action: String(row.action),
+    reason: row.reason === null ? null : String(row.reason),
+    created_at: new Date(row.created_at as string).toISOString(),
+  }));
+}
+
+donorsRouter.get(
+  '/config',
+  requireAuth,
+  asyncHandler(async (_req, res) => {
+    res.json({
+      org_doc_max_files: DONOR_CONFIG.orgDocMaxFiles,
+      org_doc_max_bytes: DONOR_CONFIG.orgDocMaxBytes,
+      review_quick_reasons: ORG_REVIEW_QUICK_REASONS,
+    });
+  }),
+);
 
 donorsRouter.post(
   '/volunteer',
@@ -71,7 +139,11 @@ donorsRouter.post(
            VALUES (?, 'vendor', 1, 'volunteer', ?, 'none')`,
           [userId, body.distribution_mode],
         );
-      } else if (profile.donor_tier === 'verified_org' || profile.org_status === 'pending') {
+      } else if (
+        profile.donor_tier === 'verified_org' ||
+        profile.org_status === 'pending' ||
+        profile.org_status === 'needs_more_info'
+      ) {
         throw new HttpError(409, 'CONFLICT', 'บัญชีนี้อยู่ในสถานะองค์กรแล้ว');
       } else if (profile.donor_tier !== 'trusted_volunteer' && profile.donor_tier !== 'volunteer') {
         await connection.query(
@@ -108,8 +180,8 @@ donorsRouter.post(
         [userId],
       );
       const row = existing[0];
-      if (row?.org_status === 'pending') {
-        throw new HttpError(409, 'CONFLICT', 'มีคำขอองค์กรรออนุมัติอยู่แล้ว');
+      if (row?.org_status === 'pending' || row?.org_status === 'needs_more_info') {
+        throw new HttpError(409, 'CONFLICT', 'มีคำขอองค์กรที่ยังไม่ปิดอยู่แล้ว — ส่งเอกสารเพิ่มหรือรอตรวจ');
       }
       if (row?.donor_tier === 'verified_org' && row.org_status === 'approved') {
         throw new HttpError(409, 'CONFLICT', 'เป็นองค์กรที่ยืนยันแล้วอยู่แล้ว');
@@ -156,19 +228,7 @@ donorsRouter.post(
         );
         await connection.query('DELETE FROM org_application_docs WHERE user_id = ?', [userId]);
       }
-      for (const doc of body.documents) {
-        const saved = await savePrivateUpload({
-          userId,
-          originalName: doc.filename,
-          mime: doc.mime,
-          base64: doc.base64,
-        });
-        await connection.query(
-          `INSERT INTO org_application_docs (user_id, stored_name, original_name, mime, size_bytes)
-           VALUES (?, ?, ?, ?, ?)`,
-          [userId, saved.storedName, doc.filename, doc.mime, saved.sizeBytes],
-        );
-      }
+      await insertDocs(connection, userId, body.documents);
       await connection.commit();
     } catch (error) {
       await connection.rollback();
@@ -180,6 +240,106 @@ donorsRouter.post(
   }),
 );
 
+donorsRouter.post(
+  '/org-applications/documents',
+  requireAuth,
+  requireCapability('buy'),
+  asyncHandler(async (req, res) => {
+    const body = addDocsSchema.parse(req.body);
+    const userId = req.auth?.id ?? 0;
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [rows] = await connection.query<RowDataPacket[]>(
+        'SELECT org_status FROM buyer_profiles WHERE user_id = ? FOR UPDATE',
+        [userId],
+      );
+      const status = rows[0]?.org_status;
+      if (status !== 'pending' && status !== 'needs_more_info') {
+        throw new HttpError(409, 'CONFLICT', 'อัปโหลดเอกสารเพิ่มได้เฉพาะคำขอที่รอตรวจหรือขอเอกสารเพิ่ม');
+      }
+      const existing = await countOrgDocs(connection, userId);
+      if (existing + body.documents.length > DONOR_CONFIG.orgDocMaxFiles) {
+        throw new HttpError(
+          400,
+          'VALIDATION',
+          `อัปโหลดได้สูงสุด ${DONOR_CONFIG.orgDocMaxFiles} ไฟล์ (มีอยู่แล้ว ${existing})`,
+        );
+      }
+      await insertDocs(connection, userId, body.documents);
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+    res.status(201).json({ user: await loadPublicUser(userId) });
+  }),
+);
+
+donorsRouter.post(
+  '/org-applications/resubmit',
+  requireAuth,
+  requireCapability('buy'),
+  asyncHandler(async (req, res) => {
+    const userId = req.auth?.id ?? 0;
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [rows] = await connection.query<RowDataPacket[]>(
+        'SELECT org_status FROM buyer_profiles WHERE user_id = ? FOR UPDATE',
+        [userId],
+      );
+      if (rows[0]?.org_status !== 'needs_more_info') {
+        throw new HttpError(409, 'CONFLICT', 'ส่งตรวจอีกครั้งได้เมื่อสถานะเป็นขอเอกสารเพิ่มเท่านั้น');
+      }
+      const docs = await countOrgDocs(connection, userId);
+      if (docs < 1) {
+        throw new HttpError(400, 'VALIDATION', 'ต้องมีเอกสารอย่างน้อย 1 ไฟล์ก่อนส่งตรวจ');
+      }
+      await connection.query(
+        `UPDATE buyer_profiles
+         SET org_status = 'pending', org_reject_reason = NULL, org_reviewed_at = NULL
+         WHERE user_id = ?`,
+        [userId],
+      );
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+    res.json({ user: await loadPublicUser(userId) });
+  }),
+);
+
+donorsRouter.get(
+  '/org-applications/mine',
+  requireAuth,
+  requireCapability('buy'),
+  asyncHandler(async (req, res) => {
+    const userId = req.auth?.id ?? 0;
+    const [docs] = await pool.query<RowDataPacket[]>(
+      `SELECT id, original_name, mime, size_bytes, created_at
+       FROM org_application_docs WHERE user_id = ? ORDER BY id`,
+      [userId],
+    );
+    res.json({
+      user: await loadPublicUser(userId),
+      documents: docs.map((doc) => ({
+        id: Number(doc.id),
+        original_name: String(doc.original_name),
+        mime: String(doc.mime),
+        size_bytes: Number(doc.size_bytes),
+        created_at: new Date(doc.created_at as string).toISOString(),
+      })),
+      review_logs: await loadReviewLogs(userId),
+    });
+  }),
+);
+
 donorsRouter.get(
   '/admin/org-applications',
   requireAuth,
@@ -188,10 +348,10 @@ donorsRouter.get(
     const [rows] = await pool.query<RowDataPacket[]>(
       `SELECT u.id, u.name, u.phone, bp.org_name, bp.org_type, bp.contact_name, bp.contact_title,
               bp.contact_phone, bp.org_lat, bp.org_lng, bp.beneficiary_count, bp.distribution_mode,
-              bp.created_at
+              bp.org_status, bp.org_reject_reason, bp.created_at
        FROM buyer_profiles bp
        JOIN users u ON u.id = bp.user_id
-       WHERE bp.org_status = 'pending'
+       WHERE bp.org_status IN ('pending', 'needs_more_info')
        ORDER BY bp.created_at ASC, u.id ASC`,
     );
     const apps = [];
@@ -214,6 +374,8 @@ donorsRouter.get(
         org_lng: Number(row.org_lng),
         beneficiary_count: Number(row.beneficiary_count),
         distribution_mode: String(row.distribution_mode),
+        org_status: String(row.org_status),
+        org_reject_reason: row.org_reject_reason === null ? null : String(row.org_reject_reason),
         created_at: new Date(row.created_at as string).toISOString(),
         documents: docs.map((doc) => ({
           id: Number(doc.id),
@@ -222,9 +384,10 @@ donorsRouter.get(
           size_bytes: Number(doc.size_bytes),
           created_at: new Date(doc.created_at as string).toISOString(),
         })),
+        review_logs: await loadReviewLogs(Number(row.id)),
       });
     }
-    res.json({ applications: apps });
+    res.json({ applications: apps, review_quick_reasons: ORG_REVIEW_QUICK_REASONS });
   }),
 );
 
@@ -234,15 +397,27 @@ donorsRouter.post(
   requireCapability('admin'),
   asyncHandler(async (req, res) => {
     const userId = Number(req.params.userId);
-    const [result] = await pool.query<ResultSetHeader>(
-      `UPDATE buyer_profiles
-       SET org_status = 'approved', charity_approved = 1, donor_tier = 'verified_org',
-           org_reject_reason = NULL, org_reviewed_at = UTC_TIMESTAMP()
-       WHERE user_id = ? AND org_status = 'pending'`,
-      [userId],
-    );
-    if (result.affectedRows === 0) {
-      throw new HttpError(404, 'NOT_FOUND', 'ไม่พบคำขอองค์กรที่รออนุมัติ');
+    const adminId = req.auth?.id ?? 0;
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [result] = await connection.query<ResultSetHeader>(
+        `UPDATE buyer_profiles
+         SET org_status = 'approved', charity_approved = 1, donor_tier = 'verified_org',
+             org_reject_reason = NULL, org_reviewed_at = UTC_TIMESTAMP()
+         WHERE user_id = ? AND org_status = 'pending'`,
+        [userId],
+      );
+      if (result.affectedRows === 0) {
+        throw new HttpError(404, 'NOT_FOUND', 'ไม่พบคำขอองค์กรที่รออนุมัติ');
+      }
+      await writeReviewLog(connection, { userId, adminId, action: 'approved', reason: null });
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
     }
     res.json({ user: await loadPublicUser(userId) });
   }),
@@ -254,16 +429,66 @@ donorsRouter.post(
   requireCapability('admin'),
   asyncHandler(async (req, res) => {
     const userId = Number(req.params.userId);
-    const body = rejectSchema.parse(req.body);
-    const [result] = await pool.query<ResultSetHeader>(
-      `UPDATE buyer_profiles
-       SET org_status = 'rejected', charity_approved = 0, donor_tier = NULL,
-           org_reject_reason = ?, org_reviewed_at = UTC_TIMESTAMP()
-       WHERE user_id = ? AND org_status = 'pending'`,
-      [body.reason, userId],
-    );
-    if (result.affectedRows === 0) {
-      throw new HttpError(404, 'NOT_FOUND', 'ไม่พบคำขอองค์กรที่รออนุมัติ');
+    const adminId = req.auth?.id ?? 0;
+    const body = reasonSchema.parse(req.body ?? {});
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [result] = await connection.query<ResultSetHeader>(
+        `UPDATE buyer_profiles
+         SET org_status = 'rejected', charity_approved = 0, donor_tier = NULL,
+             org_reject_reason = ?, org_reviewed_at = UTC_TIMESTAMP()
+         WHERE user_id = ? AND org_status IN ('pending', 'needs_more_info')`,
+        [body.reason, userId],
+      );
+      if (result.affectedRows === 0) {
+        throw new HttpError(404, 'NOT_FOUND', 'ไม่พบคำขอองค์กรที่รอตรวจ');
+      }
+      await writeReviewLog(connection, { userId, adminId, action: 'rejected', reason: body.reason });
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+    res.json({ user: await loadPublicUser(userId) });
+  }),
+);
+
+donorsRouter.post(
+  '/admin/org-applications/:userId/needs-more-info',
+  requireAuth,
+  requireCapability('admin'),
+  asyncHandler(async (req, res) => {
+    const userId = Number(req.params.userId);
+    const adminId = req.auth?.id ?? 0;
+    const body = reasonSchema.parse(req.body ?? {});
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [result] = await connection.query<ResultSetHeader>(
+        `UPDATE buyer_profiles
+         SET org_status = 'needs_more_info', charity_approved = 0, donor_tier = NULL,
+             org_reject_reason = ?, org_reviewed_at = UTC_TIMESTAMP()
+         WHERE user_id = ? AND org_status = 'pending'`,
+        [body.reason, userId],
+      );
+      if (result.affectedRows === 0) {
+        throw new HttpError(404, 'NOT_FOUND', 'ไม่พบคำขอองค์กรที่รออนุมัติ');
+      }
+      await writeReviewLog(connection, {
+        userId,
+        adminId,
+        action: 'needs_more_info',
+        reason: body.reason,
+      });
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
     }
     res.json({ user: await loadPublicUser(userId) });
   }),

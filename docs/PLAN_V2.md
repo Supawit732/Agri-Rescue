@@ -33,12 +33,14 @@
 
 ## 6.1b การยืนยันผู้รับบริจาค
 - `donor_tier`: `volunteer` (10 กก./สัปดาห์ เปิดจากโปรไฟล์ทันที) → `trusted_volunteer` (เลื่อนอัตโนมัติเมื่อรูปยืนยัน `subject_match` ครบ 5 ครั้ง, 30 กก./สัปดาห์) → `verified_org` (admin อนุมัติ, เพดาน = ผู้รับประโยชน์ × 0.5 กก./สัปดาห์); ค่า config ใน DECISIONS
-- สมัครองค์กร: ฟอร์ม + เอกสาร 1–3 ไฟล์ (pdf/jpg/png ≤ 5MB) ใน `server/private_uploads/` (ไม่ static; ดาวน์โหลดเฉพาะ admin); ห้ามเก็บบัตรประชาชน; admin อนุมัติ/ปฏิเสธพร้อมเหตุผล
+- สมัครองค์กร: ฟอร์ม + เอกสาร (pdf/jpg/png ≤ 5MB, รวมสูงสุด 10 ไฟล์) ใน `server/private_uploads/` (ไม่ static; ดาวน์โหลดเฉพาะ admin); ห้ามเก็บบัตรประชาชน
+- สถานะคำขอ: `pending → approved | rejected | needs_more_info`; `needs_more_info → pending` เมื่อส่งเอกสารเพิ่ม; admin ต้องกรอกเหตุผลทุกครั้งที่ปฏิเสธ/ขอเอกสารเพิ่ม; เก็บประวัติใน `org_review_logs`
 - `harvest_lots.donation_audience` (`verified_org_only` | `all_donors`, ค่าเริ่มต้น `verified_org_only`); เกษตรกรเลือกเมื่อติ๊กยินดีบริจาค
-- จิตอาสาขอรับได้เฉพาะ `all_donors` และไม่เกินเพดานสัปดาห์; แจกจ่ายต่อต้องกรอกสถานที่+วันแจก
+- ขอรับบริจาคได้เฉพาะเมื่อ `allow_donation=1`, audience ตรง tier ที่อนุมัติแล้ว, ไม่ถูกระงับ, และไม่เกินเพดานสัปดาห์ — ผู้สมัครองค์กรที่ยังรออนุมัติไม่มีสิทธิ์รับบริจาค
+- ตลาด: แยกปุ่มซื้อ/ขอรับบริจาค, ป้ายสิทธิ์, ยืนยันก่อนจอง, แสดงเหตุผลเมื่อไม่มีสิทธิ์
 - หลังรับของ: ส่งรูปยืนยันภายใน 48 ชม. (vision `subject_match`); พลาด/ไม่ผ่าน 3 ครั้งใน 60 วัน → ระงับจนกว่า admin ปลด; expire job ตรวจกำหนด
 - บัญชี charity ที่อนุมัติแล้ว ย้ายเป็น `verified_org`
-- **Done when:** test เพดาน, เลื่อนระดับ, audience, ระงับ/ปลด, ดาวน์โหลดเอกสาร 403 สำหรับ non-admin, mock vision ทุกกรณี
+- **Done when:** test เพดาน, เลื่อนระดับ, audience, ระงับ/ปลด, pending org/volunteer/suspended → 403, needs_more_info→resubmit, reject ไม่มีเหตุผล → 400, ดาวน์โหลดเอกสาร 403 สำหรับ non-admin, mock vision ทุกกรณี
 
 ## 6.2 หน้าแรกดูสินค้าแบบไม่ต้อง login
 - เก็บรูปล็อต: `lot_photos(id, lot_id, path, created_at)` เก็บไฟล์ใน `server/uploads/` (ไม่ commit), เสิร์ฟผ่าน `/uploads/...`, jpeg/webp ไม่เกิน 1MB หลังย่อ; รูปที่ใช้ให้ AI ประเมินบันทึกเป็นรูปของล็อตอัตโนมัติ

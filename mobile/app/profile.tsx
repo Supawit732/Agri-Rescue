@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { ApiError } from '../src/api/client';
 import { Body, Chip, Field, PrimaryButton, Screen, SectionTitle, SecondaryButton, TopBar } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
@@ -106,6 +107,70 @@ export default function ProfileScreen(): React.ReactElement {
         ) : null}
         {user.org_status === 'pending' ? (
           <Text style={styles.muted}>คำขอองค์กร: รอผู้ดูแลอนุมัติ</Text>
+        ) : null}
+        {user.org_status === 'needs_more_info' ? (
+          <>
+            <Text style={styles.error}>
+              ขอเอกสารเพิ่ม: {user.org_reject_reason ?? '-'}
+            </Text>
+            <PrimaryButton
+              label="อัปโหลดเอกสารเพิ่ม (รูป)"
+              onPress={() => {
+                void (async () => {
+                  setBusy(true);
+                  setError(null);
+                  try {
+                    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                    if (!permission.granted) {
+                      setError('ไม่ได้รับสิทธิ์เข้าถึงรูปภาพ');
+                      return;
+                    }
+                    const picked = await ImagePicker.launchImageLibraryAsync({
+                      mediaTypes: ['images'],
+                      base64: true,
+                      quality: 0.8,
+                    });
+                    if (picked.canceled || picked.assets[0] === undefined || !picked.assets[0].base64) {
+                      return;
+                    }
+                    const asset = picked.assets[0];
+                    const mime = asset.mimeType === 'image/png' ? 'image/png' : 'image/jpeg';
+                    await api.addOrgDocuments([
+                      {
+                        filename: asset.fileName ?? `doc-${Date.now()}.jpg`,
+                        mime,
+                        base64: asset.base64,
+                      },
+                    ]);
+                    setMessage('อัปโหลดเอกสารเพิ่มแล้ว');
+                  } catch (err) {
+                    setError(err instanceof ApiError ? err.message : 'อัปโหลดไม่สำเร็จ');
+                  } finally {
+                    setBusy(false);
+                  }
+                })();
+              }}
+              loading={busy}
+            />
+            <PrimaryButton
+              label="ส่งตรวจอีกครั้ง"
+              onPress={() => {
+                void (async () => {
+                  setBusy(true);
+                  setError(null);
+                  try {
+                    await api.resubmitOrg();
+                    setMessage('ส่งคำขอตรวจอีกครั้งแล้ว');
+                  } catch (err) {
+                    setError(err instanceof ApiError ? err.message : 'ส่งตรวจไม่สำเร็จ');
+                  } finally {
+                    setBusy(false);
+                  }
+                })();
+              }}
+              loading={busy}
+            />
+          </>
         ) : null}
         {user.org_status === 'rejected' ? (
           <Text style={styles.error}>คำขอองค์กรถูกปฏิเสธ: {user.org_reject_reason ?? '-'}</Text>

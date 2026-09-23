@@ -122,7 +122,10 @@ JWT เก็บ `sub`, `role`, `can_sell`, `can_buy`, `is_admin` (อายุ 
 | เพดาน `verified_org` | `beneficiary_count × 0.5` กก./สัปดาห์ |
 | เลื่อนเป็น trusted | รูปยืนยัน `subject_match = true` ครบ 5 ครั้ง |
 | ระงับสิทธิ์ | infractions 3 ครั้งใน 60 วัน (พลาดกำหนด 48 ชม. หรือ subject_match = false) |
-| เอกสารองค์กร | pdf/jpg/png ไม่เกิน 5MB ต่อไฟล์ สูงสุด 3 ไฟล์ ใน `server/private_uploads/` ดาวน์โหลดเฉพาะ admin |
+| เอกสารองค์กร | pdf/jpg/png ไม่เกิน 5MB ต่อไฟล์ สูงสุด 10 ไฟล์ ใน `server/private_uploads/` ดาวน์โหลดเฉพาะ admin |
+| สถานะคำขอองค์กร | `pending → approved \| rejected \| needs_more_info`; `needs_more_info → pending` เมื่อ resubmit; เหตุผลบังคับเมื่อ reject/needs_more_info; ประวัติใน `org_review_logs` |
 | `donation_audience` เริ่มต้น | `verified_org_only` |
 
 บัญชี charity ที่อนุมัติแล้ว migration เป็น `verified_org` พร้อม `beneficiary_count` สำรอง 100 ถ้าไม่มีค่า
+
+ผู้สมัครองค์กรที่ยัง `pending` / `needs_more_info` / `rejected` ไม่มีสิทธิ์ขอรับบริจาค (แม้เคยเป็นจิตอาสา) — ตรวจแล้วใน DB ว่าจองล็อต `verified_org_only` ตอนรออนุมัติถูกบันทึกเป็นซื้อปกติ (`is_donation=0`) ไม่ใช่บริจาค; UI จึงแยกปุ่มซื้อ/ขอรับชัดเจน
