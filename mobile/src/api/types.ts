@@ -198,11 +198,24 @@ export type AssessPhotoResponse =
       reason: string;
     };
 
+export interface MyLotBooking {
+  id: number;
+  quantity_kg: number;
+  is_donation: boolean;
+  status: string;
+  agreed_price_per_kg: number;
+  buyer_name?: string;
+}
+
 export interface MyLot {
   id: number;
   plot_id: number;
   crop_id: number;
   weight_kg: number;
+  remaining_kg?: number;
+  split_allowed?: boolean;
+  min_order_kg?: number;
+  order_step_kg?: number;
   grade: Grade;
   ripeness: number;
   photo_url: string | null;
@@ -220,6 +233,7 @@ export interface MyLot {
   crop_name_th: string;
   plot_name: string;
   price_per_kg: number | null;
+  bookings?: MyLotBooking[];
 }
 
 export interface MarketLot {
@@ -227,6 +241,10 @@ export interface MarketLot {
   crop_name_th: string;
   farmer_name: string;
   weight_kg: number;
+  remaining_kg?: number;
+  split_allowed?: boolean;
+  min_order_kg?: number;
+  order_step_kg?: number;
   grade: Grade;
   ripeness: number;
   sale_mode: SaleMode;
@@ -320,6 +338,7 @@ export interface DitSuggestion {
 export interface Order {
   id: number;
   lot_id: number;
+  quantity_kg?: number;
   agreed_price_per_kg: number;
   is_donation: boolean;
   status: string;

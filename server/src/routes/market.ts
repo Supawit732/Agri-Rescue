@@ -3,6 +3,7 @@ import type { RowDataPacket } from 'mysql2';
 import { z } from 'zod';
 import { pool } from '../db/pool';
 import { haversineKm } from '../domain/geo';
+import { remainingLotKg } from '../domain/lotInventory';
 import type { ProduceGrade } from '../domain/pricing';
 import { lotAcceptsDonation, lotPricePerKg } from '../domain/sellerPricing';
 import { asyncHandler } from '../http/asyncHandler';
@@ -19,6 +20,10 @@ const querySchema = z.object({
 interface MarketRow extends RowDataPacket {
   id: number;
   weight_kg: number;
+  split_allowed: number;
+  min_order_kg: number;
+  order_step_kg: number;
+  reserved_kg: number;
   grade: ProduceGrade;
   ripeness: number;
   allow_donation: number;
@@ -43,15 +48,20 @@ marketRouter.get(
     const query = querySchema.parse(req.query);
     const radiusKm = query.radius_km ?? 15;
     const [rows] = await pool.query<MarketRow[]>(
-      `SELECT h.id, h.weight_kg, h.grade, h.ripeness, h.allow_donation, h.donation_audience,
+      `SELECT h.id, h.weight_kg, h.split_allowed, h.min_order_kg, h.order_step_kg,
+              h.grade, h.ripeness, h.allow_donation, h.donation_audience,
               h.start_price_per_kg, h.floor_price_per_kg, h.sale_mode, h.donation_opened, h.expires_at,
               c.name_th AS crop_name_th, c.base_shelf_days,
-              p.lat, p.lng, u.name AS farmer_name
+              p.lat, p.lng, u.name AS farmer_name,
+              COALESCE((
+                SELECT SUM(o.quantity_kg) FROM orders o
+                WHERE o.lot_id = h.id AND o.status IN ('reserved', 'picked', 'delivered')
+              ), 0) AS reserved_kg
        FROM harvest_lots h
        JOIN crops c ON c.id = h.crop_id
        JOIN plots p ON p.id = h.plot_id
        JOIN users u ON u.id = p.farmer_id
-       WHERE h.status = 'open' AND h.expires_at > UTC_TIMESTAMP()
+       WHERE h.status IN ('open', 'partially_reserved') AND h.expires_at > UTC_TIMESTAMP()
        ORDER BY h.expires_at ASC, h.id ASC`,
     );
     const now = Date.now();
@@ -78,11 +88,17 @@ marketRouter.get(
         } else {
           pricePerKg = 0;
         }
+        const weightKg = Number(row.weight_kg);
+        const remaining = remainingLotKg(weightKg, Number(row.reserved_kg));
         return {
           id: Number(row.id),
           crop_name_th: row.crop_name_th,
           farmer_name: row.farmer_name,
-          weight_kg: Number(row.weight_kg),
+          weight_kg: weightKg,
+          remaining_kg: remaining,
+          split_allowed: Number(row.split_allowed) === 1,
+          min_order_kg: Number(row.min_order_kg),
+          order_step_kg: Number(row.order_step_kg),
           grade: row.grade,
           ripeness: Number(row.ripeness),
           sale_mode: saleMode,
@@ -97,7 +113,7 @@ marketRouter.get(
           lng: Number(row.lng),
         };
       })
-      .filter((lot) => lot.distance_km <= radiusKm && lot.hours_left > 0);
+      .filter((lot) => lot.distance_km <= radiusKm && lot.hours_left > 0 && lot.remaining_kg > 0);
     res.json({ lots });
   }),
 );

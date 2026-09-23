@@ -124,6 +124,9 @@ export async function insertLot(input: {
   donationAudience?: 'verified_org_only' | 'all_donors';
   grade?: 'normal' | 'substandard';
   weightKg?: number;
+  splitAllowed?: boolean;
+  minOrderKg?: number;
+  orderStepKg?: number;
   saleMode?: 'sell' | 'donate' | 'sell_then_donate';
   startPricePerKg?: number | null;
   floorPricePerKg?: number | null;
@@ -155,15 +158,19 @@ export async function insertLot(input: {
         : input.floorPricePerKg;
   const [result] = await pool.query<ResultSetHeader>(
     `INSERT INTO harvest_lots (
-       plot_id, crop_id, weight_kg, grade, ripeness, allow_donation, donation_audience,
+       plot_id, crop_id, weight_kg, split_allowed, min_order_kg, order_step_kg,
+       grade, ripeness, allow_donation, donation_audience,
        start_price_per_kg, floor_price_per_kg, sale_mode, donation_opened,
        market_price_snapshot, market_price_is_estimate,
        predicted_shelf_hours, expires_at, status
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, 'open')`,
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, 'open')`,
     [
       input.plotId,
       input.cropId,
       input.weightKg ?? 10,
+      input.splitAllowed === false ? 0 : 1,
+      input.minOrderKg ?? 1,
+      input.orderStepKg ?? 1,
       grade,
       2,
       allowDonation,

@@ -10,6 +10,8 @@ export const GRADE_OPTIONS: { key: Grade; label: string }[] = [
 export const STATUS_LABELS: Record<string, string> = {
   open: 'เปิดขาย',
   reserved: 'จองแล้ว',
+  partially_reserved: 'จองบางส่วน',
+  fully_reserved: 'จองเต็มแล้ว',
   picked: 'รับของแล้ว',
   delivered: 'ส่งมอบแล้ว',
   expired: 'หมดอายุ',

@@ -1,11 +1,26 @@
-export type LotStatus = 'open' | 'reserved' | 'picked' | 'delivered' | 'expired' | 'cancelled';
+export type LotStatus =
+  | 'open'
+  | 'partially_reserved'
+  | 'fully_reserved'
+  | 'picked'
+  | 'delivered'
+  | 'expired'
+  | 'cancelled';
 
 const TRANSITIONS: ReadonlyArray<readonly [LotStatus, LotStatus]> = [
-  ['open', 'reserved'],
-  ['reserved', 'picked'],
+  ['open', 'partially_reserved'],
+  ['open', 'fully_reserved'],
+  ['partially_reserved', 'fully_reserved'],
+  ['partially_reserved', 'open'],
+  ['fully_reserved', 'partially_reserved'],
+  ['fully_reserved', 'open'],
+  ['partially_reserved', 'picked'],
+  ['fully_reserved', 'picked'],
   ['picked', 'delivered'],
+  ['partially_reserved', 'delivered'],
+  ['fully_reserved', 'delivered'],
   ['open', 'expired'],
-  ['reserved', 'open'],
+  ['partially_reserved', 'expired'],
 ];
 
 export class InvalidLotTransitionError extends Error {
@@ -21,6 +36,9 @@ export class InvalidLotTransitionError extends Error {
 }
 
 export function assertLotTransition(from: LotStatus, to: LotStatus): void {
+  if (from === to) {
+    return;
+  }
   const allowed = TRANSITIONS.some(([start, end]) => start === from && end === to);
   if (!allowed) {
     throw new InvalidLotTransitionError(from, to);

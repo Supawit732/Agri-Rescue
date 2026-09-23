@@ -150,3 +150,14 @@ JWT เก็บ `sub`, `role`, `can_sell`, `can_buy`, `is_admin` (อายุ 
 | มัธยฐานใกล้เคียง | รัศมี 15 กม. และ ≥ 3 ล็อตพืชเดียวกัน |
 
 `crop_reference_prices` เก็บ `product_code`, `unit`, `source_url`, `date`, `wholesale_price` เพื่อตรวจย้อนได้
+
+## D021 — Phase 6.1e การแบ่งขายล็อต
+
+| รายการ | ค่า |
+|---|---|
+| `split_allowed` ดีฟอลต์ | true (แบ่งขายได้) |
+| `min_order_kg` / `order_step_kg` ดีฟอลต์ | 1 |
+| คงเหลือ | `weight_kg − Σ quantity_kg` ของออเดอร์สถานะไม่ใช่ `cancelled` |
+| สถานะจอง | `open` / `partially_reserved` / `fully_reserved` (migrate `reserved` เดิม → `fully_reserved`) |
+| เศษท้าย | ถ้าคงเหลือ &lt; `min_order_kg` ต้องจองทั้งเศษ (ข้ามขั้นต่ำ/step) |
+| แก้ migration ที่ชนเลข | ตาม Conventions: ห้ามเปลี่ยนไฟล์ที่อยู่บน main แล้ว; ตอนรวม 6.1c+6.1d เลข 6.1c เป็น 008–010 หลัง `007_donor_formal_apply` |

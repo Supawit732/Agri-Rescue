@@ -79,6 +79,9 @@ interface Api {
     donation_audience?: DonationAudience;
     start_price_per_kg?: number | null;
     floor_price_per_kg?: number | null;
+    split_allowed?: boolean;
+    min_order_kg?: number;
+    order_step_kg?: number;
     ai_ripeness?: number | null;
     ai_confidence?: number | null;
     ai_model?: string | null;
@@ -93,6 +96,9 @@ interface Api {
       floor_price_per_kg?: number | null;
       sale_mode?: SaleMode;
       donation_audience?: DonationAudience;
+      split_allowed?: boolean;
+      min_order_kg?: number;
+      order_step_kg?: number;
       ripeness?: number;
       ai_ripeness?: number | null;
       confirm_ripeness_photo?: boolean;
@@ -103,6 +109,7 @@ interface Api {
   createOrder: (
     lotId: number,
     donation: boolean,
+    quantityKg: number,
     extras?: { distribution_place?: string; distribution_at?: string },
   ) => Promise<{ order: Order }>;
   becomeVolunteer: () => Promise<AuthResponse>;
@@ -309,8 +316,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
       getMyLots: () => authed<{ lots: MyLot[] }>('GET', '/api/lots/mine').then((r) => r.lots),
       getMarket: (lat, lng, radiusKm) =>
         authed<{ lots: MarketLot[] }>('GET', `/api/market?lat=${lat}&lng=${lng}&radius_km=${radiusKm}`).then((r) => r.lots),
-      createOrder: (lotId, donation, extras) =>
-        authed<{ order: Order }>('POST', '/api/orders', { lot_id: lotId, donation, ...extras }),
+      createOrder: (lotId, donation, quantityKg, extras) =>
+        authed<{ order: Order }>('POST', '/api/orders', {
+          lot_id: lotId,
+          donation,
+          quantity_kg: quantityKg,
+          ...extras,
+        }),
       becomeVolunteer: async () => {
         const res = await authed<{ user: User }>('POST', '/api/donors/volunteer', {});
         setUser(res.user);

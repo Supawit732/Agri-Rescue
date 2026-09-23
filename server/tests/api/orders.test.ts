@@ -24,8 +24,14 @@ describe('orders', () => {
     const first = await registerUser(app, { role: 'buyer', buyer_type: 'shop' });
     const second = await registerUser(app, { role: 'buyer', buyer_type: 'vendor' });
     const [left, right] = await Promise.all([
-      request(app).post('/api/orders').set(bearer(first.token)).send({ lot_id: lotId, donation: false }),
-      request(app).post('/api/orders').set(bearer(second.token)).send({ lot_id: lotId, donation: false }),
+      request(app)
+        .post('/api/orders')
+        .set(bearer(first.token))
+        .send({ lot_id: lotId, donation: false, quantity_kg: 10 }),
+      request(app)
+        .post('/api/orders')
+        .set(bearer(second.token))
+        .send({ lot_id: lotId, donation: false, quantity_kg: 10 }),
     ]);
     const statuses = [left.status, right.status].sort((a, b) => a - b);
     expect(statuses).toEqual([201, 409]);
@@ -56,6 +62,7 @@ describe('orders', () => {
       .send({
         lot_id: vendorLot.lotId,
         donation: true,
+        quantity_kg: 10,
         distribution_place: 'จุดแจก',
         distribution_at: new Date(Date.now() + 86400000).toISOString(),
       });
@@ -70,6 +77,7 @@ describe('orders', () => {
       .send({
         lot_id: vendorLot.lotId,
         donation: true,
+        quantity_kg: 10,
         distribution_place: 'จุดแจก',
         distribution_at: new Date(Date.now() + 86400000).toISOString(),
       });
@@ -86,6 +94,7 @@ describe('orders', () => {
       .send({
         lot_id: closed.lotId,
         donation: true,
+        quantity_kg: 10,
         distribution_place: 'จุดแจก',
         distribution_at: new Date(Date.now() + 86400000).toISOString(),
       });

@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { ApiError } from '../src/api/client';
 import {
   Badge,
@@ -25,6 +25,38 @@ const SALE_MODE_BADGE: Record<SaleMode, string> = {
   donate: 'บริจาค',
   sell_then_donate: 'ขายแล้วเปิดบริจาค',
 };
+
+function remainingOf(lot: MarketLot): number {
+  return lot.remaining_kg ?? lot.weight_kg;
+}
+
+function minOrderOf(lot: MarketLot): number {
+  return lot.min_order_kg ?? 1;
+}
+
+function stepOf(lot: MarketLot): number {
+  return lot.order_step_kg ?? 1;
+}
+
+function splitAllowedOf(lot: MarketLot): boolean {
+  return lot.split_allowed !== false;
+}
+
+function defaultQuantity(lot: MarketLot): number {
+  const remaining = remainingOf(lot);
+  if (!splitAllowedOf(lot)) {
+    return remaining;
+  }
+  const min = minOrderOf(lot);
+  if (remaining + 1e-6 < min) {
+    return remaining;
+  }
+  return Math.min(remaining, min);
+}
+
+function roundQty(kg: number): number {
+  return Math.round(kg * 1000) / 1000;
+}
 
 export default function BuyerScreen(): React.ReactElement {
   const { api, logout, user, mode, setMode } = useAuth();
@@ -72,6 +104,7 @@ export default function BuyerScreen(): React.ReactElement {
 function donationEligibility(
   user: User | null,
   lot: MarketLot,
+  quantityKg: number,
 ): { canDonate: boolean; badge: string | null; reason: string | null } {
   const acceptsDonation =
     lot.sale_mode === 'donate' || (lot.sale_mode === 'sell_then_donate' && lot.donation_opened);
@@ -102,7 +135,7 @@ function donationEligibility(
   if (
     user.donation_remaining_kg !== null &&
     user.donation_remaining_kg !== undefined &&
-    lot.weight_kg > user.donation_remaining_kg
+    quantityKg > user.donation_remaining_kg
   ) {
     return {
       canDonate: false,
@@ -126,9 +159,44 @@ function Market({ refreshKey, onBooked }: { refreshKey: number; onBooked: () => 
   const [banner, setBanner] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [confirm, setConfirm] = useState<{ lot: MarketLot; donation: boolean } | null>(null);
+  const [quantityKg, setQuantityKg] = useState(1);
+  const [quantityError, setQuantityError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (confirm === null) {
+      return;
+    }
+    setQuantityKg(defaultQuantity(confirm.lot));
+    setQuantityError(null);
+  }, [confirm]);
+
+  const adjustQuantity = (deltaSteps: number): void => {
+    if (confirm === null) {
+      return;
+    }
+    const lot = confirm.lot;
+    const remaining = remainingOf(lot);
+    const step = stepOf(lot);
+    const min = minOrderOf(lot);
+    if (!splitAllowedOf(lot) || remaining + 1e-6 < min) {
+      setQuantityKg(remaining);
+      setQuantityError(null);
+      return;
+    }
+    const next = roundQty(quantityKg + deltaSteps * step);
+    if (next + 1e-6 < min) {
+      setQuantityKg(min);
+    } else if (next - remaining > 1e-6) {
+      setQuantityKg(remaining);
+    } else {
+      setQuantityKg(next);
+    }
+    setQuantityError(null);
+  };
 
   const book = async (lot: MarketLot, donation: boolean): Promise<void> => {
     setBanner(null);
+    setQuantityError(null);
     setBusyId(lot.id);
     try {
       const extras =
@@ -138,12 +206,15 @@ function Market({ refreshKey, onBooked }: { refreshKey: number; onBooked: () => 
               distribution_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
             }
           : undefined;
-      await api.createOrder(lot.id, donation, extras);
+      await api.createOrder(lot.id, donation, quantityKg, extras);
       setConfirm(null);
       await refreshUser();
       onBooked();
       reload();
     } catch (err) {
+      if (err instanceof ApiError && err.fields?.quantity_kg !== undefined) {
+        setQuantityError(err.fields.quantity_kg);
+      }
       setBanner(err instanceof ApiError ? err.message : 'จองไม่สำเร็จ');
     } finally {
       setBusyId(null);
@@ -166,13 +237,39 @@ function Market({ refreshKey, onBooked }: { refreshKey: number; onBooked: () => 
             <Card>
               <Text style={styles.confirmTitle}>ยืนยันก่อนจอง</Text>
               <Text style={styles.cardLine}>
-                {confirm.lot.crop_name_th} · {confirm.lot.weight_kg} กก. · โดย {confirm.lot.farmer_name}
+                {confirm.lot.crop_name_th} · เหลือ {remainingOf(confirm.lot)} / {confirm.lot.weight_kg} กก. · โดย{' '}
+                {confirm.lot.farmer_name}
               </Text>
+              <Text style={styles.cardLine}>ขั้นต่ำ {minOrderOf(confirm.lot)} กก.</Text>
               <Text style={styles.confirmKind}>
                 {confirm.donation
                   ? 'ประเภท: ขอรับบริจาค (ไม่คิดเงิน)'
                   : `ประเภท: ซื้อ ${confirm.lot.price_per_kg ?? '—'} บาท/กก.`}
               </Text>
+              <Text style={styles.qtyLabel}>จำนวน (กก.)</Text>
+              <View style={styles.stepper}>
+                <Pressable
+                  style={styles.stepBtn}
+                  onPress={() => adjustQuantity(-1)}
+                  disabled={!splitAllowedOf(confirm.lot)}
+                >
+                  <Text style={styles.stepBtnText}>−</Text>
+                </Pressable>
+                <Text style={styles.qtyValue}>{quantityKg}</Text>
+                <Pressable
+                  style={styles.stepBtn}
+                  onPress={() => adjustQuantity(1)}
+                  disabled={!splitAllowedOf(confirm.lot)}
+                >
+                  <Text style={styles.stepBtnText}>+</Text>
+                </Pressable>
+              </View>
+              {quantityError !== null ? <Text style={styles.fieldError}>{quantityError}</Text> : null}
+              {!confirm.donation && confirm.lot.price_per_kg !== null ? (
+                <Text style={styles.totalPrice}>
+                  รวมประมาณ {Math.round(confirm.lot.price_per_kg * quantityKg)} บาท
+                </Text>
+              ) : null}
               <View style={styles.actions}>
                 <View style={styles.slot}>
                   <PrimaryButton
@@ -191,8 +288,9 @@ function Market({ refreshKey, onBooked }: { refreshKey: number; onBooked: () => 
           {lots.map((lot) => {
             const hours = hoursLeftFrom(lot.expires_at, now);
             const tone = urgency(hours);
-            const elig = donationEligibility(user, lot);
-            const canBuy = lot.sale_mode !== 'donate' && lot.price_per_kg !== null;
+            const remaining = remainingOf(lot);
+            const elig = donationEligibility(user, lot, remaining);
+            const canBuy = lot.sale_mode !== 'donate' && lot.price_per_kg !== null && remaining > 0;
             const saleBadge =
               lot.sale_mode === 'sell_then_donate' && lot.donation_opened
                 ? 'ขายแล้วเปิดบริจาค'
@@ -201,7 +299,7 @@ function Market({ refreshKey, onBooked }: { refreshKey: number; onBooked: () => 
               <Card key={lot.id}>
                 <View style={styles.cardHeader}>
                   <Text style={styles.cardTitle}>
-                    {lot.crop_name_th} · {lot.weight_kg} กก.
+                    {lot.crop_name_th} · เหลือ {remaining} / {lot.weight_kg} กก.
                   </Text>
                   <Badge text={formatCountdown(hours)} fg={tone.fg} bg={tone.bg} />
                 </View>
@@ -222,6 +320,7 @@ function Market({ refreshKey, onBooked }: { refreshKey: number; onBooked: () => 
                 <Text style={styles.cardLine}>โดย {lot.farmer_name}</Text>
                 <Text style={styles.cardLine}>
                   ระยะ {lot.distance_km.toFixed(1)} กม. · {lot.grade === 'substandard' ? 'ตกเกรด' : 'ปกติ'}
+                  {splitAllowedOf(lot) ? ` · ขั้นต่ำ ${minOrderOf(lot)} กก.` : ' · ขายยกล็อต'}
                 </Text>
                 {!elig.canDonate && elig.reason !== null ? (
                   <Text style={styles.reason}>{elig.reason}</Text>
@@ -236,7 +335,7 @@ function Market({ refreshKey, onBooked }: { refreshKey: number; onBooked: () => 
                       />
                     </View>
                   ) : null}
-                  {elig.canDonate ? (
+                  {elig.canDonate && remaining > 0 ? (
                     <View style={styles.slot}>
                       <PrimaryButton
                         label="ขอรับบริจาค"
@@ -298,6 +397,7 @@ function MyOrders({ refreshKey, onChanged }: { refreshKey: number; onChanged: ()
                 </View>
                 <Text style={styles.cardLine}>
                   {order.is_donation ? 'รับบริจาค' : `ซื้อ ${order.agreed_price_per_kg} บาท/กก.`}
+                  {order.quantity_kg !== undefined ? ` · ${order.quantity_kg} กก.` : ''}
                 </Text>
                 {active ? (
                   <View style={styles.otpBox}>
@@ -330,6 +430,20 @@ const styles = StyleSheet.create({
   reason: { color: C.chili, marginTop: 6, marginBottom: 4 },
   confirmTitle: { fontSize: 18, fontWeight: '800', color: C.ink, marginBottom: 6 },
   confirmKind: { fontSize: 15, fontWeight: '700', color: C.leaf, marginVertical: 8 },
+  qtyLabel: { color: C.mute, marginTop: 4, marginBottom: 6 },
+  stepper: { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 6 },
+  stepBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: C.leafSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepBtnText: { fontSize: 22, fontWeight: '800', color: C.leaf },
+  qtyValue: { fontSize: 22, fontWeight: '800', color: C.ink, minWidth: 48, textAlign: 'center' },
+  fieldError: { color: C.chili, marginBottom: 6 },
+  totalPrice: { fontSize: 15, fontWeight: '700', color: C.ink, marginBottom: 4 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
   slot: { flexGrow: 1, flexBasis: '45%', minWidth: 140 },
   otpBox: { backgroundColor: C.leafSoft, borderRadius: 12, padding: 12, alignItems: 'center', marginVertical: 8 },

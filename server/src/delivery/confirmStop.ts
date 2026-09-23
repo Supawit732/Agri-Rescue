@@ -2,10 +2,11 @@ import type { ResultSetHeader, RowDataPacket } from 'mysql2';
 import type { PoolConnection } from 'mysql2/promise';
 import { pool } from '../db/pool';
 import { CO2E_PER_KG } from '../db/seedData';
-import { assertLotTransition, InvalidLotTransitionError, type LotStatus } from '../domain/lotStateMachine';
+import { type LotStatus } from '../domain/lotStateMachine';
 import { createDonationProofForOrder } from '../donors/donationService';
 
 import { HttpError } from '../http/errors';
+import { finalizeLotIfComplete } from '../orders/lotInventoryService';
 import { round2 } from './depot';
 import { loadBatch } from './createBatch';
 import { toStopJson, type StopRow } from './present';
@@ -20,6 +21,7 @@ interface PickupContext extends RowDataPacket {
   weight_kg: number;
   order_id: number;
   order_status: string;
+  quantity_kg: number;
 }
 
 interface DropOrder extends RowDataPacket {
@@ -134,7 +136,7 @@ async function confirmPickup(
   }
   const [rows] = await connection.query<PickupContext[]>(
     `SELECT h.id AS lot_id, h.status AS lot_status, h.weight_kg,
-            o.id AS order_id, o.status AS order_status
+            o.id AS order_id, o.status AS order_status, o.quantity_kg
      FROM harvest_lots h
      JOIN orders o ON o.lot_id = h.id AND o.batch_id = ?
      WHERE h.id = ?
@@ -148,25 +150,17 @@ async function confirmPickup(
   if (row.order_status !== 'reserved') {
     throw new HttpError(409, 'CONFLICT', 'คำสั่งซื้อนี้ยืนยันรับของไม่ได้');
   }
-  try {
-    assertLotTransition(row.lot_status, 'picked');
-  } catch (error) {
-    if (error instanceof InvalidLotTransitionError) {
-      throw new HttpError(409, 'CONFLICT', 'สถานะล็อตไม่พร้อมยืนยัน');
-    }
-    throw error;
-  }
-  const planned = Number(row.weight_kg);
-  const weightFlag = Math.abs(weightKg - planned) / planned > 0.1 ? 1 : 0;
-  await connection.query('UPDATE harvest_lots SET status = ? WHERE id = ?', ['picked', row.lot_id]);
+  const planned = Number(row.quantity_kg);
+  const weightFlag = planned > 0 && Math.abs(weightKg - planned) / planned > 0.1 ? 1 : 0;
   await connection.query('UPDATE orders SET status = ? WHERE id = ?', ['picked', row.order_id]);
+  const lotStatus = await finalizeLotIfComplete(connection, Number(row.lot_id));
   await connection.query(
     `UPDATE route_stops
      SET status = 'done', confirmed_weight_kg = ?, weight_flag = ?, confirmed_at = ?
      WHERE id = ?`,
     [weightKg, weightFlag, new Date(), stop.id],
   );
-  return { lotStatus: 'picked', orderStatus: 'picked' };
+  return { lotStatus, orderStatus: 'picked' };
 }
 
 async function confirmDrop(
@@ -208,6 +202,7 @@ async function confirmDrop(
     }
     return { kind: 'otp_failed', error: new HttpError(400, 'OTP_MISMATCH', 'รหัสยืนยันไม่ถูกต้อง') };
   }
+  let lastLotStatus: LotStatus = 'delivered';
   for (const order of matching) {
     const [lots] = await connection.query<RowDataPacket[]>(
       'SELECT id, status FROM harvest_lots WHERE id = ? FOR UPDATE',
@@ -216,14 +211,6 @@ async function confirmDrop(
     const lot = lots[0];
     if (lot === undefined) {
       throw new HttpError(404, 'NOT_FOUND', 'ไม่พบล็อต');
-    }
-    try {
-      assertLotTransition(lot.status as LotStatus, 'delivered');
-    } catch (error) {
-      if (error instanceof InvalidLotTransitionError) {
-        throw new HttpError(409, 'CONFLICT', 'สถานะล็อตไม่พร้อมยืนยัน');
-      }
-      throw error;
     }
     const [pickups] = await connection.query<RowDataPacket[]>(
       `SELECT confirmed_weight_kg
@@ -241,7 +228,7 @@ async function confirmDrop(
       [order.id, kgSaved, round2(kgSaved * CO2E_PER_KG)],
     );
     await connection.query('UPDATE orders SET status = ? WHERE id = ?', ['delivered', order.id]);
-    await connection.query('UPDATE harvest_lots SET status = ? WHERE id = ?', ['delivered', order.lot_id]);
+    lastLotStatus = await finalizeLotIfComplete(connection, Number(order.lot_id));
     if (Number(order.is_donation) === 1) {
       await createDonationProofForOrder(connection, Number(order.id));
     }
@@ -254,7 +241,7 @@ async function confirmDrop(
       stop.id,
     ]);
   }
-  return { kind: 'delivered', lotStatus: 'delivered', orderStatus: 'delivered' };
+  return { kind: 'delivered', lotStatus: lastLotStatus, orderStatus: 'delivered' };
 }
 
 async function refreshBatchStatus(

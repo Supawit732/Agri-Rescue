@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { assessRipenessFromPhoto, loadVisionConfig } from '../ai/vision';
 import { pool } from '../db/pool';
 import { haversineKm } from '../domain/geo';
+import { remainingLotKg, validateLotWeightPatch } from '../domain/lotInventory';
 import type { ProduceGrade } from '../domain/pricing';
 import {
   PRICING_CONFIG,
@@ -18,6 +19,7 @@ import { predictShelfHours } from '../domain/shelfLife';
 import { asyncHandler } from '../http/asyncHandler';
 import { HttpError } from '../http/errors';
 import { requireAuth, requireCapability } from '../middleware/auth';
+import { sumReservedQuantityKg } from '../orders/lotInventoryService';
 import { defaultLotPrices, resolveMarketPrice } from '../pricing/referencePrices';
 import { fetchWeather, WEATHER_BASIS } from '../weather/openMeteo';
 
@@ -47,6 +49,9 @@ const createSchema = z.object({
   plot_id: z.number().int().positive(),
   crop_id: z.number().int().positive(),
   weight_kg: z.number().positive(),
+  split_allowed: z.boolean().optional(),
+  min_order_kg: z.number().positive().optional(),
+  order_step_kg: z.number().positive().optional(),
   grade: gradeSchema,
   ripeness: z.number().int().min(0).max(4),
   sale_mode: saleModeSchema,
@@ -61,6 +66,9 @@ const createSchema = z.object({
 
 const patchSchema = z.object({
   weight_kg: z.number().positive().optional(),
+  split_allowed: z.boolean().optional(),
+  min_order_kg: z.number().positive().optional(),
+  order_step_kg: z.number().positive().optional(),
   grade: gradeSchema.optional(),
   photo_url: z.string().max(1024).nullable().optional(),
   start_price_per_kg: z.number().nonnegative().nullable().optional(),
@@ -86,6 +94,9 @@ interface OwnedLotRow extends RowDataPacket {
   plot_id: number;
   crop_id: number;
   weight_kg: number;
+  split_allowed: number;
+  min_order_kg: number;
+  order_step_kg: number;
   grade: ProduceGrade;
   ripeness: number;
   photo_url: string | null;
@@ -228,20 +239,27 @@ lotsRouter.post(
       body.ai_confidence !== null;
     const method = hasAi && body.ai_ripeness === body.ripeness ? 'model' : 'rule';
     const aiModel = hasAi ? (body.ai_model ?? loadVisionConfig().model) : null;
+    const splitAllowed = body.split_allowed !== false;
+    const minOrderKg = body.min_order_kg ?? 1;
+    const orderStepKg = body.order_step_kg ?? 1;
     const connection = await pool.getConnection();
     try {
       await connection.beginTransaction();
       const [lotResult] = await connection.query<ResultSetHeader>(
         `INSERT INTO harvest_lots (
-           plot_id, crop_id, weight_kg, grade, ripeness, photo_url, allow_donation, donation_audience,
+           plot_id, crop_id, weight_kg, split_allowed, min_order_kg, order_step_kg,
+           grade, ripeness, photo_url, allow_donation, donation_audience,
            start_price_per_kg, floor_price_per_kg, sale_mode, donation_opened,
            market_price_snapshot, market_price_is_estimate, market_price_as_of,
            predicted_shelf_hours, expires_at, status, created_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 'open', ?)`,
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 'open', ?)`,
         [
           body.plot_id,
           body.crop_id,
           body.weight_kg,
+          splitAllowed ? 1 : 0,
+          minOrderKg,
+          orderStepKg,
           body.grade,
           body.ripeness,
           body.photo_url ?? null,
@@ -292,6 +310,10 @@ lotsRouter.post(
           plot_id: body.plot_id,
           crop_id: body.crop_id,
           weight_kg: body.weight_kg,
+          split_allowed: splitAllowed,
+          min_order_kg: minOrderKg,
+          order_step_kg: orderStepKg,
+          remaining_kg: body.weight_kg,
           grade: body.grade,
           ripeness: body.ripeness,
           photo_url: body.photo_url ?? null,
@@ -344,8 +366,8 @@ lotsRouter.patch(
       if (Number(lot.farmer_id) !== farmerId) {
         throw new HttpError(403, 'FORBIDDEN', 'ดูหรือแก้ไขได้เฉพาะล็อตของตนเอง');
       }
-      if (lot.status !== 'open') {
-        throw new HttpError(409, 'CONFLICT', 'แก้ไขได้เฉพาะล็อตที่ยังเปิดอยู่');
+      if (lot.status !== 'open' && lot.status !== 'partially_reserved') {
+        throw new HttpError(409, 'CONFLICT', 'แก้ไขได้เฉพาะล็อตที่ยังมีคงเหลือ');
       }
 
       const updates: Record<string, unknown> = {};
@@ -366,8 +388,29 @@ lotsRouter.patch(
             weight_kg: 'น้ำหนักลดได้เท่านั้น — ห้ามเพิ่มน้ำหนักหลังลงประกาศ',
           });
         }
+        const reservedSum = await sumReservedQuantityKg(connection, lot.id);
+        const weightCheck = validateLotWeightPatch({
+          nextWeightKg: body.weight_kg,
+          reservedKgSum: reservedSum,
+        });
+        if (!weightCheck.ok) {
+          throw new HttpError(400, 'VALIDATION', weightCheck.message, { weight_kg: weightCheck.message });
+        }
         noteChange('weight_kg', lot.weight_kg, body.weight_kg);
         updates.weight_kg = body.weight_kg;
+      }
+
+      if (body.split_allowed !== undefined) {
+        noteChange('split_allowed', lot.split_allowed, body.split_allowed ? 1 : 0);
+        updates.split_allowed = body.split_allowed ? 1 : 0;
+      }
+      if (body.min_order_kg !== undefined) {
+        noteChange('min_order_kg', lot.min_order_kg, body.min_order_kg);
+        updates.min_order_kg = body.min_order_kg;
+      }
+      if (body.order_step_kg !== undefined) {
+        noteChange('order_step_kg', lot.order_step_kg, body.order_step_kg);
+        updates.order_step_kg = body.order_step_kg;
       }
 
       if (body.grade !== undefined) {
@@ -580,7 +623,7 @@ async function nearbySameCropMedianPrice(input: {
      FROM harvest_lots h
      JOIN crops c ON c.id = h.crop_id
      JOIN plots p ON p.id = h.plot_id
-     WHERE h.crop_id = ? AND h.status = 'open' AND h.expires_at > UTC_TIMESTAMP()
+     WHERE h.crop_id = ? AND h.status IN ('open', 'partially_reserved') AND h.expires_at > UTC_TIMESTAMP()
        AND h.sale_mode <> 'donate'
        AND h.start_price_per_kg IS NOT NULL AND h.floor_price_per_kg IS NOT NULL`,
     [input.cropId],
@@ -657,7 +700,8 @@ async function findOwnedLotForUpdate(
   lotId: number,
 ): Promise<OwnedLotRow> {
   const [rows] = await connection.query<OwnedLotRow[]>(
-    `SELECT h.id, h.plot_id, h.crop_id, h.weight_kg, h.grade, h.ripeness, h.photo_url,
+    `SELECT h.id, h.plot_id, h.crop_id, h.weight_kg, h.split_allowed, h.min_order_kg, h.order_step_kg,
+            h.grade, h.ripeness, h.photo_url,
             h.allow_donation, h.donation_audience, h.start_price_per_kg, h.floor_price_per_kg,
             h.sale_mode, h.donation_opened, h.market_price_snapshot, h.market_price_is_estimate,
             h.market_price_as_of, h.predicted_shelf_hours, h.expires_at, h.status,
@@ -681,6 +725,9 @@ interface MineLotRow extends RowDataPacket {
   plot_id: number;
   crop_id: number;
   weight_kg: number;
+  split_allowed: number;
+  min_order_kg: number;
+  order_step_kg: number;
   grade: ProduceGrade;
   ripeness: number;
   photo_url: string | null;
@@ -701,7 +748,8 @@ interface MineLotRow extends RowDataPacket {
 
 async function listMine(farmerId: number): Promise<object[]> {
   const [rows] = await pool.query<MineLotRow[]>(
-    `SELECT h.id, h.plot_id, h.crop_id, h.weight_kg, h.grade, h.ripeness, h.photo_url,
+    `SELECT h.id, h.plot_id, h.crop_id, h.weight_kg, h.split_allowed, h.min_order_kg, h.order_step_kg,
+            h.grade, h.ripeness, h.photo_url,
             h.allow_donation, h.donation_audience, h.start_price_per_kg, h.floor_price_per_kg,
             h.sale_mode, h.donation_opened, h.predicted_shelf_hours, h.expires_at, h.status, h.created_at,
             c.name_th AS crop_name_th, c.base_shelf_days, p.name AS plot_name
@@ -717,7 +765,8 @@ async function listMine(farmerId: number): Promise<object[]> {
 
 async function presentLot(lotId: number): Promise<object> {
   const [rows] = await pool.query<MineLotRow[]>(
-    `SELECT h.id, h.plot_id, h.crop_id, h.weight_kg, h.grade, h.ripeness, h.photo_url,
+    `SELECT h.id, h.plot_id, h.crop_id, h.weight_kg, h.split_allowed, h.min_order_kg, h.order_step_kg,
+            h.grade, h.ripeness, h.photo_url,
             h.allow_donation, h.donation_audience, h.start_price_per_kg, h.floor_price_per_kg,
             h.sale_mode, h.donation_opened, h.predicted_shelf_hours, h.expires_at, h.status, h.created_at,
             c.name_th AS crop_name_th, c.base_shelf_days, p.name AS plot_name
@@ -727,16 +776,17 @@ async function presentLot(lotId: number): Promise<object> {
      WHERE h.id = ?`,
     [lotId],
   );
-  const lot = mapMineLots(rows)[0];
+  const lot = (await mapMineLots(rows))[0];
   if (lot === undefined) {
     throw new HttpError(404, 'NOT_FOUND', 'ไม่พบล็อต');
   }
   return lot;
 }
 
-function mapMineLots(rows: MineLotRow[]): object[] {
+async function mapMineLots(rows: MineLotRow[]): Promise<object[]> {
   const now = Date.now();
-  return rows.map((row) => {
+  const result: object[] = [];
+  for (const row of rows) {
     const hoursLeft = (new Date(row.expires_at).getTime() - now) / (60 * 60 * 1000);
     const saleMode = String(row.sale_mode);
     const pricePerKg =
@@ -748,11 +798,30 @@ function mapMineLots(rows: MineLotRow[]): object[] {
             baseShelfHours: Number(row.base_shelf_days) * 24,
             hoursLeft,
           });
-    return {
+    const [reservedRows] = await pool.query<RowDataPacket[]>(
+      `SELECT COALESCE(SUM(quantity_kg), 0) AS total
+       FROM orders WHERE lot_id = ? AND status IN ('reserved', 'picked', 'delivered')`,
+      [row.id],
+    );
+    const reserved = Number(reservedRows[0]?.total ?? 0);
+    const weightKg = Number(row.weight_kg);
+    const [bookings] = await pool.query<RowDataPacket[]>(
+      `SELECT o.id, o.quantity_kg, o.agreed_price_per_kg, o.is_donation, o.status, o.created_at, u.name AS buyer_name
+       FROM orders o
+       JOIN users u ON u.id = o.buyer_id
+       WHERE o.lot_id = ? AND o.status <> 'cancelled'
+       ORDER BY o.id`,
+      [row.id],
+    );
+    result.push({
       id: Number(row.id),
       plot_id: Number(row.plot_id),
       crop_id: Number(row.crop_id),
-      weight_kg: Number(row.weight_kg),
+      weight_kg: weightKg,
+      split_allowed: Number(row.split_allowed) === 1,
+      min_order_kg: Number(row.min_order_kg),
+      order_step_kg: Number(row.order_step_kg),
+      remaining_kg: remainingLotKg(weightKg, reserved),
       grade: row.grade,
       ripeness: Number(row.ripeness),
       photo_url: row.photo_url,
@@ -771,6 +840,16 @@ function mapMineLots(rows: MineLotRow[]): object[] {
       crop_name_th: row.crop_name_th,
       plot_name: row.plot_name,
       price_per_kg: pricePerKg,
-    };
-  });
+      bookings: bookings.map((b) => ({
+        order_id: Number(b.id),
+        buyer_name: String(b.buyer_name),
+        quantity_kg: Number(b.quantity_kg),
+        agreed_price_per_kg: Number(b.agreed_price_per_kg),
+        is_donation: Number(b.is_donation) === 1,
+        status: String(b.status),
+        created_at: new Date(b.created_at as string).toISOString(),
+      })),
+    });
+  }
+  return result;
 }

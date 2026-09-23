@@ -190,6 +190,7 @@ price = max(5, round(market_price * (0.3 + 0.7 * freshness) * gradeFactor))
 - query ใช้ placeholder (`?`) เสมอ ห้ามต่อ string
 - หนึ่ง commit ต่อหนึ่งหน่วยงานที่ทดสอบผ่าน, message แบบ `feat(server): ...`
 - อัปเดต README (วิธี setup, env, migrate, seed, run, บัญชี demo) เมื่อจบทุก Phase
+- **ห้ามเปลี่ยนชื่อหรือเลขไฟล์ migration ที่เคย push แล้ว** ถ้าเลขชนตอน merge ให้เปลี่ยนเฉพาะไฟล์ที่ยังไม่เคยอยู่บน `main` และบันทึกเหตุผลใน `docs/DECISIONS.md`
 
 ### การ push
 - เปิด draft PR ทันทีหลัง commit แรกของ phase

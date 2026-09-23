@@ -101,6 +101,7 @@ describe('donors 6.1b', () => {
       .send({
         lot_id: orgOnly,
         donation: true,
+        quantity_kg: 5,
         distribution_place: 'จุดแจก',
         distribution_at: new Date(Date.now() + 86400000).toISOString(),
       });
@@ -115,6 +116,7 @@ describe('donors 6.1b', () => {
       .send({
         lot_id: orgOnly,
         donation: true,
+        quantity_kg: 5,
         distribution_place: 'ตลาดชุมชน',
         distribution_at: new Date(Date.now() + 86400000).toISOString(),
       });
@@ -128,6 +130,7 @@ describe('donors 6.1b', () => {
       .send({
         lot_id: openLot,
         donation: true,
+        quantity_kg: 1,
         distribution_place: 'ตลาดชุมชน',
         distribution_at: new Date(Date.now() + 86400000).toISOString(),
       });
@@ -145,6 +148,7 @@ describe('donors 6.1b', () => {
       .send({
         lot_id: orgOnly,
         donation: true,
+        quantity_kg: 5,
         distribution_place: 'ตลาดชุมชน',
         distribution_at: new Date(Date.now() + 86400000).toISOString(),
       });
@@ -157,6 +161,7 @@ describe('donors 6.1b', () => {
       .send({
         lot_id: openLot,
         donation: true,
+        quantity_kg: 5,
         distribution_place: 'ตลาดชุมชน',
         distribution_at: new Date(Date.now() + 86400000).toISOString(),
       });
@@ -169,6 +174,7 @@ describe('donors 6.1b', () => {
       .send({
         lot_id: heavy,
         donation: true,
+        quantity_kg: 8,
         distribution_place: 'ตลาดชุมชน',
         distribution_at: new Date(Date.now() + 86400000).toISOString(),
       });
@@ -260,6 +266,7 @@ describe('donors 6.1b', () => {
         .send({
           lot_id: lotId,
           donation: true,
+          quantity_kg: 1,
           distribution_place: 'จุดแจก',
           distribution_at: new Date(Date.now() + 86400000).toISOString(),
         });
@@ -305,6 +312,7 @@ describe('donors 6.1b', () => {
         .send({
           lot_id: lotId,
           donation: true,
+          quantity_kg: 1,
           distribution_place: 'จุดแจก',
           distribution_at: new Date(Date.now() + 86400000).toISOString(),
         });
@@ -342,6 +350,7 @@ describe('donors 6.1b', () => {
       .send({
         lot_id: lotId,
         donation: true,
+        quantity_kg: 1,
         distribution_place: 'จุดแจก',
         distribution_at: new Date(Date.now() + 86400000).toISOString(),
       });
@@ -392,6 +401,7 @@ describe('donors 6.1d formal apply', () => {
       .send({
         lot_id: lotId,
         donation: true,
+        quantity_kg: 1,
         distribution_place: 'จุดแจก',
         distribution_at: new Date(Date.now() + 86400000).toISOString(),
       });

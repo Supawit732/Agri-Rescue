@@ -25,7 +25,7 @@ describe('expire lots job', () => {
     const overdue = await insertLot({ plotId, cropId, expiresAt: new Date(now.getTime() - 1000) });
     const fresh = await insertLot({ plotId, cropId, expiresAt: new Date(now.getTime() + 60 * 60 * 1000) });
     const reserved = await insertLot({ plotId, cropId, expiresAt: new Date(now.getTime() - 60 * 60 * 1000) });
-    await pool.query('UPDATE harvest_lots SET status = ? WHERE id = ?', ['reserved', reserved]);
+    await pool.query('UPDATE harvest_lots SET status = ? WHERE id = ?', ['fully_reserved', reserved]);
 
     expect(await expireOpenLots(now)).toBe(2);
     const [rows] = await pool.query<RowDataPacket[]>('SELECT id, status FROM harvest_lots ORDER BY id');
@@ -33,6 +33,6 @@ describe('expire lots job', () => {
     expect(status.get(due)).toBe('expired');
     expect(status.get(overdue)).toBe('expired');
     expect(status.get(fresh)).toBe('open');
-    expect(status.get(reserved)).toBe('reserved');
+    expect(status.get(reserved)).toBe('fully_reserved');
   });
 });
