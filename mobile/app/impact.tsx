@@ -1,18 +1,18 @@
 import { useRouter } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
-import { BigStat, Body, Card, DataState, Screen, SecondaryButton, TopBar } from '../src/components/ui';
+import { BigStat, Body, Card, DataState, Screen, StackHeader } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
 import { useApiData } from '../src/hooks/useApiData';
 import { C } from '../src/theme';
 
 export default function ImpactScreen(): React.ReactElement {
-  const { api, logout } = useAuth();
+  const { api } = useAuth();
   const router = useRouter();
   const { data, loading, error, reload } = useApiData(() => api.getImpact(), []);
 
   return (
     <Screen>
-      <TopBar title="ผลลัพธ์ที่ช่วยได้" onLogout={logout} />
+      <StackHeader title="ผลลัพธ์ที่ช่วยได้" onBack={() => router.replace('/(tabs)/account')} />
       <DataState loading={loading} error={error} data={data} onRetry={reload}>
         {(summary) => (
           <Body>
@@ -30,7 +30,6 @@ export default function ImpactScreen(): React.ReactElement {
                 <BigStat value={String(summary.lot_count)} label="ล็อตที่ส่งมอบ" />
               </View>
             </Card>
-            <SecondaryButton label="ย้อนกลับ" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />
           </Body>
         )}
       </DataState>

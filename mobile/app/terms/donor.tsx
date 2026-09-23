@@ -1,16 +1,19 @@
 import { useRouter } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
-import { Body, PrimaryButton, Screen, TopBar } from '../../src/components/ui';
+import { Body, PrimaryButton, Screen, StackHeader } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
 import { C } from '../../src/theme';
 
 export default function DonorTermsScreen(): React.ReactElement {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const router = useRouter();
 
   return (
     <Screen>
-      {user !== null ? <TopBar title="ข้อกำหนดผู้รับบริจาค" onLogout={logout} /> : null}
+      <StackHeader
+        title="ข้อกำหนดผู้รับบริจาค"
+        onBack={() => router.replace(user !== null ? '/(tabs)/account' : '/(tabs)')}
+      />
       <Body>
         {user === null ? <Text style={styles.brand}>Agri Rescue</Text> : null}
         <Text style={styles.title}>ข้อกำหนดและนโยบายผู้รับบริจาค</Text>

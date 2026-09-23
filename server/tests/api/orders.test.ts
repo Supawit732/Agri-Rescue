@@ -45,12 +45,66 @@ describe('orders', () => {
     const listed = await request(app).get('/api/orders/mine').set(bearer(winnerToken));
     expect(listed.status).toBe(200);
     expect(listed.body.orders[0].drop_otp).toBe(winner.body.order.drop_otp);
+    expect(listed.body.orders[0].crop_name_th).toBe('มะม่วง');
 
     const cancelled = await request(app).delete(`/api/orders/${winner.body.order.id}`).set(bearer(winnerToken));
     expect(cancelled.status).toBe(200);
     expect(cancelled.body).toEqual({ status: 'cancelled', lot_status: 'open' });
     const [rows] = await pool.query<RowDataPacket[]>('SELECT status FROM harvest_lots WHERE id = ?', [lotId]);
     expect(rows[0]?.status).toBe('open');
+  });
+
+  it('lets buyer and lot owner fetch enriched order detail with plot coords', async () => {
+    const farmer = await registerUser(app, { role: 'farmer' });
+    const buyer = await registerUser(app, {
+      role: 'buyer',
+      buyer_type: 'shop',
+      lat: 13.67,
+      lng: 100.62,
+    });
+    const stranger = await registerUser(app, { role: 'buyer', buyer_type: 'vendor' });
+    const cropId = await insertCrop('ทุเรียน', 5, 40);
+    const plotId = await insertPlot(farmer.user.id, 13.66, 100.61, 'แปลงทุเรียน');
+    const lotId = await insertLot({
+      plotId,
+      cropId,
+      expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+    });
+    const booked = await request(app)
+      .post('/api/orders')
+      .set(bearer(buyer.token))
+      .send({ lot_id: lotId, donation: false, quantity_kg: 4 });
+    expect(booked.status).toBe(201);
+    const orderId = booked.body.order.id as number;
+
+    const asBuyer = await request(app).get(`/api/orders/${orderId}`).set(bearer(buyer.token));
+    expect(asBuyer.status).toBe(200);
+    expect(asBuyer.body.order).toMatchObject({
+      id: orderId,
+      lot_id: lotId,
+      crop_name_th: 'ทุเรียน',
+      quantity_kg: 4,
+      is_donation: false,
+      status: 'reserved',
+      plot_name: 'แปลงทุเรียน',
+      drop_otp: booked.body.order.drop_otp,
+    });
+    expect(asBuyer.body.order.total).toBe(
+      Math.round(4 * Number(asBuyer.body.order.agreed_price_per_kg) * 100) / 100,
+    );
+    expect(asBuyer.body.order.lat).toBeCloseTo(13.66, 5);
+    expect(asBuyer.body.order.lng).toBeCloseTo(100.61, 5);
+    expect(asBuyer.body.order.distance_km).toBeGreaterThan(0);
+    expect(asBuyer.body.order.expires_at).toBeTruthy();
+    expect(asBuyer.body.order.sale_mode).toBeUndefined();
+
+    const asSeller = await request(app).get(`/api/orders/${orderId}`).set(bearer(farmer.token));
+    expect(asSeller.status).toBe(200);
+    expect(asSeller.body.order.drop_otp).toBe(booked.body.order.drop_otp);
+    expect(asSeller.body.order.lat).toBeCloseTo(13.66, 5);
+
+    const denied = await request(app).get(`/api/orders/${orderId}`).set(bearer(stranger.token));
+    expect(denied.status).toBe(403);
   });
 
   it('rejects donation from a non-charity buyer and from a closed lot', async () => {

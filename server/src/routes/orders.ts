@@ -3,6 +3,7 @@ import { randomInt } from 'crypto';
 import type { ResultSetHeader, RowDataPacket } from 'mysql2';
 import { z } from 'zod';
 import { pool } from '../db/pool';
+import { haversineKm } from '../domain/geo';
 import type { LotStatus } from '../domain/lotStateMachine';
 import type { ProduceGrade } from '../domain/pricing';
 import type { DonationAudience } from '../domain/donorRules';
@@ -66,10 +67,25 @@ interface OrderRow extends RowDataPacket {
   created_at: Date;
 }
 
-ordersRouter.use(requireAuth, requireCapability('buy'));
+interface OrderDetailRow extends OrderRow {
+  crop_name_th: string;
+  grade: ProduceGrade;
+  ripeness: number;
+  photo_url: string | null;
+  expires_at: Date;
+  plot_name: string;
+  plot_lat: number;
+  plot_lng: number;
+  farmer_id: number;
+  buyer_lat: number | null;
+  buyer_lng: number | null;
+}
+
+ordersRouter.use(requireAuth);
 
 ordersRouter.post(
   '/',
+  requireCapability('buy'),
   asyncHandler(async (req, res) => {
     const body = createSchema.parse(req.body);
     const buyerId = req.auth?.id ?? 0;
@@ -208,35 +224,121 @@ ordersRouter.post(
 
 ordersRouter.get(
   '/mine',
+  requireCapability('buy'),
   asyncHandler(async (req, res) => {
-    const [rows] = await pool.query<OrderRow[]>(
-      `SELECT id, lot_id, buyer_id, quantity_kg, agreed_price_per_kg, is_donation, status, batch_id, drop_otp,
-              distribution_place, distribution_at, created_at
-       FROM orders
-       WHERE buyer_id = ?
-       ORDER BY id`,
+    const [rows] = await pool.query<(OrderRow & { crop_name_th: string })[]>(
+      `SELECT o.id, o.lot_id, o.buyer_id, o.quantity_kg, o.agreed_price_per_kg, o.is_donation, o.status,
+              o.batch_id, o.drop_otp, o.distribution_place, o.distribution_at, o.created_at,
+              c.name_th AS crop_name_th
+       FROM orders o
+       JOIN harvest_lots h ON h.id = o.lot_id
+       JOIN crops c ON c.id = h.crop_id
+       WHERE o.buyer_id = ?
+       ORDER BY o.id`,
       [req.auth?.id ?? 0],
     );
     res.json({
-      orders: rows.map((row) => ({
+      orders: rows.map((row) => {
+        const quantityKg = Number(row.quantity_kg);
+        const price = Number(row.agreed_price_per_kg);
+        return {
+          id: Number(row.id),
+          lot_id: Number(row.lot_id),
+          crop_name_th: row.crop_name_th,
+          quantity_kg: quantityKg,
+          agreed_price_per_kg: price,
+          total: Math.round(quantityKg * price * 100) / 100,
+          is_donation: Number(row.is_donation) === 1,
+          status: row.status,
+          batch_id: row.batch_id === null ? null : Number(row.batch_id),
+          drop_otp: row.drop_otp,
+          distribution_place: row.distribution_place,
+          distribution_at:
+            row.distribution_at === null ? null : new Date(row.distribution_at).toISOString(),
+          created_at: new Date(row.created_at).toISOString(),
+        };
+      }),
+    });
+  }),
+);
+
+/**
+ * Seller delivery OTP+weight: not implemented here (Phase 6.4).
+ * Existing flow is driver-only via POST /api/stops/:id/confirm (confirmStop).
+ * Farmer UI for 6.1f should stub OTP entry until that flow exists for sellers.
+ */
+ordersRouter.get(
+  '/:id',
+  requireCapability('buy', 'sell'),
+  asyncHandler(async (req, res) => {
+    const orderId = z.coerce.number().int().positive().parse(req.params.id);
+    const userId = req.auth?.id ?? 0;
+    const [rows] = await pool.query<OrderDetailRow[]>(
+      `SELECT o.id, o.lot_id, o.buyer_id, o.quantity_kg, o.agreed_price_per_kg, o.is_donation, o.status,
+              o.batch_id, o.drop_otp, o.distribution_place, o.distribution_at, o.created_at,
+              c.name_th AS crop_name_th, h.grade, h.ripeness, h.photo_url, h.expires_at,
+              p.name AS plot_name, p.lat AS plot_lat, p.lng AS plot_lng, p.farmer_id,
+              bu.lat AS buyer_lat, bu.lng AS buyer_lng
+       FROM orders o
+       JOIN harvest_lots h ON h.id = o.lot_id
+       JOIN crops c ON c.id = h.crop_id
+       JOIN plots p ON p.id = h.plot_id
+       JOIN users bu ON bu.id = o.buyer_id
+       WHERE o.id = ?`,
+      [orderId],
+    );
+    const row = rows[0];
+    if (row === undefined) {
+      throw new HttpError(404, 'NOT_FOUND', 'ไม่พบคำสั่งซื้อ');
+    }
+    const isBuyer = Number(row.buyer_id) === userId;
+    const isSeller = Number(row.farmer_id) === userId;
+    if (!isBuyer && !isSeller) {
+      throw new HttpError(403, 'FORBIDDEN', 'ดูได้เฉพาะเจ้าของออเดอร์หรือเจ้าของล็อต');
+    }
+    const quantityKg = Number(row.quantity_kg);
+    const price = Number(row.agreed_price_per_kg);
+    const plotLat = Number(row.plot_lat);
+    const plotLng = Number(row.plot_lng);
+    let distanceKm: number | null = null;
+    if (row.buyer_lat !== null && row.buyer_lng !== null) {
+      distanceKm = haversineKm(
+        { lat: Number(row.buyer_lat), lng: Number(row.buyer_lng) },
+        { lat: plotLat, lng: plotLng },
+      );
+    }
+    res.json({
+      order: {
         id: Number(row.id),
         lot_id: Number(row.lot_id),
-        quantity_kg: Number(row.quantity_kg),
-        agreed_price_per_kg: Number(row.agreed_price_per_kg),
+        crop_name_th: row.crop_name_th,
+        grade: row.grade,
+        ripeness: Number(row.ripeness),
+        photo_url: row.photo_url,
+        quantity_kg: quantityKg,
+        agreed_price_per_kg: price,
+        total: Math.round(quantityKg * price * 100) / 100,
         is_donation: Number(row.is_donation) === 1,
         status: row.status,
         batch_id: row.batch_id === null ? null : Number(row.batch_id),
         drop_otp: row.drop_otp,
+        expires_at: new Date(row.expires_at).toISOString(),
+        plot_name: row.plot_name,
+        lat: plotLat,
+        lng: plotLng,
+        distance_km: distanceKm,
         distribution_place: row.distribution_place,
-        distribution_at: row.distribution_at === null ? null : new Date(row.distribution_at).toISOString(),
+        distribution_at:
+          row.distribution_at === null ? null : new Date(row.distribution_at).toISOString(),
         created_at: new Date(row.created_at).toISOString(),
-      })),
+      },
     });
   }),
 );
 
 ordersRouter.delete(
   '/:id',
+  requireCapability('buy'),
   asyncHandler(async (req, res) => {
     const orderId = z.coerce.number().int().positive().parse(req.params.id);
     const buyerId = req.auth?.id ?? 0;

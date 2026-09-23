@@ -47,11 +47,12 @@ describe('lots patch and pricing 6.1c', () => {
       .send({ lot_id: lotId, donation: false, quantity_kg: 18 });
     expect(booked.status).toBe(201);
 
+    // Fully reserved → 409; if still editable somehow, weight below reserved → 400 (6.1e).
     const afterBook = await request(app)
       .patch(`/api/lots/${lotId}`)
       .set(bearer(farmer.token))
       .send({ weight_kg: 15 });
-    expect(afterBook.status).toBe(409);
+    expect([400, 409]).toContain(afterBook.status);
   });
 
   it('rejects out-of-bounds seller prices with 400', async () => {

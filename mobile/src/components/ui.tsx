@@ -10,14 +10,116 @@ import {
   type TextInputProps,
   View,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { C } from '../theme';
 
-export function Screen({ children }: { children: React.ReactNode }): React.ReactElement {
+export function Screen({
+  children,
+  fullWidth,
+}: {
+  children: React.ReactNode;
+  fullWidth?: boolean;
+}): React.ReactElement {
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
-      <View style={styles.screenInner}>{children}</View>
+      <View style={[styles.screenInner, fullWidth === true ? styles.screenInnerWide : null]}>{children}</View>
     </SafeAreaView>
+  );
+}
+
+export function StackHeader({
+  title,
+  onBack,
+}: {
+  title: string;
+  onBack?: () => void;
+}): React.ReactElement {
+  const router = useRouter();
+  const goBack = (): void => {
+    if (onBack !== undefined) {
+      onBack();
+      return;
+    }
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace('/(tabs)');
+  };
+  return (
+    <View style={styles.stackHeader}>
+      <Pressable accessibilityRole="button" onPress={goBack} style={styles.backBtn} hitSlop={8}>
+        <Text style={styles.backBtnText}>‹ กลับ</Text>
+      </Pressable>
+      <Text style={styles.stackTitle} numberOfLines={1}>
+        {title}
+      </Text>
+      <View style={styles.backBtnSpacer} />
+    </View>
+  );
+}
+
+export function SubScreen({
+  title,
+  children,
+  onBack,
+}: {
+  title: string;
+  children: React.ReactNode;
+  onBack?: () => void;
+}): React.ReactElement {
+  return (
+    <Screen>
+      <StackHeader title={title} onBack={onBack} />
+      {children}
+    </Screen>
+  );
+}
+
+export function LoginPrompt({
+  title,
+  message,
+  returnTo,
+  primaryLabel,
+}: {
+  title: string;
+  message: string;
+  returnTo: string;
+  primaryLabel?: string;
+}): React.ReactElement {
+  const router = useRouter();
+  return (
+    <View style={styles.centerState}>
+      <Text style={styles.promptTitle}>{title}</Text>
+      <Text style={styles.stateText}>{message}</Text>
+      <PrimaryButton
+        label={primaryLabel ?? 'เข้าสู่ระบบ'}
+        onPress={() =>
+          router.push({ pathname: '/login', params: { returnTo } })
+        }
+      />
+      <SecondaryButton label="สมัครสมาชิก" onPress={() => router.push('/register')} />
+    </View>
+  );
+}
+
+export function EmptyState({
+  message,
+  ctaLabel,
+  onCta,
+}: {
+  message: string;
+  ctaLabel?: string;
+  onCta?: () => void;
+}): React.ReactElement {
+  return (
+    <View style={styles.centerState}>
+      <Text style={styles.stateText}>{message}</Text>
+      {ctaLabel !== undefined && onCta !== undefined ? (
+        <PrimaryButton label={ctaLabel} onPress={onCta} />
+      ) : null}
+    </View>
   );
 }
 
@@ -328,6 +430,23 @@ const styles = StyleSheet.create({
     width: '100%',
     ...(Platform.OS === 'web' ? { maxWidth: 480 } : {}),
   },
+  screenInnerWide: {
+    maxWidth: undefined,
+  },
+  stackHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: C.leaf,
+    gap: 8,
+  },
+  backBtn: { paddingHorizontal: 8, paddingVertical: 6, minWidth: 64 },
+  backBtnSpacer: { minWidth: 64 },
+  backBtnText: { color: C.white, fontWeight: '700', fontSize: 16 },
+  stackTitle: { flex: 1, color: C.white, fontSize: 17, fontWeight: '700', textAlign: 'center' },
+  promptTitle: { fontSize: 20, fontWeight: '800', color: C.ink, textAlign: 'center' },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',

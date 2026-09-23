@@ -1,4 +1,5 @@
 import {
+  availableAs,
   buildMocPriceUrl,
   ditMidpoint,
   isKgUnit,
@@ -79,6 +80,17 @@ describe('sellerPricing', () => {
     expect(lotAcceptsDonation('sell', 1)).toBe(false);
     expect(lotAcceptsDonation('sell_then_donate', 0)).toBe(false);
     expect(lotAcceptsDonation('sell_then_donate', 1)).toBe(true);
+  });
+
+  it('maps sale mode to buyer-facing availableAs without leaking sell_then_donate', () => {
+    expect(availableAs('donate', 0)).toEqual(['donate']);
+    expect(availableAs('sell', 0)).toEqual(['buy']);
+    expect(availableAs('sell', 1)).toEqual(['buy']);
+    expect(availableAs('sell_then_donate', 0)).toEqual(['buy']);
+    expect(availableAs('sell_then_donate', false)).toEqual(['buy']);
+    expect(availableAs('sell_then_donate', 1)).toEqual(['buy', 'donate']);
+    expect(availableAs('sell_then_donate', true)).toEqual(['buy', 'donate']);
+    expect(JSON.stringify(availableAs('sell_then_donate', 0))).not.toContain('sell_then_donate');
   });
 
   it('builds moc price url', () => {

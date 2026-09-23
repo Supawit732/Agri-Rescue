@@ -4,7 +4,7 @@ import type {
   OrgStatus,
   OrgType,
   RecipientGroup,
-} from '../api/types';
+} from './api/types';
 
 export type DistributionModeLabel = 'self_use' | 'redistribute';
 
