@@ -185,6 +185,7 @@ function NewLotForm({
   const [estimateError, setEstimateError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [assessing, setAssessing] = useState(false);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [aiResult, setAiResult] = useState<
@@ -376,12 +377,17 @@ function NewLotForm({
 
   const onSubmit = async (): Promise<void> => {
     setSubmitError(null);
+    setFieldErrors({});
+    const nextErrors: Record<string, string> = {};
     if (plot === undefined || cropId === 0) {
-      setSubmitError('กรุณาเลือกแปลงและพืช');
-      return;
+      nextErrors.crop_id = 'กรุณาเลือกแปลงและพืช';
     }
     if (!(weightNum > 0)) {
-      setSubmitError('กรุณากรอกน้ำหนักให้ถูกต้อง');
+      nextErrors.weight_kg = 'กรุณากรอกน้ำหนักให้ถูกต้อง (มากกว่า 0)';
+    }
+    if (Object.keys(nextErrors).length > 0) {
+      setFieldErrors(nextErrors);
+      setSubmitError('กรุณาแก้ช่องที่ผิด');
       return;
     }
     setSubmitting(true);
@@ -400,7 +406,14 @@ function NewLotForm({
       });
       onCreated();
     } catch (err) {
-      setSubmitError(err instanceof ApiError ? err.message : 'ลงประกาศไม่สำเร็จ');
+      if (err instanceof ApiError) {
+        if (err.fields !== undefined) {
+          setFieldErrors(err.fields);
+        }
+        setSubmitError(err.message);
+      } else {
+        setSubmitError('ลงประกาศไม่สำเร็จ');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -429,10 +442,38 @@ function NewLotForm({
       <Field
         label="น้ำหนัก (กก.)"
         value={weight}
-        onChangeText={setWeight}
+        onChangeText={(text) => {
+          setWeight(text);
+          const n = Number(text);
+          setFieldErrors((prev) => {
+            const next = { ...prev };
+            if (!(n > 0)) {
+              next.weight_kg = 'กรุณากรอกน้ำหนักให้ถูกต้อง (มากกว่า 0)';
+            } else {
+              delete next.weight_kg;
+            }
+            return next;
+          });
+        }}
+        onBlur={() => {
+          const n = Number(weight);
+          setFieldErrors((prev) => {
+            const next = { ...prev };
+            if (!(n > 0)) {
+              next.weight_kg = 'กรุณากรอกน้ำหนักให้ถูกต้อง (มากกว่า 0)';
+            } else {
+              delete next.weight_kg;
+            }
+            return next;
+          });
+        }}
+        error={fieldErrors.weight_kg}
         keyboardType="numeric"
         placeholder="เช่น 50"
       />
+      {fieldErrors.crop_id !== undefined ? (
+        <Text style={styles.previewError}>{fieldErrors.crop_id}</Text>
+      ) : null}
 
       <SectionTitle>ความสุก</SectionTitle>
       <View style={styles.row}>

@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { assessRipenessFromPhoto } from '../ai/vision';
 import { pool } from '../db/pool';
 import { DONOR_CONFIG, ORG_REVIEW_QUICK_REASONS } from '../domain/donorRules';
+import { DONOR_TERMS_TITLE, DONOR_TERMS_VERSION } from '../domain/donorTerms';
 import { unlockDonorSuspension, recordProofResult } from '../donors/donationService';
 import { asyncHandler } from '../http/asyncHandler';
 import { HttpError } from '../http/errors';
@@ -14,33 +15,160 @@ import { readPrivateUpload, savePrivateUpload } from '../storage/privateUploads'
 
 export const donorsRouter = Router();
 
-const orgTypeSchema = z.enum(['foundation', 'association', 'shelter', 'community_kitchen', 'other']);
+const orgTypeSchema = z.enum([
+  'foundation',
+  'association',
+  'shelter',
+  'community_kitchen',
+  'community_enterprise',
+  'other',
+]);
+
+const docCategorySchema = z.enum(['registration_cert', 'community_cert', 'site_photo', 'other']);
 
 const docSchema = z.object({
   filename: z.string().min(1).max(255),
   mime: z.enum(['application/pdf', 'image/jpeg', 'image/png']),
   base64: z.string().min(1),
+  doc_category: docCategorySchema.default('other'),
 });
+
+const recipientGroupSchema = z.enum(['elderly', 'children', 'community', 'temple', 'other']);
 
 const becomeVolunteerSchema = z.object({
   distribution_mode: z.enum(['self_use', 'redistribute']).default('redistribute'),
 });
 
-const orgApplySchema = z.object({
-  org_name: z.string().trim().min(1).max(255),
-  org_type: orgTypeSchema,
-  contact_name: z.string().trim().min(1).max(255),
-  contact_title: z.string().trim().min(1).max(128),
-  contact_phone: z.string().trim().regex(/^\d{9,15}$/, 'เบอร์โทรไม่ถูกต้อง'),
+const phoneSchema = z.string().trim().regex(/^\d{9,15}$/, 'เบอร์โทรไม่ถูกต้อง');
+const emailSchema = z.string().trim().email('อีเมลไม่ถูกต้อง').max(255).optional().nullable();
+
+const draftSchema = z.object({
+  application_kind: z.enum(['individual', 'organization']).optional().nullable(),
+  draft_step: z.number().int().min(0).max(20).optional().nullable(),
+  org_name: z.string().trim().max(255).optional().nullable(),
+  org_type: orgTypeSchema.optional().nullable(),
+  registered: z.boolean().optional().nullable(),
+  registration_number: z.string().trim().max(64).optional().nullable(),
+  registered_address: z.string().trim().max(512).optional().nullable(),
+  contact_name: z.string().trim().max(255).optional().nullable(),
+  contact_title: z.string().trim().max(128).optional().nullable(),
+  contact_phone: z.string().trim().max(32).optional().nullable(),
+  contact_email: z.string().trim().max(255).optional().nullable(),
+  org_lat: z.number().gte(-90).lte(90).optional().nullable(),
+  org_lng: z.number().gte(-180).lte(180).optional().nullable(),
+  beneficiary_count: z.number().int().positive().optional().nullable(),
+  recipient_groups: z.array(recipientGroupSchema).optional().nullable(),
+  purpose_th: z.string().trim().max(512).optional().nullable(),
+  distribution_mode: z.enum(['self_use', 'redistribute']).optional().nullable(),
+  redistribute_place: z.string().trim().max(512).optional().nullable(),
+  redistribute_frequency: z.string().trim().max(128).optional().nullable(),
+  documents: z.array(docSchema).max(DONOR_CONFIG.orgDocMaxFiles).optional(),
+  replace_documents: z.boolean().optional(),
+});
+
+const orgApplyBase = z.object({
+  application_kind: z.enum(['individual', 'organization']),
+  terms_version: z.string().min(1),
+  terms_accepted: z.literal(true, { message: 'ต้องยอมรับข้อกำหนดก่อนส่งคำขอ' }),
+  contact_name: z.string().trim().min(1, 'กรุณากรอกชื่อ').max(255),
+  contact_phone: phoneSchema,
+  contact_email: emailSchema,
   org_lat: z.number().gte(-90).lte(90),
   org_lng: z.number().gte(-180).lte(180),
-  beneficiary_count: z.number().int().positive(),
-  distribution_mode: z.enum(['self_use', 'redistribute']),
-  documents: z.array(docSchema).min(1).max(DONOR_CONFIG.orgDocMaxFiles),
+  recipient_groups: z.array(recipientGroupSchema).min(1, 'เลือกอย่างน้อยหนึ่งกลุ่มผู้รับ'),
+  purpose_th: z.string().trim().min(1, 'กรุณาระบุวัตถุประสงค์').max(512).optional(),
+  // Org-only (validated in superRefine)
+  org_name: z.string().trim().max(255).optional(),
+  org_type: orgTypeSchema.optional(),
+  registered: z.boolean().optional(),
+  registration_number: z.string().trim().max(64).optional().nullable(),
+  registered_address: z.string().trim().max(512).optional(),
+  contact_title: z.string().trim().max(128).optional(),
+  beneficiary_count: z.number().int().positive().optional(),
+  distribution_mode: z.enum(['self_use', 'redistribute']).optional(),
+  redistribute_place: z.string().trim().max(512).optional().nullable(),
+  redistribute_frequency: z.string().trim().max(128).optional().nullable(),
+  documents: z.array(docSchema).max(DONOR_CONFIG.orgDocMaxFiles).optional(),
+});
+
+const orgApplySchema = orgApplyBase.superRefine((body, ctx) => {
+  if (body.terms_version !== DONOR_TERMS_VERSION) {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'กรุณายอมรับข้อกำหนดฉบับล่าสุด',
+      path: ['terms_version'],
+    });
+  }
+  if (body.application_kind === 'individual') {
+    if (body.purpose_th === undefined || body.purpose_th.trim() === '') {
+      ctx.addIssue({ code: 'custom', message: 'กรุณาระบุวัตถุประสงค์', path: ['purpose_th'] });
+    }
+    return;
+  }
+  // organization
+  if (body.org_name === undefined || body.org_name.trim() === '') {
+    ctx.addIssue({ code: 'custom', message: 'กรุณากรอกชื่อองค์กร', path: ['org_name'] });
+  }
+  if (body.org_type === undefined) {
+    ctx.addIssue({ code: 'custom', message: 'กรุณาเลือกประเภทองค์กร', path: ['org_type'] });
+  }
+  if (body.registered === undefined) {
+    ctx.addIssue({ code: 'custom', message: 'กรุณาระบุว่าจดทะเบียนหรือไม่', path: ['registered'] });
+  }
+  if (body.registered_address === undefined || body.registered_address.trim() === '') {
+    ctx.addIssue({ code: 'custom', message: 'กรุณากรอกที่อยู่ตามทะเบียน', path: ['registered_address'] });
+  }
+  if (body.contact_title === undefined || body.contact_title.trim() === '') {
+    ctx.addIssue({ code: 'custom', message: 'กรุณากรอกตำแหน่งผู้ติดต่อ', path: ['contact_title'] });
+  }
+  if (body.beneficiary_count === undefined) {
+    ctx.addIssue({ code: 'custom', message: 'กรุณาระบุจำนวนผู้รับประโยชน์', path: ['beneficiary_count'] });
+  }
+  if (body.distribution_mode === undefined) {
+    ctx.addIssue({ code: 'custom', message: 'กรุณาเลือกรูปแบบการแจกจ่าย', path: ['distribution_mode'] });
+  }
+  if (body.distribution_mode === 'redistribute') {
+    if (body.redistribute_place === undefined || body.redistribute_place === null || body.redistribute_place.trim() === '') {
+      ctx.addIssue({ code: 'custom', message: 'กรุณาระบุสถานที่แจกประจำ', path: ['redistribute_place'] });
+    }
+    if (
+      body.redistribute_frequency === undefined ||
+      body.redistribute_frequency === null ||
+      body.redistribute_frequency.trim() === ''
+    ) {
+      ctx.addIssue({ code: 'custom', message: 'กรุณาระบุความถี่การแจก', path: ['redistribute_frequency'] });
+    }
+  }
+  const docs = body.documents ?? [];
+  const certs = docs.filter((d) => d.doc_category === 'registration_cert' || d.doc_category === 'community_cert');
+  const photos = docs.filter((d) => d.doc_category === 'site_photo');
+  if (certs.length < 1) {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'ต้องแนบหนังสือรับรองการจดทะเบียนหรือหนังสือรับรองจากชุมชนอย่างน้อย 1 ไฟล์',
+      path: ['documents'],
+    });
+  }
+  if (photos.length < 1 || photos.length > 3) {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'ต้องแนบรูปสถานที่ 1–3 รูป',
+      path: ['documents'],
+    });
+  }
 });
 
 const reasonSchema = z.object({
   reason: z.string().trim().min(1, 'กรุณาระบุเหตุผล').max(512),
+  requested_fields: z.array(z.string().trim().min(1).max(64)).max(40).optional(),
+});
+
+const checklistSchema = z.object({
+  checklist: z.object({
+    name_matches_docs: z.boolean(),
+    location_matches_photos: z.boolean(),
+    docs_not_expired: z.boolean(),
+  }),
 });
 
 const addDocsSchema = z.object({
@@ -51,6 +179,41 @@ const proofSchema = z.object({
   image_base64: z.string().min(1),
   mime: z.enum(['image/jpeg', 'image/png']),
 });
+
+type DocInput = z.infer<typeof docSchema>;
+
+function parseJsonArray(raw: unknown): string[] {
+  if (raw === null || raw === undefined || raw === '') {
+    return [];
+  }
+  if (Array.isArray(raw)) {
+    return raw.map(String);
+  }
+  try {
+    const parsed = JSON.parse(String(raw)) as unknown;
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseJsonObject(raw: unknown): Record<string, unknown> | null {
+  if (raw === null || raw === undefined || raw === '') {
+    return null;
+  }
+  if (typeof raw === 'object' && !Array.isArray(raw)) {
+    return raw as Record<string, unknown>;
+  }
+  try {
+    const parsed = JSON.parse(String(raw)) as unknown;
+    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
 
 async function countOrgDocs(connection: PoolConnection, userId: number): Promise<number> {
   const [rows] = await connection.query<RowDataPacket[]>(
@@ -63,7 +226,7 @@ async function countOrgDocs(connection: PoolConnection, userId: number): Promise
 async function insertDocs(
   connection: PoolConnection,
   userId: number,
-  documents: z.infer<typeof docSchema>[],
+  documents: DocInput[],
 ): Promise<void> {
   for (const doc of documents) {
     const saved = await savePrivateUpload({
@@ -73,28 +236,52 @@ async function insertDocs(
       base64: doc.base64,
     });
     await connection.query(
-      `INSERT INTO org_application_docs (user_id, stored_name, original_name, mime, size_bytes)
-       VALUES (?, ?, ?, ?, ?)`,
-      [userId, saved.storedName, doc.filename, doc.mime, saved.sizeBytes],
+      `INSERT INTO org_application_docs (user_id, stored_name, original_name, mime, doc_category, size_bytes)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [userId, saved.storedName, doc.filename, doc.mime, doc.doc_category, saved.sizeBytes],
     );
   }
 }
 
 async function writeReviewLog(
   connection: PoolConnection,
-  input: { userId: number; adminId: number; action: 'approved' | 'rejected' | 'needs_more_info'; reason: string | null },
+  input: {
+    userId: number;
+    adminId: number;
+    action: 'approved' | 'rejected' | 'needs_more_info' | 'checklist_saved';
+    reason: string | null;
+    checklistJson?: string | null;
+    requestedFieldsJson?: string | null;
+  },
 ): Promise<void> {
   await connection.query(
-    `INSERT INTO org_review_logs (user_id, admin_id, action, reason) VALUES (?, ?, ?, ?)`,
-    [input.userId, input.adminId, input.action, input.reason],
+    `INSERT INTO org_review_logs (user_id, admin_id, action, reason, checklist_json, requested_fields_json)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [
+      input.userId,
+      input.adminId,
+      input.action,
+      input.reason,
+      input.checklistJson ?? null,
+      input.requestedFieldsJson ?? null,
+    ],
   );
 }
 
-async function loadReviewLogs(userId: number): Promise<
-  { id: number; admin_id: number; action: string; reason: string | null; created_at: string }[]
-> {
+type ReviewLog = {
+  id: number;
+  admin_id: number;
+  action: string;
+  reason: string | null;
+  checklist: Record<string, unknown> | null;
+  requested_fields: string[];
+  created_at: string;
+};
+
+async function loadReviewLogs(userId: number): Promise<ReviewLog[]> {
   const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT id, admin_id, action, reason, created_at FROM org_review_logs WHERE user_id = ? ORDER BY id DESC`,
+    `SELECT id, admin_id, action, reason, checklist_json, requested_fields_json, created_at
+     FROM org_review_logs WHERE user_id = ? ORDER BY id DESC`,
     [userId],
   );
   return rows.map((row) => ({
@@ -102,9 +289,113 @@ async function loadReviewLogs(userId: number): Promise<
     admin_id: Number(row.admin_id),
     action: String(row.action),
     reason: row.reason === null ? null : String(row.reason),
+    checklist: parseJsonObject(row.checklist_json),
+    requested_fields: parseJsonArray(row.requested_fields_json),
     created_at: new Date(row.created_at as string).toISOString(),
   }));
 }
+
+type DocRow = {
+  id: number;
+  original_name: string;
+  mime: string;
+  size_bytes: number;
+  doc_category: string;
+  created_at: string;
+};
+
+async function loadDocs(userId: number): Promise<DocRow[]> {
+  const [docs] = await pool.query<RowDataPacket[]>(
+    `SELECT id, original_name, mime, size_bytes, doc_category, created_at
+     FROM org_application_docs WHERE user_id = ? ORDER BY id`,
+    [userId],
+  );
+  return docs.map((doc) => ({
+    id: Number(doc.id),
+    original_name: String(doc.original_name),
+    mime: String(doc.mime),
+    size_bytes: Number(doc.size_bytes),
+    doc_category: String(doc.doc_category ?? 'other'),
+    created_at: new Date(doc.created_at as string).toISOString(),
+  }));
+}
+
+function groupDocsByCategory(docs: DocRow[]): Record<string, DocRow[]> {
+  const groups: Record<string, DocRow[]> = {
+    registration_cert: [],
+    community_cert: [],
+    site_photo: [],
+    other: [],
+  };
+  for (const doc of docs) {
+    const key = groups[doc.doc_category] !== undefined ? doc.doc_category : 'other';
+    groups[key]!.push(doc);
+  }
+  return groups;
+}
+
+function applicationSections(row: RowDataPacket): {
+  kind: string | null;
+  individual: Record<string, unknown> | null;
+  organization: Record<string, unknown> | null;
+  contact: Record<string, unknown>;
+  beneficiaries: Record<string, unknown>;
+} {
+  const kind = row.application_kind === null || row.application_kind === undefined ? null : String(row.application_kind);
+  const contact = {
+    contact_name: row.contact_name === null ? null : String(row.contact_name),
+    contact_title: row.contact_title === null ? null : String(row.contact_title),
+    contact_phone: row.contact_phone === null ? null : String(row.contact_phone),
+    contact_email: row.contact_email === null ? null : String(row.contact_email),
+  };
+  const beneficiaries = {
+    beneficiary_count: row.beneficiary_count === null ? null : Number(row.beneficiary_count),
+    recipient_groups: parseJsonArray(row.recipient_groups_json),
+    distribution_mode: row.distribution_mode === null ? null : String(row.distribution_mode),
+    redistribute_place: row.redistribute_place === null ? null : String(row.redistribute_place),
+    redistribute_frequency: row.redistribute_frequency === null ? null : String(row.redistribute_frequency),
+    purpose_th: row.purpose_th === null ? null : String(row.purpose_th),
+  };
+  if (kind === 'individual') {
+    return {
+      kind,
+      individual: {
+        contact_name: contact.contact_name,
+        contact_phone: contact.contact_phone,
+        contact_email: contact.contact_email,
+        org_lat: row.org_lat === null ? null : Number(row.org_lat),
+        org_lng: row.org_lng === null ? null : Number(row.org_lng),
+        recipient_groups: beneficiaries.recipient_groups,
+        purpose_th: beneficiaries.purpose_th,
+      },
+      organization: null,
+      contact,
+      beneficiaries,
+    };
+  }
+  return {
+    kind,
+    individual: null,
+    organization: {
+      org_name: row.org_name === null ? null : String(row.org_name),
+      org_type: row.org_type === null ? null : String(row.org_type),
+      registered: row.registered === null || row.registered === undefined ? null : Number(row.registered) === 1,
+      registration_number: row.registration_number === null ? null : String(row.registration_number),
+      registered_address: row.registered_address === null ? null : String(row.registered_address),
+      org_lat: row.org_lat === null ? null : Number(row.org_lat),
+      org_lng: row.org_lng === null ? null : Number(row.org_lng),
+    },
+    contact,
+    beneficiaries,
+  };
+}
+
+donorsRouter.get(
+  '/terms',
+  asyncHandler(async (_req, res) => {
+    res.json({ version: DONOR_TERMS_VERSION, title: DONOR_TERMS_TITLE });
+  }),
+);
 
 donorsRouter.get(
   '/config',
@@ -114,6 +405,8 @@ donorsRouter.get(
       org_doc_max_files: DONOR_CONFIG.orgDocMaxFiles,
       org_doc_max_bytes: DONOR_CONFIG.orgDocMaxBytes,
       review_quick_reasons: ORG_REVIEW_QUICK_REASONS,
+      terms_version: DONOR_TERMS_VERSION,
+      terms_title: DONOR_TERMS_TITLE,
     });
   }),
 );
@@ -142,7 +435,8 @@ donorsRouter.post(
       } else if (
         profile.donor_tier === 'verified_org' ||
         profile.org_status === 'pending' ||
-        profile.org_status === 'needs_more_info'
+        profile.org_status === 'needs_more_info' ||
+        profile.org_status === 'draft'
       ) {
         throw new HttpError(409, 'CONFLICT', 'บัญชีนี้อยู่ในสถานะองค์กรแล้ว');
       } else if (profile.donor_tier !== 'trusted_volunteer' && profile.donor_tier !== 'volunteer') {
@@ -166,12 +460,154 @@ donorsRouter.post(
 );
 
 donorsRouter.post(
+  '/org-applications/draft',
+  requireAuth,
+  requireCapability('buy'),
+  asyncHandler(async (req, res) => {
+    const body = draftSchema.parse(req.body ?? {});
+    const userId = req.auth?.id ?? 0;
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [existing] = await connection.query<RowDataPacket[]>(
+        'SELECT user_id, org_status, donor_tier FROM buyer_profiles WHERE user_id = ? FOR UPDATE',
+        [userId],
+      );
+      const row = existing[0];
+      if (row?.org_status === 'pending') {
+        throw new HttpError(409, 'CONFLICT', 'มีคำขอที่รอตรวจอยู่แล้ว');
+      }
+      if (row?.donor_tier === 'verified_org' && row.org_status === 'approved') {
+        throw new HttpError(409, 'CONFLICT', 'เป็นองค์กรที่ยืนยันแล้วอยู่แล้ว');
+      }
+      const recipientJson =
+        body.recipient_groups === undefined || body.recipient_groups === null
+          ? null
+          : JSON.stringify(body.recipient_groups);
+      const registeredVal =
+        body.registered === undefined || body.registered === null ? null : body.registered ? 1 : 0;
+
+      if (row === undefined) {
+        await connection.query(
+          `INSERT INTO buyer_profiles (
+             user_id, buyer_type, charity_approved, donor_tier, org_status, application_kind, draft_step,
+             org_name, org_type, registered, registration_number, registered_address,
+             contact_name, contact_title, contact_phone, contact_email, org_lat, org_lng,
+             beneficiary_count, recipient_groups_json, purpose_th, distribution_mode,
+             redistribute_place, redistribute_frequency
+           ) VALUES (?, 'charity', 0, NULL, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            userId,
+            body.application_kind ?? null,
+            body.draft_step ?? 0,
+            body.org_name ?? null,
+            body.org_type ?? null,
+            registeredVal,
+            body.registration_number ?? null,
+            body.registered_address ?? null,
+            body.contact_name ?? null,
+            body.contact_title ?? null,
+            body.contact_phone ?? null,
+            body.contact_email ?? null,
+            body.org_lat ?? null,
+            body.org_lng ?? null,
+            body.beneficiary_count ?? null,
+            recipientJson,
+            body.purpose_th ?? null,
+            body.distribution_mode ?? null,
+            body.redistribute_place ?? null,
+            body.redistribute_frequency ?? null,
+          ],
+        );
+      } else {
+        if (row.org_status === 'approved') {
+          throw new HttpError(409, 'CONFLICT', 'บัญชีนี้พร้อมรับบริจาคแล้ว');
+        }
+        const nextStatus =
+          row.org_status === 'needs_more_info' ? 'needs_more_info' : 'draft';
+        await connection.query(
+          `UPDATE buyer_profiles SET
+             buyer_type = 'charity', charity_approved = 0,
+             donor_tier = CASE WHEN ? = 'needs_more_info' THEN donor_tier ELSE NULL END,
+             org_status = ?,
+             application_kind = COALESCE(?, application_kind),
+             draft_step = COALESCE(?, draft_step),
+             org_name = COALESCE(?, org_name),
+             org_type = COALESCE(?, org_type),
+             registered = COALESCE(?, registered),
+             registration_number = COALESCE(?, registration_number),
+             registered_address = COALESCE(?, registered_address),
+             contact_name = COALESCE(?, contact_name),
+             contact_title = COALESCE(?, contact_title),
+             contact_phone = COALESCE(?, contact_phone),
+             contact_email = COALESCE(?, contact_email),
+             org_lat = COALESCE(?, org_lat),
+             org_lng = COALESCE(?, org_lng),
+             beneficiary_count = COALESCE(?, beneficiary_count),
+             recipient_groups_json = COALESCE(?, recipient_groups_json),
+             purpose_th = COALESCE(?, purpose_th),
+             distribution_mode = COALESCE(?, distribution_mode),
+             redistribute_place = COALESCE(?, redistribute_place),
+             redistribute_frequency = COALESCE(?, redistribute_frequency)
+           WHERE user_id = ?`,
+          [
+            nextStatus,
+            nextStatus,
+            body.application_kind ?? null,
+            body.draft_step ?? null,
+            body.org_name ?? null,
+            body.org_type ?? null,
+            registeredVal,
+            body.registration_number ?? null,
+            body.registered_address ?? null,
+            body.contact_name ?? null,
+            body.contact_title ?? null,
+            body.contact_phone ?? null,
+            body.contact_email ?? null,
+            body.org_lat ?? null,
+            body.org_lng ?? null,
+            body.beneficiary_count ?? null,
+            recipientJson,
+            body.purpose_th ?? null,
+            body.distribution_mode ?? null,
+            body.redistribute_place ?? null,
+            body.redistribute_frequency ?? null,
+            userId,
+          ],
+        );
+      }
+
+      if (body.replace_documents === true) {
+        await connection.query('DELETE FROM org_application_docs WHERE user_id = ?', [userId]);
+      }
+      if (body.documents !== undefined && body.documents.length > 0) {
+        const existingCount = await countOrgDocs(connection, userId);
+        if (existingCount + body.documents.length > DONOR_CONFIG.orgDocMaxFiles) {
+          throw new HttpError(400, 'VALIDATION', `อัปโหลดได้สูงสุด ${DONOR_CONFIG.orgDocMaxFiles} ไฟล์`);
+        }
+        await insertDocs(connection, userId, body.documents);
+      }
+
+      await connection.query('UPDATE users SET can_buy = 1 WHERE id = ?', [userId]);
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+    res.json({ user: await loadPublicUser(userId) });
+  }),
+);
+
+donorsRouter.post(
   '/org-applications',
   requireAuth,
   requireCapability('buy'),
   asyncHandler(async (req, res) => {
     const body = orgApplySchema.parse(req.body);
     const userId = req.auth?.id ?? 0;
+    const isIndividual = body.application_kind === 'individual';
     const connection = await pool.getConnection();
     try {
       await connection.beginTransaction();
@@ -186,49 +622,81 @@ donorsRouter.post(
       if (row?.donor_tier === 'verified_org' && row.org_status === 'approved') {
         throw new HttpError(409, 'CONFLICT', 'เป็นองค์กรที่ยืนยันแล้วอยู่แล้ว');
       }
+
+      const recipientJson = JSON.stringify(body.recipient_groups);
+      const orgStatus = isIndividual ? 'approved' : 'pending';
+      const donorTier = isIndividual ? 'volunteer' : null;
+      const charityApproved = 0;
+      const distributionMode = isIndividual ? 'redistribute' : (body.distribution_mode ?? 'redistribute');
+      const orgName = body.org_name ?? (isIndividual ? body.contact_name : null);
+      const registeredVal = body.registered === undefined ? null : body.registered ? 1 : 0;
+
+      const profileFields = [
+        charityApproved,
+        donorTier,
+        body.beneficiary_count ?? null,
+        distributionMode,
+        orgName,
+        body.org_type ?? null,
+        registeredVal,
+        body.registration_number ?? null,
+        body.registered_address ?? null,
+        body.contact_name,
+        body.contact_title ?? null,
+        body.contact_phone,
+        body.contact_email ?? null,
+        body.org_lat,
+        body.org_lng,
+        recipientJson,
+        body.purpose_th ?? null,
+        body.redistribute_place ?? null,
+        body.redistribute_frequency ?? null,
+        body.application_kind,
+        orgStatus,
+        body.terms_version,
+      ];
+
       if (row === undefined) {
         await connection.query(
           `INSERT INTO buyer_profiles (
              user_id, buyer_type, charity_approved, donor_tier, beneficiary_count, distribution_mode,
-             org_name, org_type, contact_name, contact_title, contact_phone, org_lat, org_lng, org_status
-           ) VALUES (?, 'charity', 0, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
-          [
-            userId,
-            body.beneficiary_count,
-            body.distribution_mode,
-            body.org_name,
-            body.org_type,
-            body.contact_name,
-            body.contact_title,
-            body.contact_phone,
-            body.org_lat,
-            body.org_lng,
-          ],
+             org_name, org_type, registered, registration_number, registered_address,
+             contact_name, contact_title, contact_phone, contact_email, org_lat, org_lng,
+             recipient_groups_json, purpose_th, redistribute_place, redistribute_frequency,
+             application_kind, org_status, draft_step, donor_terms_version, donor_terms_accepted_at,
+             org_reject_reason, requested_fields_json, org_reviewed_at
+           ) VALUES (
+             ?, 'charity', ?, ?, ?, ?,
+             ?, ?, ?, ?, ?,
+             ?, ?, ?, ?, ?, ?,
+             ?, ?, ?, ?,
+             ?, ?, NULL, ?, UTC_TIMESTAMP(),
+             NULL, NULL, NULL
+           )`,
+          [userId, ...profileFields],
         );
       } else {
         await connection.query(
           `UPDATE buyer_profiles SET
-             buyer_type = 'charity', charity_approved = 0, donor_tier = NULL,
+             buyer_type = 'charity', charity_approved = ?, donor_tier = ?,
              beneficiary_count = ?, distribution_mode = ?,
-             org_name = ?, org_type = ?, contact_name = ?, contact_title = ?, contact_phone = ?,
-             org_lat = ?, org_lng = ?, org_status = 'pending', org_reject_reason = NULL, org_reviewed_at = NULL
+             org_name = ?, org_type = ?, registered = ?, registration_number = ?, registered_address = ?,
+             contact_name = ?, contact_title = ?, contact_phone = ?, contact_email = ?,
+             org_lat = ?, org_lng = ?, recipient_groups_json = ?, purpose_th = ?,
+             redistribute_place = ?, redistribute_frequency = ?,
+             application_kind = ?, org_status = ?, draft_step = NULL,
+             donor_terms_version = ?, donor_terms_accepted_at = UTC_TIMESTAMP(),
+             org_reject_reason = NULL, requested_fields_json = NULL, org_reviewed_at = NULL
            WHERE user_id = ?`,
-          [
-            body.beneficiary_count,
-            body.distribution_mode,
-            body.org_name,
-            body.org_type,
-            body.contact_name,
-            body.contact_title,
-            body.contact_phone,
-            body.org_lat,
-            body.org_lng,
-            userId,
-          ],
+          [...profileFields, userId],
         );
         await connection.query('DELETE FROM org_application_docs WHERE user_id = ?', [userId]);
       }
-      await insertDocs(connection, userId, body.documents);
+
+      if (!isIndividual && body.documents !== undefined && body.documents.length > 0) {
+        await insertDocs(connection, userId, body.documents);
+      }
+      await connection.query('UPDATE users SET can_buy = 1 WHERE id = ?', [userId]);
       await connection.commit();
     } catch (error) {
       await connection.rollback();
@@ -255,8 +723,8 @@ donorsRouter.post(
         [userId],
       );
       const status = rows[0]?.org_status;
-      if (status !== 'pending' && status !== 'needs_more_info') {
-        throw new HttpError(409, 'CONFLICT', 'อัปโหลดเอกสารเพิ่มได้เฉพาะคำขอที่รอตรวจหรือขอเอกสารเพิ่ม');
+      if (status !== 'pending' && status !== 'needs_more_info' && status !== 'draft') {
+        throw new HttpError(409, 'CONFLICT', 'อัปโหลดเอกสารเพิ่มได้เฉพาะคำขอที่รอตรวจ ขอเอกสารเพิ่ม หรือร่าง');
       }
       const existing = await countOrgDocs(connection, userId);
       if (existing + body.documents.length > DONOR_CONFIG.orgDocMaxFiles) {
@@ -300,7 +768,7 @@ donorsRouter.post(
       }
       await connection.query(
         `UPDATE buyer_profiles
-         SET org_status = 'pending', org_reject_reason = NULL, org_reviewed_at = NULL
+         SET org_status = 'pending', org_reject_reason = NULL, requested_fields_json = NULL, org_reviewed_at = NULL
          WHERE user_id = ?`,
         [userId],
       );
@@ -321,20 +789,11 @@ donorsRouter.get(
   requireCapability('buy'),
   asyncHandler(async (req, res) => {
     const userId = req.auth?.id ?? 0;
-    const [docs] = await pool.query<RowDataPacket[]>(
-      `SELECT id, original_name, mime, size_bytes, created_at
-       FROM org_application_docs WHERE user_id = ? ORDER BY id`,
-      [userId],
-    );
+    const docs = await loadDocs(userId);
     res.json({
       user: await loadPublicUser(userId),
-      documents: docs.map((doc) => ({
-        id: Number(doc.id),
-        original_name: String(doc.original_name),
-        mime: String(doc.mime),
-        size_bytes: Number(doc.size_bytes),
-        created_at: new Date(doc.created_at as string).toISOString(),
-      })),
+      documents: docs,
+      documents_by_category: groupDocsByCategory(docs),
       review_logs: await loadReviewLogs(userId),
     });
   }),
@@ -346,9 +805,13 @@ donorsRouter.get(
   requireCapability('admin'),
   asyncHandler(async (_req, res) => {
     const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT u.id, u.name, u.phone, bp.org_name, bp.org_type, bp.contact_name, bp.contact_title,
-              bp.contact_phone, bp.org_lat, bp.org_lng, bp.beneficiary_count, bp.distribution_mode,
-              bp.org_status, bp.org_reject_reason, bp.created_at
+      `SELECT u.id, u.name, u.phone,
+              bp.application_kind, bp.org_name, bp.org_type, bp.registered, bp.registration_number,
+              bp.registered_address, bp.contact_name, bp.contact_title, bp.contact_phone, bp.contact_email,
+              bp.org_lat, bp.org_lng, bp.beneficiary_count, bp.recipient_groups_json, bp.purpose_th,
+              bp.distribution_mode, bp.redistribute_place, bp.redistribute_frequency,
+              bp.org_status, bp.org_reject_reason, bp.requested_fields_json, bp.donor_terms_version,
+              bp.donor_terms_accepted_at, bp.created_at
        FROM buyer_profiles bp
        JOIN users u ON u.id = bp.user_id
        WHERE bp.org_status IN ('pending', 'needs_more_info')
@@ -356,35 +819,38 @@ donorsRouter.get(
     );
     const apps = [];
     for (const row of rows) {
-      const [docs] = await pool.query<RowDataPacket[]>(
-        `SELECT id, original_name, mime, size_bytes, created_at
-         FROM org_application_docs WHERE user_id = ? ORDER BY id`,
-        [row.id],
-      );
+      const docs = await loadDocs(Number(row.id));
+      const logs = await loadReviewLogs(Number(row.id));
+      const latestChecklist = logs.find((l) => l.action === 'checklist_saved')?.checklist ?? null;
       apps.push({
         user_id: Number(row.id),
         name: String(row.name),
         phone: String(row.phone),
-        org_name: String(row.org_name),
-        org_type: String(row.org_type),
-        contact_name: String(row.contact_name),
-        contact_title: String(row.contact_title),
-        contact_phone: String(row.contact_phone),
-        org_lat: Number(row.org_lat),
-        org_lng: Number(row.org_lng),
-        beneficiary_count: Number(row.beneficiary_count),
-        distribution_mode: String(row.distribution_mode),
+        application_kind: row.application_kind === null ? null : String(row.application_kind),
+        org_name: row.org_name === null ? null : String(row.org_name),
+        org_type: row.org_type === null ? null : String(row.org_type),
+        contact_name: row.contact_name === null ? null : String(row.contact_name),
+        contact_title: row.contact_title === null ? null : String(row.contact_title),
+        contact_phone: row.contact_phone === null ? null : String(row.contact_phone),
+        contact_email: row.contact_email === null ? null : String(row.contact_email),
+        org_lat: row.org_lat === null ? null : Number(row.org_lat),
+        org_lng: row.org_lng === null ? null : Number(row.org_lng),
+        beneficiary_count: row.beneficiary_count === null ? null : Number(row.beneficiary_count),
+        distribution_mode: row.distribution_mode === null ? null : String(row.distribution_mode),
         org_status: String(row.org_status),
         org_reject_reason: row.org_reject_reason === null ? null : String(row.org_reject_reason),
+        requested_fields: parseJsonArray(row.requested_fields_json),
+        donor_terms_version: row.donor_terms_version === null ? null : String(row.donor_terms_version),
+        donor_terms_accepted_at:
+          row.donor_terms_accepted_at === null
+            ? null
+            : new Date(row.donor_terms_accepted_at as string).toISOString(),
         created_at: new Date(row.created_at as string).toISOString(),
-        documents: docs.map((doc) => ({
-          id: Number(doc.id),
-          original_name: String(doc.original_name),
-          mime: String(doc.mime),
-          size_bytes: Number(doc.size_bytes),
-          created_at: new Date(doc.created_at as string).toISOString(),
-        })),
-        review_logs: await loadReviewLogs(Number(row.id)),
+        sections: applicationSections(row),
+        documents: docs,
+        documents_by_category: groupDocsByCategory(docs),
+        checklist: latestChecklist,
+        review_logs: logs,
       });
     }
     res.json({ applications: apps, review_quick_reasons: ORG_REVIEW_QUICK_REASONS });
@@ -404,7 +870,7 @@ donorsRouter.post(
       const [result] = await connection.query<ResultSetHeader>(
         `UPDATE buyer_profiles
          SET org_status = 'approved', charity_approved = 1, donor_tier = 'verified_org',
-             org_reject_reason = NULL, org_reviewed_at = UTC_TIMESTAMP()
+             org_reject_reason = NULL, requested_fields_json = NULL, org_reviewed_at = UTC_TIMESTAMP()
          WHERE user_id = ? AND org_status = 'pending'`,
         [userId],
       );
@@ -437,7 +903,7 @@ donorsRouter.post(
       const [result] = await connection.query<ResultSetHeader>(
         `UPDATE buyer_profiles
          SET org_status = 'rejected', charity_approved = 0, donor_tier = NULL,
-             org_reject_reason = ?, org_reviewed_at = UTC_TIMESTAMP()
+             org_reject_reason = ?, requested_fields_json = NULL, org_reviewed_at = UTC_TIMESTAMP()
          WHERE user_id = ? AND org_status IN ('pending', 'needs_more_info')`,
         [body.reason, userId],
       );
@@ -464,15 +930,17 @@ donorsRouter.post(
     const userId = Number(req.params.userId);
     const adminId = req.auth?.id ?? 0;
     const body = reasonSchema.parse(req.body ?? {});
+    const requested = body.requested_fields ?? [];
+    const requestedJson = requested.length > 0 ? JSON.stringify(requested) : null;
     const connection = await pool.getConnection();
     try {
       await connection.beginTransaction();
       const [result] = await connection.query<ResultSetHeader>(
         `UPDATE buyer_profiles
          SET org_status = 'needs_more_info', charity_approved = 0, donor_tier = NULL,
-             org_reject_reason = ?, org_reviewed_at = UTC_TIMESTAMP()
+             org_reject_reason = ?, requested_fields_json = ?, org_reviewed_at = UTC_TIMESTAMP()
          WHERE user_id = ? AND org_status = 'pending'`,
-        [body.reason, userId],
+        [body.reason, requestedJson, userId],
       );
       if (result.affectedRows === 0) {
         throw new HttpError(404, 'NOT_FOUND', 'ไม่พบคำขอองค์กรที่รออนุมัติ');
@@ -482,6 +950,7 @@ donorsRouter.post(
         adminId,
         action: 'needs_more_info',
         reason: body.reason,
+        requestedFieldsJson: requestedJson,
       });
       await connection.commit();
     } catch (error) {
@@ -491,6 +960,43 @@ donorsRouter.post(
       connection.release();
     }
     res.json({ user: await loadPublicUser(userId) });
+  }),
+);
+
+donorsRouter.post(
+  '/admin/org-applications/:userId/checklist',
+  requireAuth,
+  requireCapability('admin'),
+  asyncHandler(async (req, res) => {
+    const userId = Number(req.params.userId);
+    const adminId = req.auth?.id ?? 0;
+    const body = checklistSchema.parse(req.body ?? {});
+    const checklistJson = JSON.stringify(body.checklist);
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [rows] = await connection.query<RowDataPacket[]>(
+        `SELECT org_status FROM buyer_profiles WHERE user_id = ? FOR UPDATE`,
+        [userId],
+      );
+      if (rows[0] === undefined || (rows[0].org_status !== 'pending' && rows[0].org_status !== 'needs_more_info')) {
+        throw new HttpError(404, 'NOT_FOUND', 'ไม่พบคำขอองค์กรที่รอตรวจ');
+      }
+      await writeReviewLog(connection, {
+        userId,
+        adminId,
+        action: 'checklist_saved',
+        reason: null,
+        checklistJson,
+      });
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+    res.json({ ok: true, checklist: body.checklist, review_logs: await loadReviewLogs(userId) });
   }),
 );
 
@@ -510,7 +1016,7 @@ donorsRouter.get(
     }
     const buffer = await readPrivateUpload(String(doc.stored_name));
     res.setHeader('Content-Type', String(doc.mime));
-    res.setHeader('Content-Disposition', `attachment; filename="${String(doc.original_name).replace(/"/g, '')}"`);
+    res.setHeader('Content-Disposition', `inline; filename="${String(doc.original_name).replace(/"/g, '')}"`);
     res.send(buffer);
   }),
 );

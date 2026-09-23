@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { DonorIntroModal, type DonorIntroChoice } from '../components/DonorIntroModal';
 import { ApiError } from '../src/api/client';
 import { Body, Chip, Field, PrimaryButton, Screen, SectionTitle, SecondaryButton, TopBar } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
@@ -11,17 +12,19 @@ import type { BuyerType } from '../src/api/types';
 const buyerTypes: { key: BuyerType; label: string }[] = [
   { key: 'vendor', label: 'รถเร่' },
   { key: 'shop', label: 'ร้านค้า' },
-  { key: 'charity', label: 'สงเคราะห์' },
+  { key: 'charity', label: 'รับบริจาค' },
 ];
 
 export default function ProfileScreen(): React.ReactElement {
-  const { user, api, logout, mode, setMode } = useAuth();
+  const { user, api, logout, mode, setMode, refreshUser } = useAuth();
   const router = useRouter();
   const [lineId, setLineId] = useState(user?.line_id ?? '');
   const [buyerType, setBuyerType] = useState<BuyerType>(user?.buyer_type ?? 'vendor');
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [introVisible, setIntroVisible] = useState(false);
+  const [pendingEnableBuy, setPendingEnableBuy] = useState(false);
 
   if (user === null) {
     return (
@@ -33,6 +36,76 @@ export default function ProfileScreen(): React.ReactElement {
       </Screen>
     );
   }
+
+  const selectBuyerType = (key: BuyerType): void => {
+    if (key === 'charity') {
+      setIntroVisible(true);
+      return;
+    }
+    setBuyerType(key);
+  };
+
+  const onIntroChoice = (choice: DonorIntroChoice): void => {
+    setIntroVisible(false);
+    if (choice === 'cancel') {
+      if (buyerType === 'charity') {
+        setBuyerType('vendor');
+      }
+      setPendingEnableBuy(false);
+      return;
+    }
+    setBuyerType('charity');
+    if (pendingEnableBuy) {
+      void runEnableBuy(choice);
+      setPendingEnableBuy(false);
+    } else if (choice === 'now') {
+      router.push('/donor-apply');
+    } else if (choice === 'later') {
+      void (async () => {
+        setBusy(true);
+        try {
+          await api.saveDonorDraft({ draft_step: 0 });
+          await refreshUser();
+          setMessage('บันทึกร่างแล้ว — กรอกคำขอรับบริจาคได้จากแบนเนอร์ด้านบน');
+        } catch (err) {
+          setError(err instanceof ApiError ? err.message : 'บันทึกร่างไม่สำเร็จ');
+        } finally {
+          setBusy(false);
+        }
+      })();
+    }
+  };
+
+  const runEnableBuy = async (intent: 'now' | 'later'): Promise<void> => {
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const auth = await api.updateProfile({
+        can_buy: true,
+        ...(user.buyer_type === null ? { buyer_type: 'charity' } : {}),
+      });
+      if (intent === 'later') {
+        await api.saveDonorDraft({ draft_step: 0 });
+        await refreshUser();
+        setMessage('เปิดโหมดซื้อแล้ว — คำขอรับบริจาคยังเป็นร่าง');
+      } else {
+        setMessage(
+          auth.user.org_status === 'draft' || auth.user.org_status === 'pending'
+            ? 'เปิดโหมดซื้อแล้ว — กรุณากรอกคำขอรับบริจาค'
+            : 'เปิดโหมดซื้อแล้ว',
+        );
+        setMode('buy');
+        router.replace('/donor-apply');
+        return;
+      }
+      setMode('buy');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'อัปเดตไม่สำเร็จ');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const enableSell = async (): Promise<void> => {
     setBusy(true);
@@ -51,19 +124,20 @@ export default function ProfileScreen(): React.ReactElement {
   };
 
   const enableBuy = async (): Promise<void> => {
+    if (buyerType === 'charity') {
+      setPendingEnableBuy(true);
+      setIntroVisible(true);
+      return;
+    }
     setBusy(true);
     setError(null);
     setMessage(null);
     try {
-      const auth = await api.updateProfile({
+      await api.updateProfile({
         can_buy: true,
         ...(user.buyer_type === null ? { buyer_type: buyerType } : {}),
       });
-      setMessage(
-        buyerType === 'charity' && !auth.user.charity_approved
-          ? 'เปิดโหมดซื้อแล้ว — ประเภทสงเคราะห์รอผู้ดูแลอนุมัติ'
-          : 'เปิดโหมดซื้อแล้ว',
-      );
+      setMessage('เปิดโหมดซื้อแล้ว');
       setMode('buy');
       router.replace('/buyer');
     } catch (err) {
@@ -89,6 +163,7 @@ export default function ProfileScreen(): React.ReactElement {
 
   return (
     <Screen>
+      <DonorIntroModal visible={introVisible} onChoice={onIntroChoice} />
       <TopBar title="โปรไฟล์" onLogout={logout} />
       <Body>
         <Text style={styles.name}>{user.name}</Text>
@@ -105,14 +180,22 @@ export default function ProfileScreen(): React.ReactElement {
             {user.donation_suspended ? ' · ระงับสิทธิ์รับบริจาค' : ''}
           </Text>
         ) : null}
+
+        {user.org_status === 'draft' ? (
+          <View style={styles.banner}>
+            <Text style={styles.bannerTitle}>คำขอรับบริจาคยังไม่ครบ</Text>
+            <Text style={styles.bannerText}>ยังรับบริจาคไม่ได้จนกว่าจะส่งคำขอครบ (บุคคล) หรือได้รับอนุมัติ (องค์กร)</Text>
+            <PrimaryButton label="กรอกคำขอต่อ" onPress={() => router.push('/donor-apply')} />
+          </View>
+        ) : null}
+
         {user.org_status === 'pending' ? (
           <Text style={styles.muted}>คำขอองค์กร: รอผู้ดูแลอนุมัติ</Text>
         ) : null}
         {user.org_status === 'needs_more_info' ? (
           <>
-            <Text style={styles.error}>
-              ขอเอกสารเพิ่ม: {user.org_reject_reason ?? '-'}
-            </Text>
+            <Text style={styles.error}>ขอเอกสารเพิ่ม: {user.org_reject_reason ?? '-'}</Text>
+            <PrimaryButton label="แก้ไขคำขอ / อัปโหลดเอกสาร" onPress={() => router.push('/donor-apply')} />
             <PrimaryButton
               label="อัปโหลดเอกสารเพิ่ม (รูป)"
               onPress={() => {
@@ -130,16 +213,21 @@ export default function ProfileScreen(): React.ReactElement {
                       base64: true,
                       quality: 0.8,
                     });
-                    if (picked.canceled || picked.assets[0] === undefined || !picked.assets[0].base64) {
+                    if (picked.canceled || picked.assets[0] === undefined) {
                       return;
                     }
                     const asset = picked.assets[0];
+                    if (asset.base64 == null || asset.base64 === '') {
+                      return;
+                    }
+                    const base64: string = asset.base64;
                     const mime = asset.mimeType === 'image/png' ? 'image/png' : 'image/jpeg';
                     await api.addOrgDocuments([
                       {
                         filename: asset.fileName ?? `doc-${Date.now()}.jpg`,
                         mime,
-                        base64: asset.base64,
+                        base64,
+                        doc_category: 'other',
                       },
                     ]);
                     setMessage('อัปโหลดเอกสารเพิ่มแล้ว');
@@ -173,10 +261,16 @@ export default function ProfileScreen(): React.ReactElement {
           </>
         ) : null}
         {user.org_status === 'rejected' ? (
-          <Text style={styles.error}>คำขอองค์กรถูกปฏิเสธ: {user.org_reject_reason ?? '-'}</Text>
+          <>
+            <Text style={styles.error}>คำขอองค์กรถูกปฏิเสธ: {user.org_reject_reason ?? '-'}</Text>
+            <PrimaryButton label="สมัครใหม่" onPress={() => router.push('/donor-apply')} />
+          </>
         ) : null}
-        {user.org_status === 'approved' ? (
+        {user.org_status === 'approved' && user.application_kind === 'organization' ? (
           <Text style={styles.ok}>องค์กรที่ยืนยันแล้ว: {user.org_name ?? '-'}</Text>
+        ) : null}
+        {user.org_status === 'approved' && user.application_kind === 'individual' ? (
+          <Text style={styles.ok}>จิตอาสาพร้อมรับบริจาค</Text>
         ) : null}
 
         <SectionTitle>LINE ID</SectionTitle>
@@ -199,7 +293,7 @@ export default function ProfileScreen(): React.ReactElement {
                   key={entry.key}
                   label={entry.label}
                   selected={buyerType === entry.key}
-                  onPress={() => setBuyerType(entry.key)}
+                  onPress={() => selectBuyerType(entry.key)}
                 />
               ))}
             </View>
@@ -214,11 +308,15 @@ export default function ProfileScreen(): React.ReactElement {
           </>
         ) : null}
 
-        {user.can_buy && user.donor_tier === null && user.org_status !== 'pending' ? (
+        {user.can_buy &&
+        user.donor_tier === null &&
+        user.org_status !== 'pending' &&
+        user.org_status !== 'draft' &&
+        user.org_status !== 'needs_more_info' ? (
           <>
             <SectionTitle>รับบริจาค</SectionTitle>
             <PrimaryButton
-              label="เป็นจิตอาสา"
+              label="เป็นจิตอาสา (เร็ว)"
               onPress={() => {
                 void (async () => {
                   setBusy(true);
@@ -235,7 +333,12 @@ export default function ProfileScreen(): React.ReactElement {
               }}
               loading={busy}
             />
-            <Text style={styles.hint}>องค์กร: สมัครผ่าน API /api/donors/org-applications พร้อมเอกสาร (ในเฟสถัดไปจะมีฟอร์มเต็ม)</Text>
+            <SecondaryButton
+              label="สมัครแบบทางการ"
+              onPress={() => {
+                setIntroVisible(true);
+              }}
+            />
           </>
         ) : null}
 
@@ -257,4 +360,13 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 8 },
   ok: { color: C.leaf, marginTop: 12 },
   error: { color: C.chili, marginTop: 12 },
+  banner: {
+    backgroundColor: C.turmericSoft,
+    borderRadius: 12,
+    padding: 14,
+    marginVertical: 12,
+    gap: 8,
+  },
+  bannerTitle: { fontWeight: '800', color: C.ink },
+  bannerText: { color: C.mute, marginBottom: 4 },
 });

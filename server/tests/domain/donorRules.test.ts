@@ -26,7 +26,25 @@ describe('donorRules', () => {
   it('treats pending org as ineligible even if tier was set', () => {
     expect(activeDonorTier({ donor_tier: 'verified_org', org_status: 'pending' })).toBeNull();
     expect(activeDonorTier({ donor_tier: 'volunteer', org_status: 'needs_more_info' })).toBeNull();
+    expect(activeDonorTier({ donor_tier: 'volunteer', org_status: 'draft' })).toBeNull();
     expect(activeDonorTier({ donor_tier: 'verified_org', org_status: 'approved' })).toBe('verified_org');
+  });
+
+  it('blocks draft org in evaluateDonationRequest', () => {
+    const draft = evaluateDonationRequest({
+      allowDonation: true,
+      audience: 'all_donors',
+      lotWeightKg: 1,
+      usedKg: 0,
+      donor_tier: null,
+      org_status: 'draft',
+      donation_suspended: false,
+      beneficiary_count: null,
+    });
+    expect(draft.ok).toBe(false);
+    if (!draft.ok) {
+      expect(draft.reason).toBe('draft_org');
+    }
   });
 
   it('blocks pending org and over-cap in evaluateDonationRequest', () => {
