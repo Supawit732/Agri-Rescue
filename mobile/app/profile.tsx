@@ -2,7 +2,7 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { ApiError } from '../src/api/client';
-import { Body, Chip, Field, PrimaryButton, Screen, SectionTitle, TopBar } from '../src/components/ui';
+import { Body, Chip, Field, PrimaryButton, Screen, SectionTitle, SecondaryButton, TopBar } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
 import { C } from '../src/theme';
 import type { BuyerType } from '../src/api/types';
@@ -133,6 +133,13 @@ export default function ProfileScreen(): React.ReactElement {
               ))}
             </View>
             <PrimaryButton label="เปิดสิทธิ์ซื้อ" onPress={enableBuy} loading={busy} />
+          </>
+        ) : null}
+
+        {user.is_admin ? (
+          <>
+            <SectionTitle>ผู้ดูแล</SectionTitle>
+            <SecondaryButton label="ดูคำขอสงเคราะห์" onPress={() => router.push('/admin')} />
           </>
         ) : null}
 

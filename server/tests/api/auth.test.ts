@@ -131,6 +131,32 @@ describe('auth', () => {
     });
     expect(charity.user.charity_approved).toBe(false);
     const admin = await loginStaff(app, 'coordinator', 'แอดมิน');
+    expect(admin.user.is_admin).toBe(true);
+
+    const listed = await request(app).get('/api/auth/admin/charity-requests').set(bearer(admin.token));
+    expect(listed.status).toBe(200);
+    expect(listed.body.requests.some((row: { user_id: number }) => row.user_id === charity.user.id)).toBe(true);
+
+    const farmer = await registerUser(app, { role: 'farmer', name: 'ไม่ใช่แอดมิน' });
+    const forbiddenList = await request(app).get('/api/auth/admin/charity-requests').set(bearer(farmer.token));
+    expect(forbiddenList.status).toBe(403);
+    const forbiddenApprove = await request(app)
+      .post(`/api/auth/admin/approve-charity/${charity.user.id}`)
+      .set(bearer(farmer.token));
+    expect(forbiddenApprove.status).toBe(403);
+    const forbiddenReject = await request(app)
+      .post(`/api/auth/admin/reject-charity/${charity.user.id}`)
+      .set(bearer(farmer.token));
+    expect(forbiddenReject.status).toBe(403);
+
+    const pending = await registerUser(app, { role: 'buyer', buyer_type: 'charity', name: 'จะถูกปฏิเสธ' });
+    const rejected = await request(app)
+      .post(`/api/auth/admin/reject-charity/${pending.user.id}`)
+      .set(bearer(admin.token));
+    expect(rejected.status).toBe(200);
+    expect(rejected.body.user.can_buy).toBe(false);
+    expect(rejected.body.user.buyer_type).toBeNull();
+
     const approved = await request(app)
       .post(`/api/auth/admin/approve-charity/${charity.user.id}`)
       .set(bearer(admin.token));

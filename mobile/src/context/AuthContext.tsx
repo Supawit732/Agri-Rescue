@@ -8,6 +8,7 @@ import type {
   Batch,
   BatchDetail,
   BuyerType,
+  CharityRequest,
   Crop,
   Driver,
   EstimateResponse,
@@ -42,6 +43,9 @@ interface Api {
     buyer_type?: BuyerType;
     line_id?: string | null;
   }) => Promise<AuthResponse>;
+  listCharityRequests: () => Promise<CharityRequest[]>;
+  approveCharity: (userId: number) => Promise<User>;
+  rejectCharity: (userId: number) => Promise<User>;
   getCrops: () => Promise<Crop[]>;
   getPlots: () => Promise<Plot[]>;
   createPlot: (input: { name: string; lat: number; lng: number; area_rai: number }) => Promise<Plot>;
@@ -234,6 +238,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
     return {
       getMe: () => authed<{ user: User }>('GET', '/api/auth/me').then((r) => r.user),
       updateProfile,
+      listCharityRequests: () =>
+        authed<{ requests: CharityRequest[] }>('GET', '/api/auth/admin/charity-requests').then((r) => r.requests),
+      approveCharity: (userId) =>
+        authed<{ user: User }>('POST', `/api/auth/admin/approve-charity/${userId}`).then((r) => r.user),
+      rejectCharity: (userId) =>
+        authed<{ user: User }>('POST', `/api/auth/admin/reject-charity/${userId}`).then((r) => r.user),
       getCrops: () => authed<{ crops: Crop[] }>('GET', '/api/crops').then((r) => r.crops),
       getPlots: () => authed<{ plots: Plot[] }>('GET', '/api/plots/mine').then((r) => r.plots),
       createPlot: (input) => authed<{ plot: Plot }>('POST', '/api/plots', input).then((r) => r.plot),

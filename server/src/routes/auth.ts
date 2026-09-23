@@ -279,6 +279,29 @@ authRouter.patch(
   }),
 );
 
+authRouter.get(
+  '/admin/charity-requests',
+  requireAuth,
+  requireCapability('admin'),
+  asyncHandler(async (_req, res) => {
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT u.id, u.name, u.phone, bp.created_at
+       FROM buyer_profiles bp
+       JOIN users u ON u.id = bp.user_id
+       WHERE bp.buyer_type = 'charity' AND bp.charity_approved = 0
+       ORDER BY bp.created_at ASC, u.id ASC`,
+    );
+    res.json({
+      requests: rows.map((row) => ({
+        user_id: Number(row.id),
+        name: String(row.name),
+        phone: String(row.phone),
+        created_at: new Date(row.created_at as string).toISOString(),
+      })),
+    });
+  }),
+);
+
 authRouter.post(
   '/admin/approve-charity/:userId',
   requireAuth,
@@ -290,11 +313,44 @@ authRouter.post(
     }
     const [result] = await pool.query<ResultSetHeader>(
       `UPDATE buyer_profiles SET charity_approved = 1
-       WHERE user_id = ? AND buyer_type = 'charity'`,
+       WHERE user_id = ? AND buyer_type = 'charity' AND charity_approved = 0`,
       [userId],
     );
     if (result.affectedRows === 0) {
       throw new HttpError(404, 'NOT_FOUND', 'ไม่พบโปรไฟล์สงเคราะห์ที่รออนุมัติ');
+    }
+    const user = await loadPublicUser(userId);
+    res.json({ user });
+  }),
+);
+
+authRouter.post(
+  '/admin/reject-charity/:userId',
+  requireAuth,
+  requireCapability('admin'),
+  asyncHandler(async (req, res) => {
+    const userId = Number(req.params.userId);
+    if (!Number.isInteger(userId) || userId <= 0) {
+      throw new HttpError(400, 'VALIDATION', 'รหัสผู้ใช้ไม่ถูกต้อง');
+    }
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [result] = await connection.query<ResultSetHeader>(
+        `DELETE FROM buyer_profiles
+         WHERE user_id = ? AND buyer_type = 'charity' AND charity_approved = 0`,
+        [userId],
+      );
+      if (result.affectedRows === 0) {
+        throw new HttpError(404, 'NOT_FOUND', 'ไม่พบโปรไฟล์สงเคราะห์ที่รออนุมัติ');
+      }
+      await connection.query('UPDATE users SET can_buy = 0 WHERE id = ?', [userId]);
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
     }
     const user = await loadPublicUser(userId);
     res.json({ user });

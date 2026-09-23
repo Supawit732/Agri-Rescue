@@ -18,6 +18,13 @@ export interface User {
   lng: number | null;
 }
 
+export interface CharityRequest {
+  user_id: number;
+  name: string;
+  phone: string;
+  created_at: string;
+}
+
 export interface AuthResponse {
   token: string;
   user: User;
