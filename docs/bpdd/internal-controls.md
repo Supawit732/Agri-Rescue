@@ -10,6 +10,9 @@
 | น้ำหนักที่รับจริงไม่ตรงกับที่เกษตรกรแจ้ง | คำนวณส่วนต่างสัมพัทธ์; ถ้าเกิน 10% ตั้ง `weight_flag = 1` ให้ผู้ประสานตรวจได้ (ยังยืนยันรับของได้) | `confirmStop.ts` (`confirmPickup`): `abs(w - planned) / planned > 0.1` | `server/tests/api/delivery.test.ts` — ชั่งเท่าที่แจ้ง → `weight_flag` เท็จ; ชั่ง 50 จากที่แจ้ง 40 → `weight_flag` จริง |
 | คนขับยืนยันจุดแวะของรอบที่ไม่ได้มอบหมายให้ตน | เทียบ `batches.driver_id` กับ user ที่ login; ไม่ตรงตอบ 403 | `confirmStop.ts` ต้นฟังก์ชัน; `GET /api/batches/:id` ใน `batches.ts` | `server/tests/api/delivery.test.ts` — คนขับอื่น confirm / ดูรายละเอียดรอบได้ 403 |
 | ส่งมอบ (drop) ก่อนรับของ (pickup) ครบ | ถ้ายังมีออเดอร์ของจุดส่งเป็น `reserved` หรือยังไม่มีน้ำหนัก pickup ที่ done → 409 `PICKUP_REQUIRED` | `confirmStop.ts` (`confirmDrop`) | `server/tests/api/delivery.test.ts` — ยืนยัน drop ก่อน pickup ได้ `PICKUP_REQUIRED`; เคส merge drop ยังต้องรับครบก่อน |
+| SSRF ผ่าน resolve ลิงก์ Maps | allowlist host Google Maps เท่านั้น; บล็อก localhost / IP literal / IPv6; ตาม redirect สูงสุด 5 ครั้ง; timeout 5 วินาที | `server/src/geo/resolveLink.ts`, `domain/mapsLink.ts` | `server/tests/geo/resolveLink.test.ts`, `server/tests/api/geo.test.ts` |
+| ยิง `/api/geo` ถี่เกินไป | rate limit 20 คำขอต่อ IP ต่อนาที → 429 `RATE_LIMIT` | `server/src/middleware/geoRateLimit.ts` | `server/tests/api/geo.test.ts` |
+| ใช้รูปที่ไม่ใช่พืชที่เลือกมาตั้งความสุก | โมเดลต้องส่ง `subject_match`; ถ้า false API ไม่คืนค่าความสุกให้แอปใช้ | `server/src/ai/vision.ts` | `server/tests/ai/vision.test.ts` — เคส `subject_match: false` |
 
 ## Control เสริมที่เกี่ยวข้อง (มีในโค้ด)
 

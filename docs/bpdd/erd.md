@@ -69,6 +69,9 @@ erDiagram
     decimal temp_c
     decimal humidity
     int predicted_shelf_hours
+    tinyint ai_ripeness
+    decimal ai_confidence
+    varchar ai_model
     datetime created_at
   }
 
@@ -119,7 +122,8 @@ erDiagram
   }
 ```
 
-คอลัมน์ `otp_attempts` ถูกเพิ่มใน migration `002_otp_attempts.sql`
+คอลัมน์ `otp_attempts` ถูกเพิ่มใน migration `002_otp_attempts.sql`  
+คอลัมน์ `ai_ripeness`, `ai_confidence`, `ai_model` ถูกเพิ่มใน migration `003_ai_assessment.sql`
 
 ## ทำไมไม่มี FOREIGN KEY constraint
 

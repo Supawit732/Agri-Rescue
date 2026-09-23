@@ -1,29 +1,48 @@
 # กฎธุรกิจ (Business Rules)
 
-## 1) อายุการขาย (shelf-life)
+## 1) อากาศที่ใช้คำนวณ shelf-life
+
+โค้ด: `server/src/weather/openMeteo.ts`
+
+ระบบไม่ใช้ค่าอากาศปัจจุบัน แต่ดึงพยากรณ์รายชั่วโมง 72 ชม. (`forecast_hours=72`, `timezone=Asia/Bangkok`) แล้วใช้**ค่าเฉลี่ยช่วงกลางวัน 10:00–17:00** เป็น `temp_c` และ `humidity`
+
+| รายการ | ค่าในโค้ด |
+|---|---|
+| `weather_basis` | `forecast_72h_daytime_avg` |
+| ช่วงกลางวัน | ชั่วโมงท้องถิ่น 10 ถึง 17 รวมทั้งสองขอบ |
+| timeout | 3 วินาที |
+| fallback | 32°C / ความชื้น 75% (`PLAN_WEATHER_FALLBACK`) |
+| cache | เฉพาะผล live; key = พิกัดปัด 2 ตำแหน่ง; TTL 60 นาที |
+
+`/lots/estimate` คืน `temp_c`, `humidity`, `weather_source` (`live` \| `fallback`) และ `weather_basis`
+
+## 2) อายุการขาย (shelf-life)
 
 โค้ด: `server/src/domain/shelfLife.ts`
 
 ```text
-base        = baseShelfDays * 24
-ripeFactor  = 1 - ripeness * 0.18
-heatFactor  = tempC > 30 ? max(0.6, 1 - (tempC - 30) * 0.05) : 1
-shelfHours  = max(6, round(base * ripeFactor * heatFactor))
+base           = baseShelfDays * 24
+ripeFactor     = 1 - ripeness * 0.18
+heatFactor     = tempC > 30 ? max(0.6, 1 - (tempC - 30) * 0.05) : 1
+humidityFactor = humidity > 85 ? 0.9 : 1
+shelfHours     = max(6, round(base * ripeFactor * heatFactor * humidityFactor))
 ```
 
 - `ripeness` เป็นจำนวนเต็ม 0–4 (ดิบ → ใกล้งอม)
-- ถ้าอากาศเรียกไม่สำเร็จ ระบบใช้ค่าสำรอง **32°C / ความชื้น 75%** (`PLAN_WEATHER_FALLBACK`)
+- ความชื้น**มากกว่า 85%** ลดอายุลงอีก 10% (เท่ากับ 85% ไม่ลด) — เหตุผลใน `DECISIONS.md` D014
+- `tempC` / `humidity` คือค่าเฉลี่ยกลางวันจากข้อ 1 (หรือค่า fallback)
 
-### ตัวอย่างจาก `phase2Samples` (มะม่วง `baseShelfDays = 5`, อุณหภูมิ 34°C)
+### ตัวอย่างจาก `phase2Samples` (มะม่วง `baseShelfDays = 5`)
 
-| ripeness | คำนวณ | shelfHours ในโค้ด |
-|---|---|---|
-| 2 | base = 120; ripeFactor = 1 − 0.36 = 0.64; heatFactor = max(0.6, 1 − 0.2) = 0.8; 120 × 0.64 × 0.8 = 61.44 → round **61** | 61 |
-| 3 | ripeFactor = 1 − 0.54 = 0.46; 120 × 0.46 × 0.8 = 44.16 → round **44** | 44 |
+| ripeness | tempC | humidity | คำนวณ | shelfHours |
+|---|---|---|---|---|
+| 2 | 34 | 78 | base 120; ripe 0.64; heat 0.8; humidity 1 → 61.44 → **61** | 61 |
+| 3 | 34 | 78 | ripe 0.46; 120 × 0.46 × 0.8 = 44.16 → **44** | 44 |
+| 2 | 34 | 90 | เช่นเดียวกับแถวแรกแล้ว × 0.9 → 54.9 → **55** | **55** |
 
-เทสยืนยัน: `server/tests/domain/shelfLife.test.ts`
+เทสยืนยัน: `server/tests/domain/shelfLife.test.ts` (humidity 85 → 61; 85.1 / 90 → 55)
 
-## 2) ราคาด่วนต่อกิโลกรัม
+## 3) ราคาด่วนต่อกิโลกรัม
 
 โค้ด: `server/src/domain/pricing.ts` ฟังก์ชัน `urgentPricePerKg`
 
@@ -51,7 +70,7 @@ price     = round(40 * (0.3 + 0.7 * 0.5083)) = round(26.232) = 26
 ตอน**จอง**ระบบคำนวณใหม่จาก `hoursLeft` ที่เหลือถึง `expires_at`  
 ตอน**บริจาค** (`donation = true` และเงื่อนไข charity / `allow_donation` ผ่าน) ตั้ง `agreed_price_per_kg = 0`
 
-## 3) CO₂e และสรุปผลลัพธ์
+## 4) CO₂e และสรุปผลลัพธ์
 
 ค่าคงที่: `CO2E_PER_KG = 2.5` ใน `seedData.ts`
 
