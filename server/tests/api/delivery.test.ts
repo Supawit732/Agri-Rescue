@@ -99,7 +99,7 @@ describe('batches and delivery', () => {
       plotId: giftPlot,
       cropId,
       expiresAt: later,
-      weightKg: 40,
+      weightKg: 20,
       allowDonation: true,
     });
     const shop = await registerUser(app, { role: 'buyer', buyer_type: 'shop', name: 'ร้าน', lat: 13.651, lng: 100.621 });
@@ -121,7 +121,12 @@ describe('batches and delivery', () => {
     const giftOrder = await request(app)
       .post('/api/orders')
       .set(bearer(charity.token))
-      .send({ lot_id: giftLot, donation: true });
+      .send({
+        lot_id: giftLot,
+        donation: true,
+        distribution_place: 'บ้านพักเด็ก',
+        distribution_at: new Date(Date.now() + 86400000).toISOString(),
+      });
     expect(paidOrder.status).toBe(201);
     expect(giftOrder.status).toBe(201);
     expect(giftOrder.body.order.agreed_price_per_kg).toBe(0);
@@ -249,7 +254,7 @@ describe('batches and delivery', () => {
       'SELECT weight_kg FROM harvest_lots WHERE id IN (?, ?) ORDER BY id',
       [paidLot, giftLot],
     );
-    expect(weights.map((row) => Number(row.weight_kg))).toEqual([80, 40]);
+    expect(weights.map((row) => Number(row.weight_kg))).toEqual([80, 20]);
   });
 
   it('does not place one order on two batches created together', async () => {

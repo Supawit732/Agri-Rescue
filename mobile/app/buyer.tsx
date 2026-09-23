@@ -67,7 +67,11 @@ function Market({ refreshKey, onBooked }: { refreshKey: number; onBooked: () => 
   const { api, user } = useAuth();
   const lat = user?.lat ?? 13.65;
   const lng = user?.lng ?? 100.62;
-  const isCharity = user?.buyer_type === 'charity';
+  const isDonor = user?.donor_tier != null && user.donation_suspended !== true;
+  const needsPlace =
+    user?.donor_tier === 'volunteer' ||
+    user?.donor_tier === 'trusted_volunteer' ||
+    user?.distribution_mode === 'redistribute';
   const { data, loading, error, reload } = useApiData(() => api.getMarket(lat, lng, 15), [refreshKey, lat, lng]);
   const now = useNow();
   const [banner, setBanner] = useState<string | null>(null);
@@ -77,7 +81,14 @@ function Market({ refreshKey, onBooked }: { refreshKey: number; onBooked: () => 
     setBanner(null);
     setBusyId(lot.id);
     try {
-      await api.createOrder(lot.id, donation);
+      const extras =
+        donation && needsPlace
+          ? {
+              distribution_place: 'จุดรับ/แจกที่ระบุโดยผู้รับ',
+              distribution_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+            }
+          : undefined;
+      await api.createOrder(lot.id, donation, extras);
       onBooked();
       reload();
     } catch (err) {
@@ -102,7 +113,9 @@ function Market({ refreshKey, onBooked }: { refreshKey: number; onBooked: () => 
           {lots.map((lot) => {
             const hours = hoursLeftFrom(lot.expires_at, now);
             const tone = urgency(hours);
-            const canDonate = isCharity && lot.allow_donation;
+            const audienceOk =
+              lot.donation_audience !== 'verified_org_only' || user?.donor_tier === 'verified_org';
+            const canDonate = isDonor && lot.allow_donation && audienceOk;
             return (
               <Card key={lot.id}>
                 <View style={styles.cardHeader}>

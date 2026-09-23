@@ -7,3 +7,5 @@ coverage/
 .expo/
 *.log
 .DS_Store
+server/private_uploads/
+server/uploads/

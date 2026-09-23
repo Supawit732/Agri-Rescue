@@ -53,7 +53,12 @@ describe('orders', () => {
     const denied = await request(app)
       .post('/api/orders')
       .set(bearer(vendor.token))
-      .send({ lot_id: vendorLot.lotId, donation: true });
+      .send({
+        lot_id: vendorLot.lotId,
+        donation: true,
+        distribution_place: 'จุดแจก',
+        distribution_at: new Date(Date.now() + 86400000).toISOString(),
+      });
     expect(denied.status).toBe(403);
     expect(denied.body.error.code).toBe('FORBIDDEN');
 
@@ -62,9 +67,13 @@ describe('orders', () => {
     const pending = await request(app)
       .post('/api/orders')
       .set(bearer(charity.token))
-      .send({ lot_id: vendorLot.lotId, donation: true });
+      .send({
+        lot_id: vendorLot.lotId,
+        donation: true,
+        distribution_place: 'จุดแจก',
+        distribution_at: new Date(Date.now() + 86400000).toISOString(),
+      });
     expect(pending.status).toBe(403);
-    expect(pending.body.error.message).toContain('สงเคราะห์');
 
     const admin = await loginStaff(app, 'coordinator', 'อนุมัติสงเคราะห์');
     await request(app)
@@ -74,7 +83,12 @@ describe('orders', () => {
     const blocked = await request(app)
       .post('/api/orders')
       .set(bearer(charity.token))
-      .send({ lot_id: closed.lotId, donation: true });
+      .send({
+        lot_id: closed.lotId,
+        donation: true,
+        distribution_place: 'จุดแจก',
+        distribution_at: new Date(Date.now() + 86400000).toISOString(),
+      });
     expect(blocked.status).toBe(403);
     expect(blocked.body.error.message).toBe('ล็อตนี้ไม่เปิดรับบริจาค');
 

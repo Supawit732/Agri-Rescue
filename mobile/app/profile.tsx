@@ -2,7 +2,7 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { ApiError } from '../src/api/client';
-import { Body, Chip, Field, PrimaryButton, Screen, SectionTitle, TopBar } from '../src/components/ui';
+import { Body, Chip, Field, PrimaryButton, Screen, SectionTitle, SecondaryButton, TopBar } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
 import { C } from '../src/theme';
 import type { BuyerType } from '../src/api/types';
@@ -100,12 +100,18 @@ export default function ProfileScreen(): React.ReactElement {
         {user.can_buy ? (
           <Text style={styles.muted}>
             ประเภทผู้ซื้อ: {user.buyer_type ?? '-'}
-            {user.buyer_type === 'charity'
-              ? user.charity_approved
-                ? ' (อนุมัติแล้ว)'
-                : ' (รออนุมัติ)'
-              : ''}
+            {user.donor_tier !== null ? ` · ระดับผู้รับ ${user.donor_tier}` : ''}
+            {user.donation_suspended ? ' · ระงับสิทธิ์รับบริจาค' : ''}
           </Text>
+        ) : null}
+        {user.org_status === 'pending' ? (
+          <Text style={styles.muted}>คำขอองค์กร: รอผู้ดูแลอนุมัติ</Text>
+        ) : null}
+        {user.org_status === 'rejected' ? (
+          <Text style={styles.error}>คำขอองค์กรถูกปฏิเสธ: {user.org_reject_reason ?? '-'}</Text>
+        ) : null}
+        {user.org_status === 'approved' ? (
+          <Text style={styles.ok}>องค์กรที่ยืนยันแล้ว: {user.org_name ?? '-'}</Text>
         ) : null}
 
         <SectionTitle>LINE ID</SectionTitle>
@@ -133,6 +139,38 @@ export default function ProfileScreen(): React.ReactElement {
               ))}
             </View>
             <PrimaryButton label="เปิดสิทธิ์ซื้อ" onPress={enableBuy} loading={busy} />
+          </>
+        ) : null}
+
+        {user.is_admin ? (
+          <>
+            <SectionTitle>ผู้ดูแล</SectionTitle>
+            <SecondaryButton label="ดูคำขอองค์กร" onPress={() => router.push('/admin')} />
+          </>
+        ) : null}
+
+        {user.can_buy && user.donor_tier === null && user.org_status !== 'pending' ? (
+          <>
+            <SectionTitle>รับบริจาค</SectionTitle>
+            <PrimaryButton
+              label="เป็นจิตอาสา"
+              onPress={() => {
+                void (async () => {
+                  setBusy(true);
+                  setError(null);
+                  try {
+                    await api.becomeVolunteer();
+                    setMessage('เปิดสิทธิ์จิตอาสาแล้ว');
+                  } catch (err) {
+                    setError(err instanceof ApiError ? err.message : 'เปิดสิทธิ์ไม่สำเร็จ');
+                  } finally {
+                    setBusy(false);
+                  }
+                })();
+              }}
+              loading={busy}
+            />
+            <Text style={styles.hint}>องค์กร: สมัครผ่าน API /api/donors/org-applications พร้อมเอกสาร (ในเฟสถัดไปจะมีฟอร์มเต็ม)</Text>
           </>
         ) : null}
 

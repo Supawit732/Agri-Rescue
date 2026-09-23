@@ -110,3 +110,19 @@ Migration `004_multi_role.sql` เพิ่ม `users.can_sell` / `can_buy` / `i
 JWT เก็บ `sub`, `role`, `can_sell`, `can_buy`, `is_admin` (อายุ 7 วันเหมือนเดิม) middleware ใหม่คือ `requireCapability('sell' | 'buy' | 'admin')` ใช้กับ plots/lots/market/orders และงานผู้ดูแล (สร้างรอบ, ปลด OTP, อนุมัติ charity) `requireRole('driver')` เหลือเฉพาะยืนยันจุดของคนขับ
 
 สมัครด้วย `can_sell` / `can_buy` (อย่างน้อยหนึ่งอย่าง) ประเภทสงเคราะห์ตั้ง `charity_approved = 0` จนกว่า `POST /api/auth/admin/approve-charity/:userId` ผู้ใช้เปิดบทบาทอีกฝั่งได้ที่ `PATCH /api/auth/profile` แอปเก็บโหมดขาย/ซื้อใน storage แล้วสลับที่ TopBar หน้าคนขับ/ผู้ประสานยังอยู่ใน repo แต่ AuthGate ไม่ส่งผู้ใช้ไปหน้าเหล่านั้น
+
+## D019 — Phase 6.1b เพดานและเกณฑ์ผู้รับบริจาค
+
+ค่าใน `server/src/domain/donorRules.ts` (`DONOR_CONFIG`):
+
+| รายการ | ค่า |
+|---|---|
+| เพดาน `volunteer` | 10 กก./สัปดาห์ (สัปดาห์เริ่มวันจันทร์ 00:00 เวลาไทย) |
+| เพดาน `trusted_volunteer` | 30 กก./สัปดาห์ |
+| เพดาน `verified_org` | `beneficiary_count × 0.5` กก./สัปดาห์ |
+| เลื่อนเป็น trusted | รูปยืนยัน `subject_match = true` ครบ 5 ครั้ง |
+| ระงับสิทธิ์ | infractions 3 ครั้งใน 60 วัน (พลาดกำหนด 48 ชม. หรือ subject_match = false) |
+| เอกสารองค์กร | pdf/jpg/png ไม่เกิน 5MB ต่อไฟล์ สูงสุด 3 ไฟล์ ใน `server/private_uploads/` ดาวน์โหลดเฉพาะ admin |
+| `donation_audience` เริ่มต้น | `verified_org_only` |
+
+บัญชี charity ที่อนุมัติแล้ว migration เป็น `verified_org` พร้อม `beneficiary_count` สำรอง 100 ถ้าไม่มีค่า

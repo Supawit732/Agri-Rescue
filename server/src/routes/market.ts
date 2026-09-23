@@ -21,6 +21,7 @@ interface MarketRow extends RowDataPacket {
   grade: ProduceGrade;
   ripeness: number;
   allow_donation: number;
+  donation_audience: 'verified_org_only' | 'all_donors';
   expires_at: Date;
   crop_name_th: string;
   base_shelf_days: number;
@@ -38,7 +39,7 @@ marketRouter.get(
     const query = querySchema.parse(req.query);
     const radiusKm = query.radius_km ?? 15;
     const [rows] = await pool.query<MarketRow[]>(
-      `SELECT h.id, h.weight_kg, h.grade, h.ripeness, h.allow_donation, h.expires_at,
+      `SELECT h.id, h.weight_kg, h.grade, h.ripeness, h.allow_donation, h.donation_audience, h.expires_at,
               c.name_th AS crop_name_th, c.base_shelf_days, c.market_price_per_kg,
               p.lat, p.lng, u.name AS farmer_name
        FROM harvest_lots h
@@ -61,6 +62,7 @@ marketRouter.get(
           grade: row.grade,
           ripeness: Number(row.ripeness),
           allow_donation: Number(row.allow_donation) === 1,
+          donation_audience: row.donation_audience,
           expires_at: new Date(row.expires_at).toISOString(),
           hours_left: hoursLeft,
           distance_km: distanceKm,

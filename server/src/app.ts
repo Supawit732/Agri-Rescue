@@ -2,6 +2,7 @@ import express, { type Express } from 'express';
 import { errorHandler } from './middleware/errorHandler';
 import { authRouter } from './routes/auth';
 import { batchesRouter } from './routes/batches';
+import { donorsRouter } from './routes/donors';
 import { cropsRouter } from './routes/crops';
 import { geoRouter } from './routes/geo';
 import { impactRouter } from './routes/impact';
@@ -25,6 +26,7 @@ export function createApp(): Express {
   });
   app.use(express.json({ limit: '8mb' }));
   app.use('/api/auth', authRouter);
+  app.use('/api/donors', donorsRouter);
   app.use('/api/geo', geoRouter);
   app.use('/api/crops', cropsRouter);
   app.use('/api/plots', plotsRouter);

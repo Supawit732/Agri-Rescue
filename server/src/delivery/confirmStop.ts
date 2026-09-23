@@ -3,6 +3,8 @@ import type { PoolConnection } from 'mysql2/promise';
 import { pool } from '../db/pool';
 import { CO2E_PER_KG } from '../db/seedData';
 import { assertLotTransition, InvalidLotTransitionError, type LotStatus } from '../domain/lotStateMachine';
+import { createDonationProofForOrder } from '../donors/donationService';
+
 import { HttpError } from '../http/errors';
 import { round2 } from './depot';
 import { loadBatch } from './createBatch';
@@ -240,6 +242,9 @@ async function confirmDrop(
     );
     await connection.query('UPDATE orders SET status = ? WHERE id = ?', ['delivered', order.id]);
     await connection.query('UPDATE harvest_lots SET status = ? WHERE id = ?', ['delivered', order.lot_id]);
+    if (Number(order.is_donation) === 1) {
+      await createDonationProofForOrder(connection, Number(order.id));
+    }
   }
   const stillPicked = orders.some((order) => order.status === 'picked' && order.drop_otp !== otp);
   if (!stillPicked) {

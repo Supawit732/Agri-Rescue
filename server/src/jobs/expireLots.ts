@@ -1,6 +1,7 @@
 import type { RowDataPacket } from 'mysql2';
 import { pool } from '../db/pool';
 import { assertLotTransition, type LotStatus } from '../domain/lotStateMachine';
+import { expireMissedDonationProofs } from '../donors/donationService';
 
 export const EXPIRE_INTERVAL_MS = 10 * 60 * 1000;
 
@@ -31,9 +32,15 @@ export async function expireOpenLots(now = new Date()): Promise<number> {
   }
 }
 
+export async function runExpireJobs(now = new Date()): Promise<{ lots: number; proofs: number }> {
+  const lots = await expireOpenLots(now);
+  const proofs = await expireMissedDonationProofs(now);
+  return { lots, proofs };
+}
+
 export function startExpireSchedule(): void {
   const run = (): void => {
-    void expireOpenLots().catch((error: unknown) => {
+    void runExpireJobs().catch((error: unknown) => {
       console.error(error);
     });
   };
