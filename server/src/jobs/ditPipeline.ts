@@ -1,7 +1,7 @@
 import type { ResultSetHeader, RowDataPacket } from 'mysql2';
 import { pickAutoDitMatch } from '../domain/ditAutoMatch';
 import { pool } from '../db/pool';
-import { getCachedMocProducts, hydrateMocProductCacheFromDisk } from '../pricing/mocProductCache';
+import { getCachedMocProducts, hydrateMocProductCacheFromDiskAsync } from '../pricing/mocProductCache';
 import { syncAllMappedCropPrices, type SyncProgress } from '../pricing/referencePrices';
 
 export type DitPipelineResult = {
@@ -205,24 +205,26 @@ export async function maybeRunDitDailyJob(now = new Date()): Promise<DitPipeline
   if (syncJob.status === 'running') {
     return null;
   }
+  // Claim the day before awaiting so concurrent expire ticks / warm don't double-run.
   lastDitJobBangkokDay = day;
   return runDitPipeline({ forceRefreshCatalog: true });
 }
 
-/** Call from server.ts: hydrate disk sync, then warm MOC + pipeline in background. */
+/** Call from server.ts: hydrate disk async, then warm MOC + pipeline in background. */
 export function startDitBackgroundWarm(): void {
   if (process.env.NODE_ENV === 'test') {
     return;
   }
-  const hydrated = hydrateMocProductCacheFromDisk();
-  console.log(`DIT catalog disk hydrate=${hydrated ? 'hit' : 'miss'}`);
   if (startupPipelineStarted) {
     return;
   }
   startupPipelineStarted = true;
+  // Prevent expire-job daily pipeline from racing with boot warm today.
+  lastDitJobBangkokDay = bangkokDateKey();
   void (async () => {
     try {
-      await getCachedMocProducts({ forceRefresh: !hydrated });
+      const hydrated = await hydrateMocProductCacheFromDiskAsync();
+      await getCachedMocProducts({ forceRefresh: !hydrated, allowNetwork: true });
       if (process.env.MOC_SYNC_SKIP === '1') {
         return;
       }

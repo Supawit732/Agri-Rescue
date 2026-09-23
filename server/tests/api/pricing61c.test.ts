@@ -103,6 +103,10 @@ describe('lots patch and pricing 6.1c', () => {
 describe('admin DIT mapping', () => {
   const app = testApp();
 
+  beforeEach(() => {
+    clearMocProductCacheForTests();
+  });
+
   afterEach(() => {
     jest.restoreAllMocks();
     clearMocProductCacheForTests();

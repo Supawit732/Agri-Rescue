@@ -10,6 +10,11 @@ import { bearer, insertCrop, loginStaff, registerUser, testApp } from '../helper
 describe('DIT automation', () => {
   const app = testApp();
 
+  beforeEach(() => {
+    clearMocProductCacheForTests();
+    resetDitJobStateForTests();
+  });
+
   afterEach(() => {
     jest.restoreAllMocks();
     clearMocProductCacheForTests();

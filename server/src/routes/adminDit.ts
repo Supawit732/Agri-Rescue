@@ -7,7 +7,7 @@ import { asyncHandler } from '../http/asyncHandler';
 import { HttpError } from '../http/errors';
 import { getDitSyncJobState, startDitSyncJob } from '../jobs/ditPipeline';
 import { requireAuth, requireCapability } from '../middleware/auth';
-import { clearMocProductCacheForTests, getCachedMocProducts } from '../pricing/mocProductCache';
+import { clearMocProductCacheForTests, getCachedMocProducts, getMocCatalogMeta, peekMocProductCache } from '../pricing/mocProductCache';
 import { syncCropReferencePrice } from '../pricing/referencePrices';
 
 export const adminDitRouter = Router();
@@ -19,7 +19,7 @@ const mappingSchema = z.object({
   unit_to_kg: z.number().positive().nullable().optional(),
 });
 
-async function loadMocCatalog(input?: { forceRefresh?: boolean }) {
+async function loadMocCatalog(input?: { forceRefresh?: boolean; allowNetwork?: boolean }) {
   try {
     return await getCachedMocProducts(input);
   } catch {
@@ -31,7 +31,14 @@ adminDitRouter.get(
   '/products',
   asyncHandler(async (req, res) => {
     const q = typeof req.query.q === 'string' ? req.query.q : '';
-    const cached = await loadMocCatalog();
+    // Request path: cache only — never wait on MOC.
+    let cached: Awaited<ReturnType<typeof getCachedMocProducts>>;
+    try {
+      cached = await getCachedMocProducts({ allowNetwork: false });
+    } catch {
+      res.json({ products: [], fetched_at: null, from_cache: false });
+      return;
+    }
     const products = q.trim() === '' ? cached.products.slice(0, 50) : searchDitProducts(q, cached.products, 30);
     res.json({
       products,
@@ -73,15 +80,9 @@ adminDitRouter.get(
          )
        ORDER BY c.id`,
     );
-    let productsFetchedAt: string | null = null;
-    let productsFromCache = true;
-    try {
-      const cached = await getCachedMocProducts();
-      productsFetchedAt = cached.fetched_at;
-      productsFromCache = cached.from_cache;
-    } catch {
-      // catalog optional for view page
-    }
+    // Never await MOC on this page — metadata from in-memory catalog only.
+    const meta = getMocCatalogMeta();
+    const peek = peekMocProductCache();
     const crops = rows.map((row) => ({
       id: Number(row.id),
       name_th: String(row.name_th),
@@ -121,8 +122,9 @@ adminDitRouter.get(
     }));
     res.json({
       crops,
-      products_fetched_at: productsFetchedAt,
-      products_from_cache: productsFromCache,
+      products_fetched_at: meta.fetched_at ?? peek?.fetched_at ?? null,
+      products_from_cache: peek !== null,
+      products_in_memory: meta.in_memory,
       sync_job: getDitSyncJobState(),
     });
   }),
@@ -137,8 +139,8 @@ adminDitRouter.post(
     if (crops[0] === undefined) {
       throw new HttpError(404, 'NOT_FOUND', 'ไม่พบพืชผล');
     }
-    const cached = await loadMocCatalog();
-    const match = cached.products.find((p) => p.product_id === body.product_code);
+    const cached = await loadMocCatalog({ allowNetwork: false }).catch(() => null);
+    const match = cached?.products.find((p) => p.product_id === body.product_code);
     const unitFromCatalog = match?.unit && match.unit !== 'unknown' ? match.unit : null;
     if (body.unit_to_kg === undefined) {
       await pool.query(
@@ -178,7 +180,7 @@ adminDitRouter.post(
     if (crop === undefined) {
       throw new HttpError(404, 'NOT_FOUND', 'ไม่พบพืชผล');
     }
-    const cached = await loadMocCatalog();
+    const cached = await loadMocCatalog({ allowNetwork: true });
     const top = suggestDitProducts(String(crop.name_th), cached.products, 3);
     res.json({
       suggestions: top.map((s) => ({

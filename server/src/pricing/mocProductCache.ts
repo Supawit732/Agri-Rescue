@@ -6,15 +6,23 @@ import { fetchMocProducts, type FetchJson, type MocProduct } from './mocClient';
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const CACHE_DIR = path.resolve(__dirname, '../../.cache');
 const CACHE_FILE = path.join(CACHE_DIR, 'moc-products.json');
+const PARSE_CHUNK = 250;
 
 interface CachePayload {
   fetched_at: string;
   products: MocProduct[];
 }
 
-let memory: { fetchedAtMs: number; products: DitProductCandidate[] } | null = null;
+export type MocCatalogSnapshot = {
+  products: DitProductCandidate[];
+  fetched_at: string;
+  from_cache: boolean;
+};
 
-function toCandidates(products: MocProduct[]): DitProductCandidate[] {
+let memory: { fetchedAtMs: number; products: DitProductCandidate[] } | null = null;
+let hydratePromise: Promise<boolean> | null = null;
+
+function toCandidatesSync(products: MocProduct[]): DitProductCandidate[] {
   return products.map((p) =>
     toDitCandidate({
       product_id: p.product_id,
@@ -23,6 +31,31 @@ function toCandidates(products: MocProduct[]): DitProductCandidate[] {
       category_name: p.category_name,
     }),
   );
+}
+
+/** Yield between chunks so large catalogs do not block the event loop. */
+async function toCandidatesAsync(products: MocProduct[]): Promise<DitProductCandidate[]> {
+  if (products.length <= PARSE_CHUNK) {
+    return toCandidatesSync(products);
+  }
+  const out: DitProductCandidate[] = [];
+  for (let i = 0; i < products.length; i += PARSE_CHUNK) {
+    const slice = products.slice(i, i + PARSE_CHUNK);
+    for (const p of slice) {
+      out.push(
+        toDitCandidate({
+          product_id: p.product_id,
+          product_name: p.product_name,
+          sell_type: p.sell_type,
+          category_name: p.category_name,
+        }),
+      );
+    }
+    if (i + PARSE_CHUNK < products.length) {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+  }
+  return out;
 }
 
 function readDiskCache(): CachePayload | null {
@@ -50,7 +83,7 @@ function writeDiskCache(products: MocProduct[]): void {
   }
 }
 
-function fromMemory(): { products: DitProductCandidate[]; fetched_at: string; from_cache: boolean } | null {
+function fromMemory(): MocCatalogSnapshot | null {
   if (memory === null) {
     return null;
   }
@@ -61,62 +94,129 @@ function fromMemory(): { products: DitProductCandidate[]; fetched_at: string; fr
   };
 }
 
-function fromDisk(allowStale: boolean, nowMs: number): {
-  products: DitProductCandidate[];
-  fetched_at: string;
-  from_cache: boolean;
-} | null {
+/** Memory only — never hits MOC or disk. Safe for hot request handlers. */
+export function peekMocProductCache(): MocCatalogSnapshot | null {
+  return fromMemory();
+}
+
+export function getMocCatalogMeta(): { fetched_at: string | null; product_count: number; in_memory: boolean } {
+  if (memory === null) {
+    return { fetched_at: null, product_count: 0, in_memory: false };
+  }
+  return {
+    fetched_at: new Date(memory.fetchedAtMs).toISOString(),
+    product_count: memory.products.length,
+    in_memory: true,
+  };
+}
+
+/** Load disk into memory without blocking the event loop (chunked parse). */
+export async function hydrateMocProductCacheFromDiskAsync(): Promise<boolean> {
+  if (memory !== null) {
+    return true;
+  }
+  if (hydratePromise !== null) {
+    return hydratePromise;
+  }
+  hydratePromise = (async () => {
+    const started = Date.now();
+    const disk = readDiskCache();
+    if (disk === null) {
+      console.log('DIT catalog disk hydrate=miss');
+      return false;
+    }
+    const fetchedAtMs = Date.parse(disk.fetched_at);
+    if (!Number.isFinite(fetchedAtMs)) {
+      return false;
+    }
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const products = await toCandidatesAsync(disk.products);
+    memory = { fetchedAtMs, products };
+    console.log(
+      `DIT catalog disk hydrate=hit count=${products.length} parse_ms=${Date.now() - started}`,
+    );
+    return true;
+  })().finally(() => {
+    hydratePromise = null;
+  });
+  return hydratePromise;
+}
+
+/** Sync hydrate for tests / legacy callers. */
+export function hydrateMocProductCacheFromDisk(): boolean {
+  if (memory !== null) {
+    return true;
+  }
   const disk = readDiskCache();
   if (disk === null) {
-    return null;
+    return false;
   }
   const fetchedAtMs = Date.parse(disk.fetched_at);
   if (!Number.isFinite(fetchedAtMs)) {
-    return null;
+    return false;
   }
-  if (!allowStale && nowMs - fetchedAtMs >= CACHE_TTL_MS) {
-    return null;
-  }
-  const products = toCandidates(disk.products);
-  memory = { fetchedAtMs, products };
-  return { products, fetched_at: disk.fetched_at, from_cache: true };
-}
-
-/** Sync hydrate from disk so requests can use catalog immediately after process start. */
-export function hydrateMocProductCacheFromDisk(): boolean {
-  const loaded = fromDisk(true, Date.now());
-  return loaded !== null;
+  memory = { fetchedAtMs, products: toCandidatesSync(disk.products) };
+  return true;
 }
 
 export async function getCachedMocProducts(input?: {
   forceRefresh?: boolean;
+  /** Default true. Set false on HTTP request paths — never wait on MOC. */
+  allowNetwork?: boolean;
   fetchJson?: FetchJson;
   nowMs?: number;
-}): Promise<{ products: DitProductCandidate[]; fetched_at: string; from_cache: boolean }> {
+}): Promise<MocCatalogSnapshot> {
   const nowMs = input?.nowMs ?? Date.now();
-  if (!input?.forceRefresh && memory !== null && nowMs - memory.fetchedAtMs < CACHE_TTL_MS) {
-    return fromMemory()!;
-  }
+  const allowNetwork = input?.allowNetwork !== false;
+
+  const serveMemoryIfOk = (): MocCatalogSnapshot | null => {
+    const snap = fromMemory();
+    if (snap === null || memory === null) {
+      return null;
+    }
+    if (!allowNetwork || nowMs - memory.fetchedAtMs < CACHE_TTL_MS) {
+      return snap;
+    }
+    return allowNetwork ? null : snap;
+  };
+
   if (!input?.forceRefresh) {
-    const freshDisk = fromDisk(false, nowMs);
-    if (freshDisk !== null) {
-      return freshDisk;
+    const hot = serveMemoryIfOk();
+    if (hot !== null) {
+      return hot;
+    }
+    if (memory === null) {
+      await hydrateMocProductCacheFromDiskAsync();
+      const afterDisk = serveMemoryIfOk();
+      if (afterDisk !== null) {
+        return afterDisk;
+      }
     }
   }
+
+  if (!allowNetwork) {
+    const mem = fromMemory();
+    if (mem !== null) {
+      return mem;
+    }
+    throw new Error('MOC catalog not in cache');
+  }
+
   try {
     const raw = await fetchMocProducts(input?.fetchJson);
-    const products = toCandidates(raw);
+    const products = await toCandidatesAsync(raw);
     memory = { fetchedAtMs: nowMs, products };
     writeDiskCache(raw);
     return { products, fetched_at: new Date(nowMs).toISOString(), from_cache: false };
   } catch (error) {
-    const staleMemory = fromMemory();
-    if (staleMemory !== null) {
-      return staleMemory;
+    const stale = fromMemory();
+    if (stale !== null) {
+      return stale;
     }
-    const staleDisk = fromDisk(true, nowMs);
-    if (staleDisk !== null) {
-      return staleDisk;
+    await hydrateMocProductCacheFromDiskAsync();
+    const diskStale = fromMemory();
+    if (diskStale !== null) {
+      return diskStale;
     }
     throw error;
   }
@@ -125,6 +225,7 @@ export async function getCachedMocProducts(input?: {
 /** Test helper */
 export function clearMocProductCacheForTests(): void {
   memory = null;
+  hydratePromise = null;
   try {
     if (fs.existsSync(CACHE_FILE)) {
       fs.unlinkSync(CACHE_FILE);

@@ -26,6 +26,15 @@ export function createApp(): Express {
     next();
   });
   app.use(express.json({ limit: '8mb' }));
+  if (process.env.NODE_ENV !== 'test') {
+    app.use((req, res, next) => {
+      const started = Date.now();
+      res.on('finish', () => {
+        console.log(`HTTP ${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - started}ms`);
+      });
+      next();
+    });
+  }
   app.use('/api/auth', authRouter);
   app.use('/api/donors', donorsRouter);
   app.use('/api/geo', geoRouter);

@@ -10,5 +10,5 @@ app.listen(port, () => {
   console.log(`Agri-Rescue API listening on port ${port}`);
 });
 
-startExpireSchedule();
 startDitBackgroundWarm();
+startExpireSchedule();
