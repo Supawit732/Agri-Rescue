@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { ApiError } from '../../src/api/client';
-import { LoginPrompt, PrimaryButton, Screen } from '../../src/components/ui';
+import { LoginPrompt, PrimaryButton, CtaStack, Screen } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
 import { C } from '../../src/theme';
 import SellScreen from '../../src/screens/SellScreen';
@@ -44,7 +44,9 @@ export default function SellTab(): React.ReactElement {
             ลงล็อตผลผลิตที่ใกล้หมดอายุ ตั้งราคาเริ่มต้นและราคาต่ำสุด หรือเปิดรับบริจาคได้จากที่นี่
           </Text>
           {error !== null ? <Text style={styles.error}>{error}</Text> : null}
-          <PrimaryButton label="เปิดการขาย" onPress={() => void enableSell()} loading={busy} />
+          <CtaStack>
+            <PrimaryButton label="เปิดการขาย" block onPress={() => void enableSell()} loading={busy} />
+          </CtaStack>
         </View>
       </Screen>
     );
@@ -54,8 +56,14 @@ export default function SellTab(): React.ReactElement {
 }
 
 const styles = StyleSheet.create({
-  box: { flex: 1, justifyContent: 'center', padding: 24, gap: 12 },
-  title: { fontSize: 22, fontWeight: '800', color: C.ink, textAlign: 'center' },
-  body: { fontSize: 15, color: C.mute, textAlign: 'center', lineHeight: 22 },
-  error: { color: C.chili, textAlign: 'center' },
+  box: { flex: 1, justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 24, gap: 12 },
+  title: { fontSize: 22, fontWeight: '800', color: C.ink, textAlign: 'center', paddingHorizontal: 8 },
+  body: {
+    fontSize: 15,
+    color: C.mute,
+    textAlign: 'center',
+    lineHeight: 22,
+    paddingHorizontal: 8,
+  },
+  error: { color: C.chili, textAlign: 'center', paddingHorizontal: 8 },
 });

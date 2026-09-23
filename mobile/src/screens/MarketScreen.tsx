@@ -123,6 +123,7 @@ function MarketList(): React.ReactElement {
                       <View style={styles.slot}>
                         <PrimaryButton
                           label={`ซื้อ ${lot.price_per_kg} บาท/กก.`}
+                          block
                           onPress={() =>
                             router.push({
                               pathname: '/lots/[id]',
@@ -137,6 +138,7 @@ function MarketList(): React.ReactElement {
                         <PrimaryButton
                           label="ขอรับบริจาค"
                           tone="turmeric"
+                          block
                           onPress={() =>
                             router.push({
                               pathname: '/lots/[id]',
@@ -164,5 +166,5 @@ const styles = StyleSheet.create({
   cardLine: { color: C.ink, marginBottom: 4 },
   reason: { color: C.chili, marginTop: 6, marginBottom: 4 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
-  slot: { flexGrow: 1, flexBasis: '45%', minWidth: 140 },
+  slot: { flexGrow: 1, flexBasis: '45%', minWidth: 160 },
 });
