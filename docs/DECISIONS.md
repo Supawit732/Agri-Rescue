@@ -80,3 +80,7 @@ Jest โหลด `server/.env.test` ก่อน แล้วรีเซ็ต
 ## D005 — เซิร์ฟเวอร์ใช้ CommonJS
 
 `tsconfig` ตั้ง `module` เป็น `commonjs` เพื่อให้ Express, Jest และ ts-jest ทำงานร่วมกันโดยไม่ตั้งค่า ESM เพิ่ม
+
+## D014 — LocationPicker และ geo API
+
+หน้าสมัครและหน้าเพิ่มแปลงใช้ `LocationPicker` ร่วมกัน ไม่ใส่พิกัดเริ่มต้น 13.65/100.62 ต้องมีพิกัดก่อนส่ง ลิงก์ Google Maps แบบเต็มแยกพิกัดในแอป ลิงก์สั้น `maps.app.goo.gl` / `goo.gl/maps` ไปที่ `POST /api/geo/resolve-link` (ตาม redirect เฉพาะโดเมน Google ภายใน 5 วินาที) ชื่อสถานที่จาก `GET /api/geo/reverse` เรียก Nominatim ด้วย User-Agent ของแอป แคช 24 ชม. และไม่เกิน 1 request/วินาที ถ้าเรียกไม่ได้แสดงพิกัดตัวเลข พิกัดนอกกรอบไทยคร่าว ๆ (lat 5–21, lng 97–106) เตือนแต่ไม่บล็อก

@@ -33,6 +33,7 @@ interface RegisterInput {
 interface Api {
   getCrops: () => Promise<Crop[]>;
   getPlots: () => Promise<Plot[]>;
+  createPlot: (input: { name: string; lat: number; lng: number; area_rai: number }) => Promise<Plot>;
   estimate: (input: { crop_id: number; ripeness: number; grade: Grade; lat: number; lng: number }) => Promise<EstimateResponse>;
   createLot: (input: {
     plot_id: number;
@@ -133,6 +134,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
     return {
       getCrops: () => authed<{ crops: Crop[] }>('GET', '/api/crops').then((r) => r.crops),
       getPlots: () => authed<{ plots: Plot[] }>('GET', '/api/plots/mine').then((r) => r.plots),
+      createPlot: (input) => authed<{ plot: Plot }>('POST', '/api/plots', input).then((r) => r.plot),
       estimate: (input) => authed<EstimateResponse>('POST', '/api/lots/estimate', input),
       createLot: (input) => authed('POST', '/api/lots', input),
       getMyLots: () => authed<{ lots: MyLot[] }>('GET', '/api/lots/mine').then((r) => r.lots),

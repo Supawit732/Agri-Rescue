@@ -15,6 +15,7 @@ import {
   Segmented,
   TopBar,
 } from '../src/components/ui';
+import { LocationPicker, type LatLng } from '../src/components/LocationPicker';
 import { GRADE_OPTIONS, RIPENESS_LABELS, STATUS_LABELS } from '../src/constants';
 import { useAuth } from '../src/context/AuthContext';
 import { useApiData } from '../src/hooks/useApiData';
@@ -33,6 +34,10 @@ export default function FarmerScreen(): React.ReactElement {
     setTab('mine');
   }, []);
 
+  const onPlotCreated = useCallback(() => {
+    setRefreshKey((value) => value + 1);
+  }, []);
+
   return (
     <Screen>
       <TopBar title="เกษตรกร" onImpact={() => router.push('/impact')} onLogout={logout} />
@@ -44,22 +49,30 @@ export default function FarmerScreen(): React.ReactElement {
         value={tab}
         onChange={(key) => setTab(key as 'new' | 'mine')}
       />
-      {tab === 'new' ? <NewLot api={api} onCreated={onCreated} /> : <MyLots api={api} refreshKey={refreshKey} />}
+      {tab === 'new' ? (
+        <NewLot api={api} refreshKey={refreshKey} onCreated={onCreated} onPlotCreated={onPlotCreated} />
+      ) : (
+        <MyLots api={api} refreshKey={refreshKey} />
+      )}
     </Screen>
   );
 }
 
 function NewLot({
   api,
+  refreshKey,
   onCreated,
+  onPlotCreated,
 }: {
   api: ReturnType<typeof useAuth>['api'];
+  refreshKey: number;
   onCreated: () => void;
+  onPlotCreated: () => void;
 }): React.ReactElement {
   const meta = useApiData(async () => {
     const [crops, plots] = await Promise.all([api.getCrops(), api.getPlots()]);
     return { crops, plots };
-  }, []);
+  }, [refreshKey]);
 
   return (
     <DataState
@@ -67,11 +80,68 @@ function NewLot({
       error={meta.error}
       data={meta.data}
       onRetry={meta.reload}
-      isEmpty={(d) => d.plots.length === 0 || d.crops.length === 0}
-      emptyText="ยังไม่มีแปลงหรือพืชสำหรับลงล็อต"
+      isEmpty={(d) => d.crops.length === 0}
+      emptyText="ยังไม่มีพืชในระบบ"
     >
-      {(data) => <NewLotForm api={api} crops={data.crops} plots={data.plots} onCreated={onCreated} />}
+      {(data) =>
+        data.plots.length === 0 ? (
+          <AddPlotForm api={api} onCreated={onPlotCreated} />
+        ) : (
+          <NewLotForm api={api} crops={data.crops} plots={data.plots} onCreated={onCreated} />
+        )
+      }
     </DataState>
+  );
+}
+
+function AddPlotForm({
+  api,
+  onCreated,
+}: {
+  api: ReturnType<typeof useAuth>['api'];
+  onCreated: () => void;
+}): React.ReactElement {
+  const [name, setName] = useState('');
+  const [area, setArea] = useState('1');
+  const [coords, setCoords] = useState<LatLng | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const areaNum = Number(area);
+  const canSubmit = name.trim().length > 0 && coords !== null && areaNum > 0;
+
+  const onSubmit = async (): Promise<void> => {
+    if (coords === null) {
+      setError('กรุณาเลือกตำแหน่งแปลง');
+      return;
+    }
+    setError(null);
+    setSubmitting(true);
+    try {
+      await api.createPlot({
+        name: name.trim(),
+        lat: coords.lat,
+        lng: coords.lng,
+        area_rai: areaNum,
+      });
+      onCreated();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'เพิ่มแปลงไม่สำเร็จ');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Body>
+      <SectionTitle>เพิ่มแปลงแรก</SectionTitle>
+      <Text style={styles.addPlotHint}>ต้องมีแปลงก่อนจึงจะลงล็อตได้</Text>
+      <Field label="ชื่อแปลง" value={name} onChangeText={setName} placeholder="เช่น แปลงหน้าบ้าน" />
+      <Field label="พื้นที่ (ไร่)" value={area} onChangeText={setArea} keyboardType="numeric" />
+      <LocationPicker value={coords} onChange={setCoords} label="ตำแหน่งแปลง" />
+      {error !== null ? <Text style={styles.previewError}>{error}</Text> : null}
+      <PrimaryButton label="บันทึกแปลง" onPress={onSubmit} loading={submitting} disabled={!canSubmit} />
+    </Body>
   );
 }
 
@@ -299,6 +369,7 @@ function MyLots({
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap' },
   plotName: { color: C.ink, fontSize: 16, fontWeight: '600', marginBottom: 12 },
+  addPlotHint: { color: C.mute, marginBottom: 12 },
   checkboxRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 12 },
   checkbox: {
     width: 24,
