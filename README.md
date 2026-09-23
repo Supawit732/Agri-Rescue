@@ -38,8 +38,18 @@ npm install
 | `JWT_SECRET` | ความลับสำหรับเซ็น JWT |
 | `DEPOT_LAT` | ละติจูดจุดเริ่มรอบวิ่ง |
 | `DEPOT_LNG` | ลองจิจูดจุดเริ่มรอบวิ่ง |
+| `AI_VISION_BASE_URL` | ฐาน URL ของ OpenAI-compatible vision API (ว่าง = `https://opencode.ai/zen/go/v1`) |
+| `AI_VISION_API_KEY` | API key ของบริการ vision (ว่าง = ประเมินจากภาพไม่พร้อมใช้) |
+| `AI_VISION_MODEL` | ชื่อโมเดล (ว่าง = `mimo-v2.6-flash`) |
 
 ไฟล์ `.env` ไม่ถูก commit
+
+ค่า `AI_VISION_*` ชี้ไปที่ endpoint แบบ OpenAI-compatible (`POST {base}/chat/completions`) ไม่ผูกกับผู้ให้บริการรายใดรายหนึ่ง ทดสอบจริงด้วย:
+
+```bash
+cd server
+npm run ai:smoke -- ./path/to/photo.jpg 1
+```
 
 ## คำสั่งเซิร์ฟเวอร์
 
@@ -53,9 +63,10 @@ npm run dev    # รัน API แบบ watch
 npm run migrate
 npm run seed
 npm run seed:reset
+npm run ai:smoke -- <path-รูป> <crop_id>   # เรียก vision API จริงเพื่อทดสอบ
 ```
 
-`npm test` อ่าน `server/.env.test` แล้วรีเซ็ตข้อมูลในฐานนั้นก่อนแต่ละไฟล์เทส ไม่เรียก Open-Meteo จริง ฐานพัฒนาใน `.env` ไม่ถูกแตะ คัดลอก `server/.env.test.example` เป็น `server/.env.test` แล้วใส่รหัสฐานเทส ไฟล์ `.env` และ `.env.test` ไม่ถูก commit
+`npm test` อ่าน `server/.env.test` แล้วรีเซ็ตข้อมูลในฐานนั้นก่อนแต่ละไฟล์เทส ไม่เรียก Open-Meteo หรือ vision API จริง ฐานพัฒนาใน `.env` ไม่ถูกแตะ คัดลอก `server/.env.test.example` เป็น `server/.env.test` แล้วใส่รหัสฐานเทส ไฟล์ `.env` และ `.env.test` ไม่ถูก commit
 
 ## เรียก API
 

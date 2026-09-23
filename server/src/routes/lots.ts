@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { ResultSetHeader, RowDataPacket } from 'mysql2';
 import { z } from 'zod';
+import { assessRipenessFromPhoto, loadVisionConfig } from '../ai/vision';
 import { pool } from '../db/pool';
 import { urgentPricePerKg, type ProduceGrade } from '../domain/pricing';
 import { predictShelfHours } from '../domain/shelfLife';
@@ -21,6 +22,12 @@ const estimateSchema = z.object({
   lng: z.number().gte(-180).lte(180),
 });
 
+const assessPhotoSchema = z.object({
+  crop_id: z.number().int().positive(),
+  image_base64: z.string().min(1, 'กรุณาส่งรูป'),
+  mime: z.enum(['image/jpeg', 'image/png']),
+});
+
 const createSchema = z.object({
   plot_id: z.number().int().positive(),
   crop_id: z.number().int().positive(),
@@ -29,10 +36,14 @@ const createSchema = z.object({
   ripeness: z.number().int().min(0).max(4),
   allow_donation: z.boolean().optional(),
   photo_url: z.string().max(1024).nullable().optional(),
+  ai_ripeness: z.number().int().min(0).max(4).nullable().optional(),
+  ai_confidence: z.number().min(0).max(1).nullable().optional(),
+  ai_model: z.string().max(128).nullable().optional(),
 });
 
 interface CropRow extends RowDataPacket {
   id: number;
+  name_th: string;
   base_shelf_days: number;
   market_price_per_kg: number;
 }
@@ -62,6 +73,20 @@ lotsRouter.post(
   }),
 );
 
+lotsRouter.post(
+  '/assess-photo',
+  asyncHandler(async (req, res) => {
+    const body = assessPhotoSchema.parse(req.body);
+    const crop = await findCrop(body.crop_id);
+    const result = await assessRipenessFromPhoto({
+      cropNameTh: crop.name_th,
+      imageBase64: body.image_base64,
+      mime: body.mime,
+    });
+    res.json(result);
+  }),
+);
+
 lotsRouter.get(
   '/mine',
   asyncHandler(async (req, res) => {
@@ -88,6 +113,13 @@ lotsRouter.post(
     const createdAt = new Date();
     const expiresAt = new Date(createdAt.getTime() + shelfHours * 60 * 60 * 1000);
     const allowDonation = body.allow_donation === true ? 1 : 0;
+    const hasAi =
+      body.ai_ripeness !== undefined &&
+      body.ai_ripeness !== null &&
+      body.ai_confidence !== undefined &&
+      body.ai_confidence !== null;
+    const method = hasAi && body.ai_ripeness === body.ripeness ? 'model' : 'rule';
+    const aiModel = hasAi ? (body.ai_model ?? loadVisionConfig().model) : null;
     const connection = await pool.getConnection();
     try {
       await connection.beginTransaction();
@@ -111,9 +143,21 @@ lotsRouter.post(
       );
       const [assessmentResult] = await connection.query<ResultSetHeader>(
         `INSERT INTO quality_assessments
-           (lot_id, method, ripeness, temp_c, humidity, predicted_shelf_hours, created_at)
-         VALUES (?, 'rule', ?, ?, ?, ?, ?)`,
-        [lotResult.insertId, body.ripeness, weather.tempC, weather.humidity, shelfHours, createdAt],
+           (lot_id, method, ripeness, temp_c, humidity, predicted_shelf_hours,
+            ai_ripeness, ai_confidence, ai_model, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          lotResult.insertId,
+          method,
+          body.ripeness,
+          weather.tempC,
+          weather.humidity,
+          shelfHours,
+          hasAi ? body.ai_ripeness : null,
+          hasAi ? body.ai_confidence : null,
+          aiModel,
+          createdAt,
+        ],
       );
       await connection.commit();
       const pricePerKg = quotePrice(crop, body.grade, shelfHours);
@@ -135,11 +179,14 @@ lotsRouter.post(
         assessment: {
           id: assessmentResult.insertId,
           lot_id: lotResult.insertId,
-          method: 'rule',
+          method,
           ripeness: body.ripeness,
           temp_c: weather.tempC,
           humidity: weather.humidity,
           predicted_shelf_hours: shelfHours,
+          ai_ripeness: hasAi ? body.ai_ripeness : null,
+          ai_confidence: hasAi ? body.ai_confidence : null,
+          ai_model: aiModel,
         },
       });
     } catch (error) {
@@ -162,7 +209,7 @@ function quotePrice(crop: CropRow, grade: ProduceGrade, hoursLeft: number): numb
 
 async function findCrop(cropId: number): Promise<CropRow> {
   const [rows] = await pool.query<CropRow[]>(
-    'SELECT id, base_shelf_days, market_price_per_kg FROM crops WHERE id = ?',
+    'SELECT id, name_th, base_shelf_days, market_price_per_kg FROM crops WHERE id = ?',
     [cropId],
   );
   const crop = rows[0];

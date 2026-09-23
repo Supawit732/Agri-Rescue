@@ -77,6 +77,14 @@ Jest โหลด `server/.env.test` ก่อน แล้วรีเซ็ต
 
 `expireOpenLots(now)` เปลี่ยนเฉพาะล็อต `open` ที่เลยเวลาเป็น `expired` `startExpireSchedule` ถูกเรียกจาก `server.ts` เท่านั้น
 
+## D015 — ประเมินความสุกจากภาพผ่าน OpenAI-compatible vision API
+
+ใช้ตัวแปร `AI_VISION_BASE_URL` / `AI_VISION_API_KEY` / `AI_VISION_MODEL` (ค่าใน `.env.example` ว่าง; ถ้าไม่ใส่ base/model จะใช้ค่าเริ่มต้นของแผน) เรียก `POST {base}/chat/completions` ส่งรูปเป็น data URI ไม่ผูกกับผู้ให้บริการรายใดรายหนึ่ง
+
+`POST /lots/assess-photo` จำกัด jpeg/png ≤ 5MB timeout 20 วินาที ส่ง `response_format` แบบ json_schema และ `thinking: { type: "disabled" }` ถ้าได้ 400 เพราะไม่รองรับพารามิเตอร์ ให้ retry ครั้งเดียวโดยตัดพารามิเตอร์นั้นออก แล้วดึง JSON จากคำตอบ (รองรับ code fence) validate ด้วย zod ถ้าไม่มี key / timeout / error / parse ไม่ได้ ตอบ `{ available: false, reason }` ความมั่นใจต่ำกว่า 0.6 ตอบพร้อม `low_confidence: true`
+
+ตอนสร้างล็อต ถ้ามีค่า AI และเกษตรกรใช้ความสุกเดียวกับ AI → `quality_assessments.method = model` ถ้าแก้ค่า → `method = rule` แต่ยังเก็บ `ai_ripeness` / `ai_confidence` / `ai_model` (migration `003_ai_assessment.sql`) เทส mock ทุกกรณีห้ามยิง API จริง สคริปต์ `npm run ai:smoke` ไว้ทดสอบมือกับ API จริง
+
 ## D005 — เซิร์ฟเวอร์ใช้ CommonJS
 
 `tsconfig` ตั้ง `module` เป็น `commonjs` เพื่อให้ Express, Jest และ ts-jest ทำงานร่วมกันโดยไม่ตั้งค่า ESM เพิ่ม

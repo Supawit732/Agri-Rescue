@@ -41,6 +41,21 @@ export interface EstimateResponse {
   weather_source: 'live' | 'fallback';
 }
 
+export type AssessPhotoResponse =
+  | {
+      available: true;
+      ripeness: number;
+      confidence: number;
+      defects: string[];
+      note_th: string;
+      low_confidence: boolean;
+      model: string;
+    }
+  | {
+      available: false;
+      reason: string;
+    };
+
 export interface MyLot {
   id: number;
   plot_id: number;

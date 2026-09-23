@@ -34,7 +34,14 @@
           "backgroundColor": "#ffffff"
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "ใช้เลือกรูปผลผลิตเพื่อประเมินความสุก",
+          "cameraPermission": "ใช้ถ่ายรูปผลผลิตเพื่อประเมินความสุก"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
