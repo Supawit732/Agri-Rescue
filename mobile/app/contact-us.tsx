@@ -2,6 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,7 +14,7 @@ import { FormField, useFieldErrors, useFieldScroll } from '../src/components/for
 import { PrimaryButton, Screen, StackHeader } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
 import { useApiData } from '../src/hooks/useApiData';
-import { formatDateTime, formatTemplate, useI18n } from '../src/i18n';
+import { formatTemplate, useI18n } from '../src/i18n';
 import { C, fonts, radius } from '../src/theme';
 
 const TOPICS: Array<{ key: SupportTopic; labelKey: keyof ReturnType<typeof useI18n>['t']['support'] }> = [
@@ -38,6 +39,7 @@ export default function ContactUsScreen(): React.ReactElement {
   const [details, setDetails] = useState('');
   const [replyVia, setReplyVia] = useState<SupportReplyVia>('app');
   const [orderId, setOrderId] = useState<number | null>(null);
+  const [orderPickerOpen, setOrderPickerOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const { errors, setErrors, setFieldError } = useFieldErrors();
@@ -142,8 +144,14 @@ export default function ContactUsScreen(): React.ReactElement {
               ) : null}
             </Pressable>
           ))}
-          {tickets.data?.tickets.length === 0 ? (
-            <Text style={styles.muted}>{t.support.empty}</Text>
+            {tickets.data?.tickets.length === 0 ? (
+              <Text style={styles.muted}>{t.support.empty}</Text>
+            ) : null}
+          {tickets.loading && tickets.data === null ? (
+            <Text style={styles.muted}>{t.common.loading}</Text>
+          ) : null}
+          {tickets.error !== null && tickets.data === null ? (
+            <Text style={styles.error}>{tickets.error}</Text>
           ) : null}
         </View>
 
@@ -151,7 +159,7 @@ export default function ContactUsScreen(): React.ReactElement {
           <Text style={styles.h2}>{t.support.newTicket}</Text>
           <Text style={styles.muted}>{t.support.replyWithin}</Text>
 
-          <Text style={styles.label}>{t.support.details}</Text>
+          <Text style={styles.label}>{t.support.topicLabel}</Text>
           <View style={styles.chipWrap}>
             {TOPICS.map((item) => {
               const selected = topic === item.key;
@@ -159,6 +167,7 @@ export default function ContactUsScreen(): React.ReactElement {
                 <Pressable
                   key={item.key}
                   accessibilityRole="button"
+                  accessibilityState={{ selected }}
                   onPress={() => setTopic(item.key)}
                   style={[styles.chip, selected ? styles.chipOn : null]}
                 >
@@ -172,14 +181,9 @@ export default function ContactUsScreen(): React.ReactElement {
 
           <Text style={styles.label}>{t.support.relatedOrder}</Text>
           <Pressable
+            accessibilityRole="button"
             style={styles.select}
-            onPress={() => {
-              const list = orders.data ?? [];
-              if (list.length === 0) return;
-              const idx = list.findIndex((o) => o.id === orderId);
-              const next = idx < 0 ? list[0] : list[(idx + 1) % list.length];
-              setOrderId(next?.id ?? null);
-            }}
+            onPress={() => setOrderPickerOpen(true)}
           >
             <Text style={styles.selectText}>
               {orderId === null
@@ -194,8 +198,55 @@ export default function ContactUsScreen(): React.ReactElement {
             <Feather name="chevron-down" size={18} color={C.mute} />
           </Pressable>
 
+          <Modal
+            visible={orderPickerOpen}
+            transparent
+            animationType="slide"
+            onRequestClose={() => setOrderPickerOpen(false)}
+          >
+            <Pressable
+              style={styles.sheetBackdrop}
+              onPress={() => setOrderPickerOpen(false)}
+              accessibilityLabel={t.common.close}
+            >
+              <View style={{ flex: 1 }} />
+            </Pressable>
+            <View style={styles.sheet}>
+              <Text style={styles.sheetTitle}>{t.support.relatedOrder}</Text>
+              <ScrollView contentContainerStyle={styles.sheetList}>
+                <Pressable
+                  accessibilityRole="button"
+                  style={styles.sheetRow}
+                  onPress={() => {
+                    setOrderId(null);
+                    setOrderPickerOpen(false);
+                  }}
+                >
+                  <Text style={styles.sheetRowText}>{t.support.noOrder}</Text>
+                </Pressable>
+                {(orders.data ?? []).map((order) => {
+                  const kg = order.quantity_kg ?? 0;
+                  const label = `#${order.id} · ${formatNumber(kg)} ${t.dashboard.unitKg}`;
+                  return (
+                    <Pressable
+                      key={order.id}
+                      accessibilityRole="button"
+                      style={styles.sheetRow}
+                      onPress={() => {
+                        setOrderId(order.id);
+                        setOrderPickerOpen(false);
+                      }}
+                    >
+                      <Text style={styles.sheetRowText}>{label}</Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          </Modal>
+
           <FormField
-            label={t.support.details}
+            label={t.support.detailLabel}
             name="details"
             value={details}
             onChangeText={(text) => {
@@ -246,7 +297,7 @@ export default function ContactUsScreen(): React.ReactElement {
           })}
 
           {formError !== null ? <Text style={styles.error}>{formError}</Text> : null}
-          <PrimaryButton label={t.support.submit} onPress={() => void submit()} loading={busy} />
+          <PrimaryButton label={t.support.submit} block onPress={() => void submit()} loading={busy} />
         </View>
 
         <View style={styles.warning}>
@@ -294,7 +345,7 @@ const styles = StyleSheet.create({
   label: { fontSize: 14, fontWeight: '600', color: C.ink, fontFamily: fonts.bodySemi, marginTop: 4 },
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
-    minHeight: 36,
+    minHeight: 44,
     paddingHorizontal: 14,
     borderRadius: 18,
     borderWidth: 1,
@@ -343,4 +394,40 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   warningText: { flex: 1, fontSize: 13, color: '#3B2A06', lineHeight: 20, fontFamily: fonts.body },
+  sheetBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: C.overlay,
+  },
+  sheet: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    maxHeight: '70%',
+    backgroundColor: C.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 16,
+    paddingBottom: 24,
+  },
+  sheetTitle: {
+    fontFamily: fonts.titleBold,
+    fontSize: 18,
+    fontWeight: '700',
+    color: C.ink,
+    paddingHorizontal: 20,
+    marginBottom: 8,
+  },
+  sheetList: { paddingHorizontal: 12, gap: 4 },
+  sheetRow: {
+    minHeight: 52,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    borderRadius: 12,
+  },
+  sheetRowText: { fontSize: 15, color: C.ink, fontFamily: fonts.body },
 });

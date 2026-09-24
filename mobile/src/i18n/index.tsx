@@ -20,6 +20,7 @@ type I18nContextValue = {
   formatNumber: (n: number) => string;
   formatDateTime: (isoOrDate: string | Date) => string;
   formatDate: (isoOrDate: string | Date) => string;
+  formatRelativeTime: (isoOrDate: string | Date) => string;
   cropName: (crop: CropNameSource) => string;
   translateError: (code: string, fallback?: string) => string;
   translateFieldError: (codeOrMessage: string) => string;
@@ -59,6 +60,32 @@ export function formatDate(isoOrDate: string | Date, locale: Locale): string {
     return String(isoOrDate);
   }
   return new Intl.DateTimeFormat(intlLocale[locale], { dateStyle: 'medium' }).format(date);
+}
+
+/** Relative time like “5 นาทีที่แล้ว” / “5 min ago”. */
+export function formatRelativeTime(
+  isoOrDate: string | Date,
+  t: Messages,
+  now: Date = new Date(),
+): string {
+  const date = toDate(isoOrDate);
+  if (Number.isNaN(date.getTime())) {
+    return String(isoOrDate);
+  }
+  const diffMs = now.getTime() - date.getTime();
+  const minutes = Math.floor(diffMs / 60_000);
+  if (minutes < 1) {
+    return t.notifications.justNow;
+  }
+  if (minutes < 60) {
+    return formatTemplate(t.notifications.minutesAgo, { n: minutes });
+  }
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    return formatTemplate(t.notifications.hoursAgo, { n: hours });
+  }
+  const days = Math.floor(hours / 24);
+  return formatTemplate(t.notifications.daysAgo, { n: days });
 }
 
 export function cropName(crop: CropNameSource, locale: Locale): string {
@@ -103,6 +130,7 @@ function buildHelpers(locale: Locale, t: Messages): Omit<I18nContextValue, 'loca
     formatNumber: (n) => formatNumber(n, locale),
     formatDateTime: (isoOrDate) => formatDateTime(isoOrDate, locale),
     formatDate: (isoOrDate) => formatDate(isoOrDate, locale),
+    formatRelativeTime: (isoOrDate) => formatRelativeTime(isoOrDate, t),
     cropName: (crop) => cropName(crop, locale),
     translateError: (code, fallback) => translateError(code, fallback, locale),
     translateFieldError: (codeOrMessage) => translateFieldError(codeOrMessage, locale),

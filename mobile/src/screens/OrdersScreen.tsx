@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { ApiError } from '../api/client';
 import type { Order } from '../api/types';
 import {
@@ -18,6 +18,16 @@ import { useApiData } from '../hooks/useApiData';
 import { formatCountdown, hoursLeftFrom, useNow } from '../hooks/useNow';
 import { formatTemplate, useI18n } from '../i18n';
 import { C } from '../theme';
+
+function statusTone(status: string): { fg: string; bg: string } {
+  if (status === 'cancelled') {
+    return { fg: C.mute, bg: '#E9ECE6' };
+  }
+  if (status === 'expired') {
+    return { fg: C.urgentFg, bg: C.urgentBg };
+  }
+  return { fg: C.leaf, bg: C.leafSoft };
+}
 
 export default function OrdersScreen(): React.ReactElement {
   const { user } = useAuth();
@@ -80,6 +90,19 @@ function OrdersList(): React.ReactElement {
     }
   };
 
+  const confirmCancel = (order: Order): void => {
+    Alert.alert(t.orderDetail.cancelTitle, t.orderDetail.cancelBody, [
+      { text: t.orderDetail.cancelNo, style: 'cancel' },
+      {
+        text: t.orderDetail.cancelYes,
+        style: 'destructive',
+        onPress: () => {
+          void cancel(order);
+        },
+      },
+    ]);
+  };
+
   return (
     <Screen>
       <DataState
@@ -93,13 +116,6 @@ function OrdersList(): React.ReactElement {
         {(orders) => (
           <Body>
             {banner !== null ? <Text style={styles.banner}>{banner}</Text> : null}
-            {orders.length === 0 ? (
-              <EmptyState
-                message={t.orders.empty}
-                ctaLabel={t.orders.goMarket}
-                onCta={() => router.push('/(tabs)')}
-              />
-            ) : null}
             {orders.map((order) => {
               const qty = order.quantity_kg ?? 0;
               const total =
@@ -111,6 +127,7 @@ function OrdersList(): React.ReactElement {
                   : formatTemplate(t.orders.lotFallback, { id: order.lot_id });
               const hours =
                 order.expires_at !== undefined ? hoursLeftFrom(order.expires_at, now) : null;
+              const tone = statusTone(order.status);
               return (
                 <Pressable
                   key={order.id}
@@ -124,7 +141,7 @@ function OrdersList(): React.ReactElement {
                         {title}
                         {qty > 0 ? ` · ${formatNumber(qty)} ${t.common.kg}` : ''}
                       </Text>
-                      <Badge text={t.status[order.status] ?? order.status} fg={C.leaf} bg={C.leafSoft} />
+                      <Badge text={t.status[order.status] ?? order.status} fg={tone.fg} bg={tone.bg} />
                     </View>
                     <Text style={styles.meta}>
                       {formatTemplate(t.orders.orderMeta, { id: order.id })}
@@ -140,9 +157,12 @@ function OrdersList(): React.ReactElement {
                     </Text>
                     {order.status === 'reserved' && order.batch_id === null ? (
                       <SecondaryButton
+                        tone="danger"
                         label={busyId === order.id ? t.orders.cancelling : t.orders.cancel}
                         disabled={busyId === order.id}
-                        onPress={() => void cancel(order)}
+                        onPress={() => {
+                          confirmCancel(order);
+                        }}
                       />
                     ) : null}
                   </Card>

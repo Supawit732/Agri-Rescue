@@ -6,9 +6,7 @@ import { DataState, SectionTitle } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
 import { useApiData } from '../../src/hooks/useApiData';
 import { useI18n } from '../../src/i18n';
-import { C, fonts, radius } from '../../src/theme';
-import { OrgApplicationsPanel } from '../../src/admin/OldAdminPanels';
-import { SupportInboxPanel } from '../../src/admin/OldAdminPanels';
+import { C, fonts } from '../../src/theme';
 
 type QueueKey = 'org' | 'support' | 'weight' | 'otp' | 'proof';
 
@@ -21,7 +19,6 @@ export default function AdminInboxScreen(): React.ReactElement {
 
   const openItem = (link: string): void => {
     if (link.startsWith('/admin')) {
-      // stay / tab switch handled below
       if (link.includes('tab=orgs')) {
         setQueue('org');
         return;
@@ -44,39 +41,40 @@ export default function AdminInboxScreen(): React.ReactElement {
     <ScrollView contentContainerStyle={styles.body}>
       <SectionTitle>{t.admin.tabInbox}</SectionTitle>
       <DataState loading={loading} error={error} data={data} onRetry={reload}>
-        {(payload) => (
-          <>
-            <View style={styles.filters}>
-              {(
-                [
-                  { key: 'org' as const, label: t.admin.queueOrg, count: payload.counts.org },
-                  { key: 'support' as const, label: t.admin.queueSupport, count: payload.counts.support },
-                  { key: 'weight' as const, label: t.admin.queueWeight, count: payload.counts.weight },
-                  { key: 'otp' as const, label: t.admin.queueOtp, count: payload.counts.otp },
-                  { key: 'proof' as const, label: t.admin.queueProof, count: payload.counts.proof },
-                ] as const
-              ).map((item) => (
-                <Pressable
-                  key={item.key}
-                  style={[styles.chip, (queue ?? item.key) === item.key && item.count > 0 ? styles.chipOn : null]}
-                  onPress={() => setQueue(queue === item.key ? null : item.key)}
-                >
-                  <Text
-                    style={[
-                      styles.chipText,
-                      (queue ?? item.key) === item.key && item.count > 0 ? styles.chipTextOn : null,
-                    ]}
-                  >
-                    {item.label} {item.count > 0 ? String(item.count) : ''}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
+        {(payload) => {
+          const filtered = payload.items.filter((item) => queue === null || item.kind === queue);
+          const chips: Array<{ key: QueueKey | null; label: string; count: number }> = [
+            { key: null, label: t.admin.statusAll, count: payload.items.length },
+            { key: 'org', label: t.admin.queueOrg, count: payload.counts.org },
+            { key: 'support', label: t.admin.queueSupport, count: payload.counts.support },
+            { key: 'weight', label: t.admin.queueWeight, count: payload.counts.weight },
+            { key: 'otp', label: t.admin.queueOtp, count: payload.counts.otp },
+            { key: 'proof', label: t.admin.queueProof, count: payload.counts.proof },
+          ];
+          return (
+            <>
+              <View style={styles.filters}>
+                {chips.map((item) => {
+                  const selected = queue === item.key;
+                  return (
+                    <Pressable
+                      key={String(item.key)}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected }}
+                      style={[styles.chip, selected ? styles.chipOn : null]}
+                      onPress={() => setQueue(item.key)}
+                    >
+                      <Text style={[styles.chipText, selected ? styles.chipTextOn : null]}>
+                        {item.label}
+                        {item.count > 0 ? ` ${String(item.count)}` : ''}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
 
-            <View style={styles.list}>
-              {payload.items
-                .filter((item) => queue === null || item.kind === queue)
-                .map((item) => (
+              <View style={styles.list}>
+                {filtered.map((item) => (
                   <Pressable
                     key={`${item.kind}-${item.id}`}
                     style={styles.card}
@@ -85,7 +83,14 @@ export default function AdminInboxScreen(): React.ReactElement {
                     <View
                       style={[
                         styles.dot,
-                        { backgroundColor: item.kind === 'support' || item.kind === 'org' ? C.leaf : C.soonAccent },
+                        {
+                          backgroundColor:
+                            item.kind === 'support' || item.kind === 'org'
+                              ? C.leaf
+                              : item.kind === 'weight' || item.kind === 'otp'
+                                ? C.urgentFg
+                                : C.soonAccent,
+                        },
                       ]}
                     />
                     <View style={styles.cardText}>
@@ -100,24 +105,13 @@ export default function AdminInboxScreen(): React.ReactElement {
                     <Feather name="chevron-right" size={16} color={C.mute} />
                   </Pressable>
                 ))}
-              {payload.items.length === 0 ? (
-                <Text style={styles.muted}>{t.admin.inboxEmpty}</Text>
-              ) : null}
-            </View>
-
-            {/* Org-only queue detail uses existing org panel when selected */}
-            {queue === 'org' ? (
-              <View style={styles.panel}>
-                <OrgApplicationsPanel />
+                {filtered.length === 0 ? (
+                  <Text style={styles.muted}>{t.admin.inboxEmpty}</Text>
+                ) : null}
               </View>
-            ) : null}
-            {queue === 'support' ? (
-              <View style={styles.panel}>
-                <SupportInboxPanel />
-              </View>
-            ) : null}
-          </>
-        )}
+            </>
+          );
+        }}
       </DataState>
     </ScrollView>
   );
@@ -127,7 +121,7 @@ const styles = StyleSheet.create({
   body: { padding: 16, paddingBottom: 32, gap: 10 },
   filters: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
-    height: 34,
+    minHeight: 44,
     paddingHorizontal: 12,
     borderRadius: 17,
     borderWidth: 1,
@@ -155,5 +149,4 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 14, fontWeight: '600', color: C.ink, fontFamily: fonts.bodySemi },
   cardMeta: { fontSize: 12, color: C.mute, fontFamily: fonts.body },
   muted: { color: C.mute, fontFamily: fonts.body },
-  panel: { marginTop: 8, backgroundColor: C.surface, borderRadius: radius.cardLg, padding: 8 },
 });

@@ -50,6 +50,7 @@ export interface User {
   line_id: string | null;
   lat: number | null;
   lng: number | null;
+  created_at?: string | null;
   subdistrict_th?: string | null;
   district_th?: string | null;
 }

@@ -1,11 +1,12 @@
-import { useNavigation, useRouter } from 'expo-router';
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { ApiError } from '../api/client';
 import { AiPhotoInput } from '../components/AiPhotoInput';
-import { ChipGroup } from '../components/form';
+import { ChipGroup, useFieldScroll } from '../components/form';
 import {
   Badge,
   Body,
@@ -98,13 +99,31 @@ export default function SellScreen(): React.ReactElement {
   const [refreshKey, setRefreshKey] = useState(0);
   const [editingLot, setEditingLot] = useState<MyLot | null>(null);
   const [formDirty, setFormDirty] = useState(false);
+  const { tab: tabParam } = useLocalSearchParams<{ tab?: string }>();
 
-  const onCreated = useCallback(() => {
-    setEditingLot(null);
-    setFormDirty(false);
-    setRefreshKey((value) => value + 1);
-    router.push('/sell/success');
-  }, [router]);
+  useEffect(() => {
+    if (tabParam === 'mine') {
+      setTab('mine');
+    }
+  }, [tabParam]);
+
+  const onCreated = useCallback(
+    (summary?: { crop?: string; weight?: string; price?: string }) => {
+      setEditingLot(null);
+      setFormDirty(false);
+      setRefreshKey((value) => value + 1);
+      setTab('mine');
+      router.push({
+        pathname: '/sell/success',
+        params: {
+          ...(summary?.crop != null ? { crop: summary.crop } : {}),
+          ...(summary?.weight != null ? { weight: summary.weight } : {}),
+          ...(summary?.price != null ? { price: summary.price } : {}),
+        },
+      });
+    },
+    [router],
+  );
 
   const onPlotCreated = useCallback(() => {
     setRefreshKey((value) => value + 1);
@@ -200,7 +219,7 @@ function NewLot({
   api: ReturnType<typeof useAuth>['api'];
   refreshKey: number;
   editingLot: MyLot | null;
-  onCreated: () => void;
+  onCreated: (summary?: { crop?: string; weight?: string; price?: string }) => void;
   onPlotCreated: () => void;
   onCancelEdit: () => void;
   onDirtyChange: (dirty: boolean) => void;
@@ -318,11 +337,13 @@ function NewLotForm({
   crops: Crop[];
   plots: Plot[];
   editingLot: MyLot | null;
-  onCreated: () => void;
+  onCreated: (summary?: { crop?: string; weight?: string; price?: string }) => void;
   onCancelEdit: () => void;
   onDirtyChange: (dirty: boolean) => void;
 }): React.ReactElement {
   const { t, locale, formatNumber, cropName, translateError, translateFieldError } = useI18n();
+  const insets = useSafeAreaInsets();
+  const { scrollRef, registerY, scrollToField } = useFieldScroll();
   const isEditing = editingLot !== null;
   const [cropId, setCropId] = useState<number>(editingLot?.crop_id ?? crops[0]?.id ?? 0);
   const [plotId, setPlotId] = useState<number>(editingLot?.plot_id ?? plots[0]?.id ?? 0);
@@ -716,6 +737,8 @@ function NewLotForm({
     if (Object.keys(nextErrors).length > 0) {
       setFieldErrors(nextErrors);
       setSubmitError(t.sell.fixFields);
+      const first = Object.keys(nextErrors)[0] ?? null;
+      scrollToField(first);
       return;
     }
     setSubmitting(true);
@@ -759,7 +782,12 @@ function NewLotForm({
           ai_model: aiResult?.model ?? null,
         });
       }
-      onCreated();
+      const selectedCrop = crops.find((c) => c.id === cropId);
+      onCreated({
+        crop: selectedCrop !== undefined ? cropName(selectedCrop) : undefined,
+        weight: String(weightNum),
+        price: displayPrice !== null ? String(displayPrice) : undefined,
+      });
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.fields !== undefined) {
@@ -768,6 +796,8 @@ function NewLotForm({
               Object.entries(err.fields).map(([key, value]) => [key, translateFieldError(value)]),
             ),
           );
+          const firstField = Object.keys(err.fields)[0] ?? null;
+          scrollToField(firstField);
         }
         setSubmitError(translateError(err.code, err.message));
       } else {
@@ -792,12 +822,13 @@ function NewLotForm({
         : aiResult.note_th;
 
   return (
-    <Body>
-      {isEditing ? (
-        <Text style={styles.editHint}>
-          {formatTemplate(t.sell.editingLot, { id: editingLot.id })}
-        </Text>
-      ) : null}
+    <View style={styles.formWrap}>
+      <Body scrollRef={scrollRef}>
+        {isEditing ? (
+          <Text style={styles.editHint}>
+            {formatTemplate(t.sell.editingLot, { id: editingLot.id })}
+          </Text>
+        ) : null}
 
       <SectionTitle>{t.sell.selectCrop}</SectionTitle>
       <View style={styles.row}>
@@ -1140,14 +1171,17 @@ function NewLotForm({
           </>
         )}
       </Card>
-
+    </Body>
+    <View style={[styles.stickyFooter, { paddingBottom: insets.bottom + 12 }]}>
       {submitError !== null ? <Text style={styles.previewError}>{submitError}</Text> : null}
       <PrimaryButton
         label={isEditing ? t.sell.saveEdit : t.sell.publish}
+        block
         onPress={() => {
           if (ripeness === null) {
             setFieldErrors((prev) => ({ ...prev, ripeness: t.sell.ripenessRequired }));
             setSubmitError(t.sell.ripenessRequired);
+            scrollToField('ripeness');
             return;
           }
           void onSubmit();
@@ -1156,9 +1190,10 @@ function NewLotForm({
         disabled={!(weightNum > 0) || ripeness === null}
       />
       {isEditing ? (
-        <SecondaryButton label={t.sell.cancelEdit} onPress={onCancelEdit} />
+        <SecondaryButton label={t.sell.cancelEdit} block onPress={onCancelEdit} />
       ) : null}
-    </Body>
+    </View>
+    </View>
   );
 }
 
@@ -1285,6 +1320,7 @@ function MyLots({
                 {canEdit && (lot.bookings === undefined || lot.bookings.length === 0) ? (
                   <View style={styles.editBtn}>
                     <SecondaryButton
+                      tone="danger"
                       label={t.sell.deleteLot}
                       onPress={() => {
                         Alert.alert(t.sell.confirmDeleteTitle, t.sell.confirmDeleteBody, [
@@ -1323,6 +1359,15 @@ function MyLots({
 }
 
 const styles = StyleSheet.create({
+  formWrap: { flex: 1 },
+  stickyFooter: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: C.line,
+    backgroundColor: C.surface,
+    gap: 8,
+  },
   row: { flexDirection: 'row', flexWrap: 'wrap' },
   badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 6 },
   plotName: { color: C.ink, fontSize: 16, fontWeight: '400', marginBottom: 12 },

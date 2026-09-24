@@ -128,6 +128,7 @@ interface UserRow extends RowDataPacket {
   donor_terms_version: string | null;
   donor_terms_accepted_at: string | Date | null;
   org_type: string | null;
+  created_at?: string | Date;
   password_hash?: string;
 }
 
@@ -164,6 +165,7 @@ export interface PublicUser {
   line_id: string | null;
   lat: number | null;
   lng: number | null;
+  created_at: string | null;
   subdistrict_th: string | null;
   district_th: string | null;
 }
@@ -228,13 +230,17 @@ export function toPublicUser(row: UserRow): PublicUser {
     line_id: row.line_id,
     lat: row.lat,
     lng: row.lng,
+    created_at:
+      row.created_at === null || row.created_at === undefined
+        ? null
+        : new Date(row.created_at as string).toISOString(),
     subdistrict_th: row.subdistrict_th ?? null,
     district_th: row.district_th ?? null,
   };
 }
 
 const USER_SELECT = `SELECT u.id, u.name, u.phone, u.email, u.role, u.can_sell, u.can_buy, u.is_admin,
-                            u.line_id, u.lat, u.lng, u.subdistrict_th, u.district_th,
+                            u.line_id, u.lat, u.lng, u.created_at, u.subdistrict_th, u.district_th,
                             bp.buyer_type, bp.charity_approved, bp.donor_tier, bp.beneficiary_count,
                             bp.distribution_mode, bp.donation_suspended, bp.trusted_proof_count,
                             bp.org_status, bp.org_reject_reason, bp.org_name,
@@ -367,7 +373,7 @@ authRouter.post(
     }
     const [authRows] = await pool.query<UserRow[]>(
       `SELECT u.id, u.name, u.phone, u.email, u.role, u.can_sell, u.can_buy, u.is_admin,
-              u.line_id, u.lat, u.lng, u.subdistrict_th, u.district_th, u.password_hash,
+              u.line_id, u.lat, u.lng, u.created_at, u.subdistrict_th, u.district_th, u.password_hash,
               bp.buyer_type, bp.charity_approved, bp.donor_tier, bp.beneficiary_count,
               bp.distribution_mode, bp.donation_suspended, bp.trusted_proof_count,
               bp.org_status, bp.org_reject_reason, bp.org_name,

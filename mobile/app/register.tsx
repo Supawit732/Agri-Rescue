@@ -1,15 +1,16 @@
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { DonorIntroModal, type DonorIntroChoice } from '../components/DonorIntroModal';
 import { ApiError } from '../src/api/client';
 import { LocationPicker, type LatLng } from '../src/components/LocationPicker';
 import { PhoneEmailField } from '../src/components/PhoneEmailField';
+import { FormField } from '../src/components/form';
 import { Body, Chip, Field, PrimaryButton, Screen, SectionTitle } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
 import { useI18n } from '../src/i18n';
 import { isValidEmail, isValidThaiPhone, normalizeEmail, normalizePhone } from '../src/lib/phoneEmail';
-import { C } from '../src/theme';
+import { C, fonts } from '../src/theme';
 import type { BuyerType } from '../src/api/types';
 
 export default function RegisterScreen(): React.ReactElement {
@@ -53,6 +54,13 @@ export default function RegisterScreen(): React.ReactElement {
     password.length >= 8 &&
     coords !== null &&
     (canSell || canBuy);
+
+  const missing: string[] = [];
+  if (name.trim().length === 0) missing.push(t.register.missingName);
+  if (!phoneValid) missing.push(t.register.missingPhone);
+  if (password.length < 8) missing.push(t.register.missingPassword);
+  if (coords === null) missing.push(t.register.missingLocation);
+  if (!canSell && !canBuy) missing.push(t.register.missingRole);
 
   const selectBuyerType = (key: BuyerType): void => {
     if (key === 'charity') {
@@ -196,7 +204,16 @@ export default function RegisterScreen(): React.ReactElement {
             }}
             error={emailError}
           />
-          <Field label={t.register.password} value={password} onChangeText={setPassword} secureTextEntry />
+          <FormField
+            label={t.register.password}
+            name="password"
+            value={password}
+            onChangeText={setPassword}
+            secureToggle
+            autoCapitalize="none"
+            placeholder={t.register.passwordHint}
+          />
+          <Text style={styles.hint}>{t.register.passwordHint}</Text>
           <Field
             label={t.register.lineOptional}
             value={lineId}
@@ -206,17 +223,28 @@ export default function RegisterScreen(): React.ReactElement {
           />
           <LocationPicker value={coords} onChange={setCoords} label={t.register.location} />
           {error !== null ? <Text style={styles.error}>{error}</Text> : null}
+          {!canSubmit && missing.length > 0 ? (
+            <View style={styles.missingBox}>
+              <Text style={styles.missingTitle}>{t.register.missingTitle}</Text>
+              {missing.map((item) => (
+                <Text key={item} style={styles.missingItem}>
+                  · {item}
+                </Text>
+              ))}
+            </View>
+          ) : null}
           <PrimaryButton
             label={t.register.submit}
+            block
             onPress={onSubmit}
             loading={submitting}
             disabled={!canSubmit}
           />
           <View style={styles.footer}>
             <Text style={styles.footerText}>{t.register.haveAccount}</Text>
-            <Text style={styles.link} onPress={() => router.push('/login')}>
-              {t.common.login}
-            </Text>
+            <Pressable accessibilityRole="button" onPress={() => router.push('/login')}>
+              <Text style={styles.link}>{t.common.login}</Text>
+            </Pressable>
           </View>
         </Body>
       </KeyboardAvoidingView>
@@ -225,11 +253,32 @@ export default function RegisterScreen(): React.ReactElement {
 }
 
 const styles = StyleSheet.create({
-  brand: { fontSize: 26, fontWeight: '800', color: C.leaf, marginTop: 12, marginBottom: 12 },
+  brand: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: C.leaf,
+    marginTop: 12,
+    marginBottom: 12,
+    fontFamily: fonts.titleBold,
+  },
   row: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 8 },
-  hint: { color: C.mute, marginBottom: 8 },
-  error: { color: C.chili, marginBottom: 8 },
+  hint: { color: C.mute, marginBottom: 8, fontFamily: fonts.body, fontSize: 12 },
+  error: { color: C.chili, marginBottom: 8, fontFamily: fonts.body },
+  missingBox: {
+    backgroundColor: '#FBEFD6',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+    gap: 4,
+  },
+  missingTitle: {
+    fontWeight: '700',
+    color: C.soonFg,
+    marginBottom: 2,
+    fontFamily: fonts.bodySemi,
+  },
+  missingItem: { color: C.soonFg, fontFamily: fonts.body, fontSize: 13 },
   footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 20 },
-  footerText: { color: C.mute },
-  link: { color: C.leaf, fontWeight: '700' },
+  footerText: { color: C.mute, fontFamily: fonts.body },
+  link: { color: C.leaf, fontWeight: '700', fontFamily: fonts.bodySemi, minHeight: 44, textAlignVertical: 'center' },
 });

@@ -94,8 +94,36 @@ export default function ProfileScreen(): React.ReactElement {
       await api.updateProfile({
         email: emailTrim === '' ? '' : emailTrim,
         line_id: lineId.trim() === '' ? null : lineId.trim(),
-        ...(coords !== null ? { lat: coords.lat, lng: coords.lng } : {}),
       });
+      await refreshUser();
+      setMessage(t.profile.saved);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        applyServerFields(err.fields);
+        if (err.fields !== undefined && Object.keys(err.fields).length > 0) {
+          scrollToField(Object.keys(err.fields)[0] ?? null);
+        } else {
+          setError(translateError(err.code, err.message));
+        }
+      } else {
+        setError(t.profile.saveFailed);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveLocation = async (): Promise<void> => {
+    if (coords === null) {
+      setErrors({ lat: t.profile.pickupRequired });
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    setErrors({});
+    try {
+      await api.updateProfile({ lat: coords.lat, lng: coords.lng });
       await refreshUser();
       setMessage(t.profile.saved);
     } catch (err) {
@@ -126,7 +154,9 @@ export default function ProfileScreen(): React.ReactElement {
           </View>
           <Text style={styles.name}>{user.name}</Text>
           <Text style={styles.muted}>
-            {formatTemplate(t.profile.memberSince, { date: formatDate(new Date()) })}
+            {formatTemplate(t.profile.memberSince, {
+              date: formatDate(user.created_at != null ? user.created_at : new Date()),
+            })}
           </Text>
         </View>
 
@@ -191,7 +221,8 @@ export default function ProfileScreen(): React.ReactElement {
             placeholder={user.name}
           />
           <PrimaryButton
-            label={t.shop.editShopName}
+            label={t.profile.saveShop}
+            block
             onPress={() => {
               void (async () => {
                 setBusy(true);
@@ -243,6 +274,12 @@ export default function ProfileScreen(): React.ReactElement {
             placeholder={t.profile.lineIdPlaceholder}
             autoCapitalize="none"
           />
+          <PrimaryButton
+            label={t.profile.saveContact}
+            block
+            onPress={() => void saveContact()}
+            loading={busy}
+          />
         </View>
 
         <View style={styles.card}>
@@ -252,7 +289,14 @@ export default function ProfileScreen(): React.ReactElement {
             value={coords}
             onChange={setCoords}
             label={t.profile.pickupLocation}
-            error={errors.lat}
+            error={errors.lat ?? null}
+          />
+          <PrimaryButton
+            label={t.profile.saveLocation}
+            block
+            disabled={coords === null}
+            onPress={() => void saveLocation()}
+            loading={busy}
           />
         </View>
 
@@ -297,12 +341,7 @@ export default function ProfileScreen(): React.ReactElement {
           </View>
         </View>
 
-        <PrimaryButton
-          label={t.profile.save}
-          onPress={() => void saveContact()}
-          loading={busy}
-        />
-        <PrimaryButton label={t.account.impact} onPress={() => router.push('/impact')} />
+        <PrimaryButton label={t.account.impact} block onPress={() => router.push('/impact')} />
         <Pressable
           style={styles.logout}
           onPress={() => {

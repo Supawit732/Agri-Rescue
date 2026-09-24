@@ -127,6 +127,8 @@ export type Messages = {
     filterApply: string;
     filterShowCount: string;
     filterOpen: string;
+    allHours: string;
+    priceInvalid: string;
     priceMin: string;
     priceMax: string;
     hoursUnder24: string;
@@ -441,6 +443,7 @@ export type Messages = {
     body: string;
     viewMyLots: string;
     backToMarket: string;
+    summaryLine: string;
   };
   profile: {
     title: string;
@@ -467,6 +470,9 @@ export type Messages = {
     save: string;
     saved: string;
     saveFailed: string;
+    saveContact: string;
+    saveShop: string;
+    saveLocation: string;
     changePhoto: string;
     rightsLabel: string;
     buyerTypeLabel: string;
@@ -682,6 +688,10 @@ export type Messages = {
     chartTopShops: string;
     emptyCharts: string;
     inboxEmpty: string;
+    lastUpdated: string;
+    moreStats: string;
+    showMore: string;
+    showLess: string;
     statusActive: string;
     statusHidden: string;
     statusDelivered: string;
@@ -885,6 +895,10 @@ export type Messages = {
     catOther: string;
     unreadLabel: string;
     loginRequired: string;
+    justNow: string;
+    minutesAgo: string;
+    hoursAgo: string;
+    daysAgo: string;
   };
   support: {
     title: string;
@@ -904,6 +918,8 @@ export type Messages = {
     details: string;
     detailsPlaceholder: string;
     detailsCount: string;
+    topicLabel: string;
+    detailLabel: string;
     photos: string;
     photosHint: string;
     relatedOrder: string;
@@ -959,6 +975,13 @@ export type Messages = {
     phone: string;
     phonePlaceholder: string;
     password: string;
+    passwordHint: string;
+    missingTitle: string;
+    missingName: string;
+    missingPhone: string;
+    missingPassword: string;
+    missingLocation: string;
+    missingRole: string;
     lineOptional: string;
     linePlaceholder: string;
     location: string;
