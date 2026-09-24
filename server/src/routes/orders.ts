@@ -37,6 +37,7 @@ import { finalizeLotIfComplete, sumReservedQuantityKg, syncLotBookableStatus } f
 import { notifyUser } from '../notifications/notificationService';
 import { locationDisplayLabelFor } from '../geo/locationLabel';
 import { requestLocale } from '../http/locale';
+import { buildStorageAdvice } from '../domain/storageAdvice';
 
 export const ordersRouter = Router();
 
@@ -116,6 +117,11 @@ interface OrderDetailRow extends OrderRow {
   plot_district_th: string | null;
   plot_subdistrict_en: string | null;
   plot_district_en: string | null;
+  storage_tip_th: string | null;
+  storage_tip_en: string | null;
+  fridge_ok: number;
+  fridge_extra_days: number;
+  buyer_type: string | null;
 }
 
 ordersRouter.use(requireAuth);
@@ -616,17 +622,20 @@ ordersRouter.get(
               o.batch_id, o.drop_otp, o.distribution_place, o.distribution_at,
               o.pickup_slot_start, o.pickup_slot_end, o.created_at,
               c.name_th AS crop_name_th, c.name_en AS crop_name_en, h.grade, h.ripeness, h.photo_url, h.expires_at,
+              c.storage_tip_th, c.storage_tip_en, c.fridge_ok, c.fridge_extra_days,
               p.name AS plot_name, p.lat AS plot_lat, p.lng AS plot_lng, p.farmer_id,
               p.subdistrict_th AS plot_subdistrict_th, p.district_th AS plot_district_th,
               p.subdistrict_en AS plot_subdistrict_en, p.district_en AS plot_district_en,
               bu.lat AS buyer_lat, bu.lng AS buyer_lng,
               bu.name AS buyer_name, bu.phone AS buyer_phone, bu.line_id AS buyer_line_id,
+              bp.buyer_type,
               fu.name AS seller_name, fu.phone AS seller_phone, fu.line_id AS seller_line_id
        FROM orders o
        JOIN harvest_lots h ON h.id = o.lot_id
        JOIN crops c ON c.id = h.crop_id
        JOIN plots p ON p.id = h.plot_id
        JOIN users bu ON bu.id = o.buyer_id
+       LEFT JOIN buyer_profiles bp ON bp.user_id = bu.id
        JOIN users fu ON fu.id = p.farmer_id
        WHERE o.id = ?`,
       [orderId],
@@ -689,6 +698,18 @@ ordersRouter.get(
         pickup_slot_end: isoOrNull(row.pickup_slot_end),
         created_at: new Date(row.created_at).toISOString(),
         viewer: isSeller ? 'seller' : 'buyer',
+        advice:
+          row.status === 'delivered'
+            ? buildStorageAdvice({
+                buyerType: row.buyer_type,
+                isDonation: Number(row.is_donation) === 1,
+                fridgeOk: Number(row.fridge_ok) === 1,
+                fridgeExtraDays: Number(row.fridge_extra_days ?? 0),
+                expiresAt: row.expires_at,
+                storageTipTh: row.storage_tip_th,
+                storageTipEn: row.storage_tip_en,
+              })
+            : null,
         contact: booked
           ? {
               name: isSeller ? row.buyer_name : row.seller_name,

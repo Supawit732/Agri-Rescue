@@ -2,6 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
+  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -9,13 +10,17 @@ import {
   Text,
   View,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import type { SupportReplyVia, SupportTopic } from '../src/api/types';
 import { FormField, useFieldErrors, useFieldScroll } from '../src/components/form';
-import { PrimaryButton, Screen, StackHeader } from '../src/components/ui';
+import { PrimaryButton, Screen, SecondaryButton, StackHeader } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
 import { useApiData } from '../src/hooks/useApiData';
 import { formatTemplate, useI18n } from '../src/i18n';
+import { resizeToBase64 } from '../src/lib/media';
 import { C, fonts, radius } from '../src/theme';
+
+type PendingPhoto = { id: string; name: string; base64: string; mime: string };
 
 const TOPICS: Array<{ key: SupportTopic; labelKey: keyof ReturnType<typeof useI18n>['t']['support'] }> = [
   { key: 'order_pickup', labelKey: 'topicOrderPickup' },
@@ -40,6 +45,7 @@ export default function ContactUsScreen(): React.ReactElement {
   const [replyVia, setReplyVia] = useState<SupportReplyVia>('app');
   const [orderId, setOrderId] = useState<number | null>(null);
   const [orderPickerOpen, setOrderPickerOpen] = useState(false);
+  const [photos, setPhotos] = useState<PendingPhoto[]>([]);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const { errors, setErrors, setFieldError } = useFieldErrors();
@@ -62,6 +68,63 @@ export default function ContactUsScreen(): React.ReactElement {
     return next;
   };
 
+  const addPhoto = (): void => {
+    Alert.alert(t.support.attachPhoto, undefined, [
+      {
+        text: t.sell.takePhoto,
+        onPress: () => {
+          void pickImage(ImagePicker.launchCameraAsync);
+        },
+      },
+      {
+        text: t.sell.photoLibrary,
+        onPress: () => {
+          void pickImage(ImagePicker.launchImageLibraryAsync);
+        },
+      },
+      { text: t.common.cancel, style: 'cancel' },
+    ]);
+  };
+
+  const pickImage = async (launcher: typeof ImagePicker.launchCameraAsync): Promise<void> => {
+    if (photos.length >= 3) {
+      setFormError(t.support.maxPhotos);
+      return;
+    }
+    try {
+      const permission =
+        launcher === ImagePicker.launchCameraAsync
+          ? await ImagePicker.requestCameraPermissionsAsync()
+          : await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        setFormError(t.profile.photoDenied);
+        return;
+      }
+      const picked = await launcher({ mediaTypes: ['images'], quality: 0.85 });
+      if (picked.canceled || picked.assets[0] === undefined) {
+        return;
+      }
+      const asset = picked.assets[0];
+      const prepared = await resizeToBase64(asset.uri, asset.width, asset.height, 1024);
+      setPhotos((prev) =>
+        prev.length >= 3
+          ? prev
+          : [
+              ...prev,
+              {
+                id: `${Date.now()}-${String(prev.length)}`,
+                name: asset.fileName ?? `photo-${String(prev.length + 1)}.jpg`,
+                base64: prepared.base64,
+                mime: prepared.mime,
+              },
+            ],
+      );
+      setFormError(null);
+    } catch {
+      setFormError(t.support.photoTooLarge);
+    }
+  };
+
   const submit = async (): Promise<void> => {
     const next = validate();
     setErrors(next);
@@ -78,10 +141,17 @@ export default function ContactUsScreen(): React.ReactElement {
         details: details.trim(),
         order_id: orderId,
         reply_via: replyVia,
+        attachments: photos.map((p) => ({
+          filename: p.name,
+          mime: p.mime,
+          base64: p.base64,
+          original_name: p.name,
+        })),
       });
       setDetails('');
       setOrderId(null);
       setTopic('order_pickup');
+      setPhotos([]);
       tickets.reload();
       router.push({ pathname: '/support/[id]', params: { id: String(ticket.id) } });
     } catch {
@@ -269,8 +339,35 @@ export default function ContactUsScreen(): React.ReactElement {
             {formatTemplate(t.support.detailsCount, { count: details.length })}
           </Text>
 
-          {/* Photo attach hidden for demo — no picker wired yet. */}
-          <Text style={styles.muted}>{t.support.photosHint}</Text>
+          {/* Photo attach: ≤3 private images (owner + admin). */}
+          <Text style={styles.label}>{t.support.photosHint}</Text>
+          <Text style={styles.muted}>{t.support.maxPhotos}</Text>
+          <View style={styles.chipWrap}>
+            {photos.map((p) => (
+              <View key={p.id} style={styles.photoChip}>
+                <Feather name="image" size={14} color={C.leaf} />
+                <Text style={styles.photoChipText} numberOfLines={1}>
+                  {p.name}
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => setPhotos((prev) => prev.filter((x) => x.id !== p.id))}
+                  hitSlop={6}
+                >
+                  <Feather name="x" size={16} color={C.mute} />
+                </Pressable>
+              </View>
+            ))}
+            {photos.length < 3 ? (
+              <Pressable
+                accessibilityRole="button"
+                onPress={addPhoto}
+                style={[styles.chip, styles.chipOn]}
+              >
+                <Text style={[styles.chipText, styles.chipTextOn]}>{t.support.attachPhoto}</Text>
+              </Pressable>
+            ) : null}
+          </View>
 
           <Text style={styles.label}>{t.support.replyVia}</Text>
           {(
@@ -384,6 +481,19 @@ const styles = StyleSheet.create({
   radioOn: { borderColor: C.leaf },
   radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: C.leaf },
   radioLabel: { fontSize: 15, color: C.ink, fontFamily: fonts.body },
+  photoChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: C.leaf,
+    backgroundColor: C.leafSoft,
+    maxWidth: 220,
+  },
+  photoChipText: { flex: 1, fontSize: 13, color: C.leafDeep, fontFamily: fonts.bodySemi },
   error: { color: C.danger, fontFamily: fonts.body },
   warning: {
     flexDirection: 'row',

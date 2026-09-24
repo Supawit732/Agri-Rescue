@@ -1,11 +1,12 @@
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { donorStatusLabel } from '../donorLabels';
 import { useI18n } from '../i18n';
+import { mediaUri } from '../lib/media';
 import { C, fonts, radius } from '../theme';
 import { LogoMark, initialsOf } from './LogoMark';
 
@@ -109,7 +110,11 @@ export function ProfileMenu({
               style={styles.headerRow}
             >
               <View style={styles.avatarLg}>
-                <Text style={styles.avatarLgText}>{initialsOf(user.name)}</Text>
+                {mediaUri(user.avatar) !== null ? (
+                  <Image source={{ uri: mediaUri(user.avatar)! }} style={styles.avatarLgImg} />
+                ) : (
+                  <Text style={styles.avatarLgText}>{initialsOf(user.name)}</Text>
+                )}
               </View>
               <View style={styles.headerText}>
                 <Text style={styles.name} numberOfLines={1}>
@@ -257,7 +262,9 @@ const styles = StyleSheet.create({
     backgroundColor: C.leafSoft,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
+  avatarLgImg: { width: '100%', height: '100%' },
   avatarLgText: {
     fontFamily: fonts.titleBold,
     fontWeight: '700',

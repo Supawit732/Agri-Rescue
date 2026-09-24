@@ -370,3 +370,14 @@ JWT เก็บ `sub`, `role`, `can_sell`, `can_buy`, `is_admin` (อายุ 
 | seed ชื่อ | ร้าน/แปลง/ผู้ใช้สองภาษา เช่น `Somchai Farm (สวนลุงสมชาย)` — ข้อความที่ผู้ใช้พิมพ์เองไม่บังคับแปล |
 | ไม่ทำ | แปลชื่อร้าน/แปลง/ข้อความ support ที่ผู้ใช้กรอกเอง |
 
+## D037 — งานเล็กก่อนเดโม (6.9 + รูป)
+
+| รายการ | ค่า |
+|---|---|
+| 6.9 tips | `crops.storage_tip_th/en`, `fridge_ok`, `fridge_extra_days` (migration 026); คำนวณใน `server/src/domain/storageAdvice.ts` + unit test; ข้อความจาก i18n ไม่ใช่ AI |
+| แสดงผล | หน้า `/orders/:id` เมื่อ `status=delivered`: ควรทาน/ขาย/แจก ภายใน `expires_at`; แช่เย็นยืด `+fridge_extra_days`; รถเร่/ร้าน ลดราคาเมื่อ &lt;12 ชม. |
+| แหล่ง | `docs/crop-sources.md` (ค่าประมาณ สำหรับเดโม/ให้ความรู้) |
+| รูปโปรไฟล์ | `users.avatar` (migration 027); `POST /api/auth/avatar` ย่อ ≤512px ฝั่ง client; เก็บ `uploads/avatars/` แบบเดียวกับรูปล็อต; sync `shops.avatar`; แสดงบน ProfileMenu, profile, หน้าร้าน (fallback ปก) |
+| รูปติดต่อเรา | เปิด UI แนบ ≤3 รูป (backend มีอยู่แล้ว): `private_uploads/` เห็นเฉพาะ owner/admin |
+| ไม่ทำ | หน้า “ของที่ได้รับ” แยก — tips อยู่ใน order detail |
+

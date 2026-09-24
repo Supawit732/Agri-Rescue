@@ -51,8 +51,11 @@ export interface User {
   lat: number | null;
   lng: number | null;
   created_at?: string | null;
+  avatar?: string | null;
   subdistrict_th?: string | null;
   district_th?: string | null;
+  subdistrict_en?: string | null;
+  district_en?: string | null;
 }
 
 export interface AuthResponse {
@@ -404,6 +407,16 @@ export interface Order {
     name: string;
     phone: string;
     line_id: string | null;
+  } | null;
+  advice?: {
+    audience: 'eat' | 'sell' | 'distribute';
+    consumeBy: string;
+    hoursLeft: number;
+    fridgeUntil: string | null;
+    fridgeExtraDays: number;
+    priceDropHint: boolean;
+    storageTipTh: string | null;
+    storageTipEn: string | null;
   } | null;
 }
 

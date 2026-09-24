@@ -77,3 +77,32 @@ export function lotPhotoPublicUrl(storagePath: string): string {
   }
   return `/uploads/${storagePath.replace(/^\/+/, '')}`;
 }
+
+/** Save a profile avatar (same store as lot photos, avatars/ folder). */
+export async function saveAvatarPhoto(input: {
+  base64: string;
+  mime: string;
+}): Promise<{ path: string; url: string; sizeBytes: number }> {
+  const mime = input.mime.toLowerCase();
+  const ext = mimeToExt[mime];
+  if (ext === undefined) {
+    throw new HttpError(400, 'VALIDATION', 'รองรับเฉพาะ JPEG, WebP หรือ PNG');
+  }
+  let buffer: Buffer;
+  try {
+    buffer = Buffer.from(input.base64, 'base64');
+  } catch {
+    throw new HttpError(400, 'VALIDATION', 'ถอดรหัสรูปไม่สำเร็จ');
+  }
+  if (buffer.length === 0) {
+    throw new HttpError(400, 'VALIDATION', 'ไฟล์ว่าง');
+  }
+  if (buffer.length > PUBLIC_PHOTO_MAX_BYTES) {
+    throw new HttpError(400, 'VALIDATION', 'รูปใหญ่เกิน 1MB หลังย่อ');
+  }
+  const relative = `avatars/${randomUUID()}.${ext}`;
+  const fullPath = path.join(PUBLIC_UPLOADS_DIR, relative);
+  await mkdir(path.dirname(fullPath), { recursive: true });
+  await writeFile(fullPath, buffer);
+  return { path: relative, url: `/uploads/${relative}`, sizeBytes: buffer.length };
+}

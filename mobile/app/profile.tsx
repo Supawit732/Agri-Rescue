@@ -1,7 +1,8 @@
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { ApiError } from '../src/api/client';
 import { initialsOf } from '../src/components/LogoMark';
 import { FormField, useFieldErrors, useFieldScroll } from '../src/components/form';
@@ -12,6 +13,7 @@ import { useAuth } from '../src/context/AuthContext';
 import { donorStatusLabel } from '../src/donorLabels';
 import { formatTemplate, useI18n } from '../src/i18n';
 import { formatPhone, isValidEmail, normalizeEmail } from '../src/lib/phoneEmail';
+import { mediaUri, resizeToBase64 } from '../src/lib/media';
 import { C, fonts, radius } from '../src/theme';
 
 export default function ProfileScreen(): React.ReactElement {
@@ -142,16 +144,74 @@ export default function ProfileScreen(): React.ReactElement {
     }
   };
 
+  const pickAndUploadAvatar = (): void => {
+    Alert.alert(t.profile.takePhoto, undefined, [
+      {
+        text: t.sell.takePhoto,
+        onPress: () => {
+          void uploadFrom(ImagePicker.launchCameraAsync);
+        },
+      },
+      {
+        text: t.sell.photoLibrary,
+        onPress: () => {
+          void uploadFrom(ImagePicker.launchImageLibraryAsync);
+        },
+      },
+      { text: t.common.cancel, style: 'cancel' },
+    ]);
+  };
+
+  const uploadFrom = async (
+    launcher: typeof ImagePicker.launchCameraAsync,
+  ): Promise<void> => {
+    try {
+      const permission =
+        launcher === ImagePicker.launchCameraAsync
+          ? await ImagePicker.requestCameraPermissionsAsync()
+          : await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        setError(t.profile.photoDenied);
+        return;
+      }
+      const picked = await launcher({ mediaTypes: ['images'], quality: 0.9 });
+      if (picked.canceled || picked.assets[0] === undefined) {
+        return;
+      }
+      const asset = picked.assets[0];
+      setBusy(true);
+      setError(null);
+      setMessage(null);
+      const prepared = await resizeToBase64(asset.uri, asset.width, asset.height, 512);
+      await api.uploadAvatar({ base64: prepared.base64, mime: prepared.mime });
+      await refreshUser();
+      setMessage(t.profile.saved);
+    } catch {
+      setError(t.profile.photoFailed);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <Screen>
       <StackHeader title={t.profile.title} onBack={() => router.replace('/(tabs)')} />
       <ScrollView ref={scrollRef} contentContainerStyle={styles.body}>
         <View style={styles.hero}>
-          <View>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{initialsOf(user.name)}</Text>
+          <Pressable onPress={pickAndUploadAvatar} accessibilityRole="button" accessibilityLabel={t.profile.takePhoto}>
+            <View>
+              <View style={styles.avatar}>
+                {mediaUri(user.avatar) !== null ? (
+                  <Image source={{ uri: mediaUri(user.avatar)! }} style={styles.avatarImg} />
+                ) : (
+                  <Text style={styles.avatarText}>{initialsOf(user.name)}</Text>
+                )}
+              </View>
+              <View style={styles.cameraBadge}>
+                <Feather name="camera" size={16} color={C.white} />
+              </View>
             </View>
-          </View>
+          </Pressable>
           <Text style={styles.name}>{user.name}</Text>
           <Text style={styles.muted}>
             {formatTemplate(t.profile.memberSince, {
@@ -365,6 +425,21 @@ const styles = StyleSheet.create({
     borderRadius: 46,
     backgroundColor: C.leafSoft,
     borderWidth: 3,
+    borderColor: C.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  avatarImg: { width: '100%', height: '100%' },
+  cameraBadge: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: C.leaf,
+    borderWidth: 2,
     borderColor: C.white,
     alignItems: 'center',
     justifyContent: 'center',
