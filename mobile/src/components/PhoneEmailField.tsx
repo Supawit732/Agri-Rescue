@@ -26,6 +26,11 @@ type Shared = {
   value: string;
   /** Optional: override initial mode before storage loads. */
   initialMode?: IdentityMode;
+  /**
+   * toggle (login default) | phone | email — when phone/email, hide the mode switch.
+   * Register uses separate phone + email fields without toggle.
+   */
+  mode?: 'toggle' | 'phone' | 'email';
 };
 
 /**
@@ -41,13 +46,22 @@ export function PhoneEmailField({
   onValueChange,
   value,
   initialMode = 'phone',
+  mode: modeOverride = 'toggle',
 }: Shared): React.ReactElement {
   const { t } = useI18n();
-  const [mode, setMode] = useState<IdentityMode>(initialMode);
-  const [ready, setReady] = useState(false);
+  const [mode, setMode] = useState<IdentityMode>(
+    modeOverride === 'toggle' ? initialMode : modeOverride,
+  );
+  const [ready, setReady] = useState(modeOverride !== 'toggle');
   const fieldLabel = label ?? t.identity.label;
+  const showToggle = modeOverride === 'toggle';
 
   useEffect(() => {
+    if (modeOverride !== 'toggle') {
+      setMode(modeOverride);
+      setReady(true);
+      return;
+    }
     let alive = true;
     void (async () => {
       const stored = await loadIdentityMode();
@@ -59,7 +73,7 @@ export function PhoneEmailField({
     return () => {
       alive = false;
     };
-  }, []);
+  }, [modeOverride]);
 
   const switchMode = (next: IdentityMode): void => {
     setMode(next);
@@ -134,28 +148,30 @@ export function PhoneEmailField({
       onLayout={(e) => fieldRef?.(name, e.nativeEvent.layout.y)}
     >
       <Text style={styles.label}>{fieldLabel}</Text>
-      <View style={styles.segment} accessibilityRole="tablist">
-        <Pressable
-          accessibilityRole="tab"
-          accessibilityState={{ selected: mode === 'phone' }}
-          onPress={() => switchMode('phone')}
-          style={[styles.segmentBtn, mode === 'phone' ? styles.segmentBtnOn : null]}
-        >
-          <Text style={[styles.segmentText, mode === 'phone' ? styles.segmentTextOn : null]}>
-            {t.identity.modePhone}
-          </Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="tab"
-          accessibilityState={{ selected: mode === 'email' }}
-          onPress={() => switchMode('email')}
-          style={[styles.segmentBtn, mode === 'email' ? styles.segmentBtnOn : null]}
-        >
-          <Text style={[styles.segmentText, mode === 'email' ? styles.segmentTextOn : null]}>
-            {t.identity.modeEmail}
-          </Text>
-        </Pressable>
-      </View>
+      {showToggle ? (
+        <View style={styles.segment} accessibilityRole="tablist">
+          <Pressable
+            accessibilityRole="tab"
+            accessibilityState={{ selected: mode === 'phone' }}
+            onPress={() => switchMode('phone')}
+            style={[styles.segmentBtn, mode === 'phone' ? styles.segmentBtnOn : null]}
+          >
+            <Text style={[styles.segmentText, mode === 'phone' ? styles.segmentTextOn : null]}>
+              {t.identity.modePhone}
+            </Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="tab"
+            accessibilityState={{ selected: mode === 'email' }}
+            onPress={() => switchMode('email')}
+            style={[styles.segmentBtn, mode === 'email' ? styles.segmentBtnOn : null]}
+          >
+            <Text style={[styles.segmentText, mode === 'email' ? styles.segmentTextOn : null]}>
+              {t.identity.modeEmail}
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
       <TextInput
         style={[styles.input, error ? styles.inputError : null]}
         placeholderTextColor={C.mute}

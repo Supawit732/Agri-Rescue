@@ -46,7 +46,7 @@ import type {
 
 interface RegisterInput {
   name: string;
-  phone: string | null;
+  phone: string;
   email?: string;
   password: string;
   can_sell: boolean;

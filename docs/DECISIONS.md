@@ -290,11 +290,14 @@ JWT เก็บ `sub`, `role`, `can_sell`, `can_buy`, `is_admin` (อายุ 
 
 | รายการ | ค่า |
 |---|---|
-| Toggle | ปุ่ม «เบอร์โทร \| อีเมล» จำใน `agri_rescue_identity_mode` (SecureStore/localStorage) ค่าเริ่มต้นเบอร์โทร |
-| เบอร์ UI | แป้นเลข, ฟอร์맷 `0XX-XXX-XXXX`, paste `+66`/ขีด/ช่องว่าง → `0XXXXXXXXX`, ส่งเป็น digits, ตรวจ 10 หลักขึ้นต้น 0 |
-| โค้ด | `mobile/src/lib/phoneEmail.ts` + unit test ใน `server/tests/domain/phoneEmail.test.ts` |
-| Server | `normalizePhone` ฝั่ง server; register รับ phone มี/ไม่มีขีด; login ค้น raw หรือ normalized หรือ email |
-| `users.phone` | migration `021_users_phone_nullable` — สมัครด้วยอีเมลอย่างเดียวได้ (phone NULL) |
-| อีเมล | ไม่ autocapitalize/autocorrect; ชิปโดเมนหลัง `@`; ข้อเสนอพิมพ์ผิด (gmial → gmail) ไม่บังคับ; trim+lowercase ก่อนส่ง |
-| หน้าจอ | login (toggle identity), register (toggle), profile (phone ฟอร์แมต read-only + email chips) |
-| i18n | `identity.*` th/en |
+| Toggle | ปุ่ม «เบอร์โทร \| อีเมล» จำใน `agri_rescue_identity_mode` — **ใช้เฉพาะหน้า login** (ค่าเริ่มต้นเบอร์โทร) |
+| หน้าสมัคร | **บังคับเบอร์โทร** เสมอ (ฟอร์แมต `0XX-XXX-XXXX`) + ช่องอีเมลแยก **ไม่บังคับ** พร้อมชิปโดเมน; **ไม่มี** ปุ่มสลับ |
+| เบอร์ UI | แป้นเลข, ฟอร์맷 `0XX-XXX-XXXX`, paste `+66`/ขีด/ช่องว่าง → `0XXXXXXXXX`, ส่งเป็น digits, ตรวจน้ำแดง 10 หลักขึ้นต้น 0 |
+| โค้ด | `mobile/src/lib/phoneEmail.ts` + unit test; `PhoneEmailField` รับ `mode: toggle \| phone \| email` |
+| Server | `normalizePhone`; **register บังคับ `phone` ด้วย zod** (`fields.phone` เมื่อผิด); login ค้น raw หรือ normalized หรือ email |
+| `users.phone` | migration `021_users_phone_nullable` **ไม่แก้** หลัง push (แม้สมัครจะบังคับเบอร์แล้ว — คงไว้เพื่อ compatibility) |
+| อีเมล | ไม่ autocapitalize/autocorrect; ชิปโดเมน; ข้อเสนอพิมพ์ผิด ไม่บังคับ; trim+lowercase ก่อนส่ง |
+| หน้าจอ | login (toggle), register (phone+email แยก, ไม่สลับ), profile (phone ฟอร์แมต read-only + email chips) |
+| i18n | `identity.*` th/en (รวม `optional` สำหรับป้ายอีเมลสมัคร) |
+| Test | สมัครไม่มีเบอร์ → 400 พร้อม `error.fields.phone` |
+

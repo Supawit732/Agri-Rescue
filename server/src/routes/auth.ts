@@ -38,7 +38,8 @@ const phoneInputSchema = z
 const registerSchema = z
   .object({
     name: z.string().trim().min(1, 'กรุณากรอกชื่อ'),
-    phone: phoneInputSchema.optional().nullable(),
+    /** Always required on register (D031 revised). */
+    phone: phoneInputSchema,
     email: emailSchema,
     password: z.string().min(8, 'รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร'),
     can_sell: z.boolean(),
@@ -57,14 +58,6 @@ const registerSchema = z
     }
     if (!body.can_buy && body.buyer_type !== undefined && body.buyer_type !== null) {
       ctx.addIssue({ code: 'custom', message: 'ประเภทผู้ซื้อใช้ได้เฉพาะเมื่อเปิดสิทธิ์ซื้อ', path: ['buyer_type'] });
-    }
-    const phone = body.phone ?? '';
-    const email = body.email ?? '';
-    if (!phone && !email) {
-      ctx.addIssue({ code: 'custom', message: 'กรุณากรอกเบอร์โทรหรืออีเมล', path: ['phone'] });
-    }
-    if (phone && !isValidThaiPhone(phone)) {
-      ctx.addIssue({ code: 'custom', message: 'เบอร์โทรไม่ถูกต้อง', path: ['phone'] });
     }
   });
 
@@ -297,7 +290,7 @@ authRouter.post(
          VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
         [
           body.name,
-          body.phone ?? null,
+          body.phone,
           body.email ?? null,
           passwordHash,
           role,

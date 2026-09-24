@@ -73,6 +73,40 @@ describe('auth', () => {
     expect(authed.status).toBe(200);
   });
 
+  it('register without phone returns 400 with fields.phone', async () => {
+    const res = await request(app).post('/api/auth/register').send({
+      name: 'ไม่มีเบอร์',
+      password: 'demo1234',
+      can_sell: true,
+      can_buy: false,
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION');
+    expect(res.body.error.fields).toBeDefined();
+    expect(res.body.error.fields.phone).toBeTruthy();
+
+    const emptyPhone = await request(app).post('/api/auth/register').send({
+      name: 'เบอร์ว่าง',
+      phone: '',
+      password: 'demo1234',
+      can_sell: true,
+      can_buy: false,
+    });
+    expect(emptyPhone.status).toBe(400);
+    expect(emptyPhone.body.error.fields.phone).toBeTruthy();
+
+    // dashed phone still accepted
+    const dashed = await request(app).post('/api/auth/register').send({
+      name: 'มีขีด',
+      phone: '081-000-0003',
+      password: 'demo1234',
+      can_sell: true,
+      can_buy: false,
+    });
+    expect(dashed.status).toBe(201);
+    expect(dashed.body.user.phone).toBe('0810000003');
+  });
+
   it('registers dual-role users, blocks booking own lots, and allows booking others', async () => {
     const seller = await registerUser(app, {
       can_sell: true,

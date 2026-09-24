@@ -240,6 +240,7 @@ export type Messages = {
     phoneInvalid: string;
     emailInvalid: string;
     didYouMean: string;
+    optional: string;
   };
   sell: {
     title: string;

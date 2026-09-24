@@ -234,6 +234,7 @@ const th: Messages = {
     phoneInvalid: 'กรุณากรอกเบอร์โทร 10 หลักขึ้นต้นด้วย 0',
     emailInvalid: 'อีเมลไม่ถูกต้อง',
     didYouMean: 'หมายถึง {domain} ใช่ไหม?',
+    optional: 'ไม่บังคับ',
   },
   sell: {
     title: 'ขาย',

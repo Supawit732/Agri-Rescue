@@ -234,6 +234,7 @@ const en: Messages = {
     phoneInvalid: 'Enter a 10-digit phone starting with 0',
     emailInvalid: 'Invalid email',
     didYouMean: 'Did you mean {domain}?',
+    optional: 'optional',
   },
   sell: {
     title: 'Sell',
