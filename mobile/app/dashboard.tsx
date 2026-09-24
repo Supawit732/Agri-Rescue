@@ -13,6 +13,7 @@ import {
 import { STATUS_LABELS } from '../src/constants';
 import { useAuth } from '../src/context/AuthContext';
 import { useApiData } from '../src/hooks/useApiData';
+import { useI18n } from '../src/i18n';
 import { C } from '../src/theme';
 import type { DashboardPayload } from '../src/api/types';
 
@@ -31,6 +32,7 @@ function StatCard({ label, value, unit }: { label: string; value: string; unit?:
 }
 
 function DashboardBody({ data }: { data: DashboardPayload }): React.ReactElement {
+  const { t } = useI18n();
   const daily = useMemo(
     () =>
       data.charts.daily_kg.map((row) => ({
@@ -55,29 +57,33 @@ function DashboardBody({ data }: { data: DashboardPayload }): React.ReactElement
     return data.charts.orders_by_status.map((row, i) => ({
       value: row.count,
       color: colors[i % colors.length],
-      text: `${STATUS_LABELS[row.status] ?? row.status} ${row.count}`,
+      text: `${t.status[row.status] ?? STATUS_LABELS[row.status] ?? row.status} ${row.count}`,
     }));
-  }, [data.charts.orders_by_status]);
+  }, [data.charts.orders_by_status, t.status]);
   const ai = data.charts.ai_accuracy;
   const aiPct = ai.accuracy === null ? '—' : `${Math.round(ai.accuracy * 100)}%`;
 
   return (
     <Body>
       <Text style={styles.scope}>
-        {data.scope === 'admin' ? 'ภาพรวมทั้งระบบ' : 'ผลลัพธ์จากล็อตของคุณ'}
+        {data.scope === 'admin' ? t.dashboard.scopeAdmin : t.dashboard.scopeSeller}
       </Text>
       <View style={styles.statGrid}>
-        <StatCard label="กก. ที่ช่วยได้" value={String(data.cards.kg_saved)} unit="kg" />
-        <StatCard label="CO₂e" value={String(data.cards.co2e_kg)} unit="kg" />
-        <StatCard label="รายได้เกษตรกร" value={String(data.cards.farmer_income)} unit="บาท" />
-        <StatCard label="กก. บริจาค" value={String(data.cards.donated_kg)} unit="kg" />
-        <StatCard label="จำนวนออเดอร์" value={String(data.cards.order_count)} />
+        <StatCard label={t.dashboard.kgSaved} value={String(data.cards.kg_saved)} unit={t.dashboard.unitKg} />
+        <StatCard label={t.dashboard.co2e} value={String(data.cards.co2e_kg)} unit={t.dashboard.unitKg} />
+        <StatCard
+          label={t.dashboard.farmerIncome}
+          value={String(data.cards.farmer_income)}
+          unit={t.dashboard.unitBaht}
+        />
+        <StatCard label={t.dashboard.donatedKg} value={String(data.cards.donated_kg)} unit={t.dashboard.unitKg} />
+        <StatCard label={t.dashboard.orderCount} value={String(data.cards.order_count)} />
       </View>
 
-      <SectionTitle>กก. ที่ช่วยได้รายวัน (14 วัน)</SectionTitle>
+      <SectionTitle>{t.dashboard.dailyKg}</SectionTitle>
       <Card>
         {daily.every((d) => d.value === 0) ? (
-          <Text style={styles.empty}>ยังไม่มีข้อมูล — รัน npm run seed:demo</Text>
+          <Text style={styles.empty}>{t.dashboard.emptyCharts}</Text>
         ) : (
           <LineChart
             data={daily}
@@ -98,10 +104,10 @@ function DashboardBody({ data }: { data: DashboardPayload }): React.ReactElement
         )}
       </Card>
 
-      <SectionTitle>แยกตามพืช</SectionTitle>
+      <SectionTitle>{t.dashboard.byCrop}</SectionTitle>
       <Card>
         {byCrop.length === 0 ? (
-          <Text style={styles.empty}>ยังไม่มีข้อมูลตามพืช</Text>
+          <Text style={styles.empty}>{t.dashboard.emptyCharts}</Text>
         ) : (
           <BarChart
             data={byCrop}
@@ -118,10 +124,10 @@ function DashboardBody({ data }: { data: DashboardPayload }): React.ReactElement
         )}
       </Card>
 
-      <SectionTitle>ออเดอร์ตามสถานะ</SectionTitle>
+      <SectionTitle>{t.dashboard.ordersByStatus}</SectionTitle>
       <Card style={styles.pieWrap}>
         {pie.length === 0 ? (
-          <Text style={styles.empty}>ยังไม่มีออเดอร์</Text>
+          <Text style={styles.empty}>{t.dashboard.emptyCharts}</Text>
         ) : (
           <>
             <PieChart data={pie} donut radius={70} innerRadius={40} showText={false} />
@@ -137,11 +143,11 @@ function DashboardBody({ data }: { data: DashboardPayload }): React.ReactElement
         )}
       </Card>
 
-      <SectionTitle>ความแม่นยำ AI ความสุก</SectionTitle>
+      <SectionTitle>{t.dashboard.aiAccuracy}</SectionTitle>
       <Card>
         <Text style={styles.aiBig}>{aiPct}</Text>
         <Text style={styles.aiSub}>
-          ตรงกับที่เกษตรกรเลือก {ai.matched} / {ai.total} ครั้ง
+          {t.dashboard.matched} {ai.matched} / {ai.total}
         </Text>
       </Card>
     </Body>
@@ -150,6 +156,7 @@ function DashboardBody({ data }: { data: DashboardPayload }): React.ReactElement
 
 export default function DashboardScreen(): React.ReactElement {
   const { api, user } = useAuth();
+  const { t } = useI18n();
   const router = useRouter();
   const canSee = user !== null && (user.is_admin || user.can_sell);
   const { data, loading, error, reload } = useApiData(
@@ -159,10 +166,10 @@ export default function DashboardScreen(): React.ReactElement {
 
   if (user === null) {
     return (
-      <SubScreen title="แดชบอร์ด" onBack={() => router.replace('/(tabs)/account')}>
+      <SubScreen title={t.dashboard.title} onBack={() => router.replace('/(tabs)/account')}>
         <LoginPrompt
-          title="ต้องเข้าสู่ระบบ"
-          message="เข้าสู่ระบบเพื่อดูแดชบอร์ดผลลัพธ์"
+          title={t.dashboard.loginTitle}
+          message={t.dashboard.loginMessage}
           returnTo="/dashboard"
         />
       </SubScreen>
@@ -171,16 +178,16 @@ export default function DashboardScreen(): React.ReactElement {
 
   if (!canSee) {
     return (
-      <SubScreen title="แดชบอร์ด" onBack={() => router.replace('/(tabs)/account')}>
+      <SubScreen title={t.dashboard.title} onBack={() => router.replace('/(tabs)/account')}>
         <Body>
-          <Text style={styles.empty}>แดชบอร์ดสำหรับผู้ขายหรือผู้ดูแลระบบ — เปิดการขายที่แท็บบัญชี</Text>
+          <Text style={styles.empty}>{t.dashboard.loginMessage}</Text>
         </Body>
       </SubScreen>
     );
   }
 
   return (
-    <SubScreen title="แดชบอร์ด" onBack={() => router.replace('/(tabs)/account')}>
+    <SubScreen title={t.dashboard.title} onBack={() => router.replace('/(tabs)/account')}>
       <DataState loading={loading} error={error} data={data} onRetry={reload}>
         {(payload) => <DashboardBody data={payload} />}
       </DataState>

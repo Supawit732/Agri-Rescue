@@ -24,6 +24,7 @@ import { GRADE_OPTIONS, RIPENESS_LABELS, STATUS_LABELS } from '../constants';
 import { useAuth } from '../context/AuthContext';
 import { useApiData } from '../hooks/useApiData';
 import { formatCountdown, hoursLeftFrom, useNow } from '../hooks/useNow';
+import { formatTemplate, useI18n } from '../i18n';
 import { C, urgency } from '../theme';
 import type {
   AssessPhotoResponse,
@@ -272,11 +273,15 @@ function NewLotForm({
   onCancelEdit: () => void;
   onDirtyChange: (dirty: boolean) => void;
 }): React.ReactElement {
+  const { t } = useI18n();
   const isEditing = editingLot !== null;
   const [cropId, setCropId] = useState<number>(editingLot?.crop_id ?? crops[0]?.id ?? 0);
   const [plotId, setPlotId] = useState<number>(editingLot?.plot_id ?? plots[0]?.id ?? 0);
   const [weight, setWeight] = useState(editingLot !== null ? String(editingLot.weight_kg) : '');
-  const [ripeness, setRipeness] = useState(editingLot?.ripeness ?? 2);
+  const [ripeness, setRipeness] = useState<number | null>(editingLot?.ripeness ?? null);
+  const [ripenessSource, setRipenessSource] = useState<'user' | 'ai' | null>(
+    editingLot !== null ? 'user' : null,
+  );
   const [grade, setGrade] = useState<Grade>(editingLot?.grade ?? 'substandard');
   const [saleMode, setSaleMode] = useState<SaleMode>(editingLot?.sale_mode ?? 'sell');
   const [donationAudience, setDonationAudience] = useState<DonationAudience>(
@@ -349,6 +354,7 @@ function NewLotForm({
     setPlotId(editingLot.plot_id);
     setWeight(String(editingLot.weight_kg));
     setRipeness(editingLot.ripeness);
+    setRipenessSource('user');
     setGrade(editingLot.grade);
     setSaleMode(editingLot.sale_mode);
     setDonationAudience(editingLot.donation_audience ?? 'verified_org_only');
@@ -381,6 +387,9 @@ function NewLotForm({
     setPhotoPreview(null);
     if (!isEditing) {
       setPricesSeeded(false);
+      setRipeness(null);
+      setRipenessSource(null);
+      setEstimate(null);
     }
   }, [cropId, isEditing]);
 
@@ -390,7 +399,8 @@ function NewLotForm({
 
   // Debounced 400ms shelf-life + price preview from the API (no local pricing).
   useEffect(() => {
-    if (plot === undefined || cropId === 0) {
+    if (plot === undefined || cropId === 0 || ripeness === null) {
+      setEstimate(null);
       return;
     }
     let active = true;
@@ -440,9 +450,11 @@ function NewLotForm({
   const applyRipeness = (value: number, fromAi: boolean): void => {
     setRipeness(value);
     if (fromAi) {
+      setRipenessSource('ai');
       setAiEdited(false);
       return;
     }
+    setRipenessSource('user');
     if (aiResult !== null) {
       setAiEdited(value !== aiResult.ripeness);
     }
@@ -595,6 +607,9 @@ function NewLotForm({
     if (!(weightNum > 0)) {
       nextErrors.weight_kg = 'กรุณากรอกน้ำหนักให้ถูกต้อง (มากกว่า 0)';
     }
+    if (ripeness === null) {
+      nextErrors.ripeness = t.sell.ripenessRequired;
+    }
     if (!(minOrderNum > 0)) {
       nextErrors.min_order_kg = 'ขั้นต่ำต่อคำสั่งซื้อต้องมากกว่า 0';
     }
@@ -622,11 +637,11 @@ function NewLotForm({
         min_order_kg: minOrderNum,
       };
       if (isEditing && editingLot !== null) {
-        const loweringRipeness = ripeness < editingLot.ripeness;
+        const loweringRipeness = ripeness !== null && ripeness < editingLot.ripeness;
         await api.patchLot(editingLot.id, {
           weight_kg: weightNum,
           grade,
-          ripeness,
+          ripeness: ripeness as number,
           sale_mode: saleMode,
           donation_audience: audience,
           ...priceFields,
@@ -640,7 +655,7 @@ function NewLotForm({
           crop_id: cropId,
           weight_kg: weightNum,
           grade,
-          ripeness,
+          ripeness: ripeness as number,
           sale_mode: saleMode,
           donation_audience: audience,
           ...priceFields,
@@ -771,10 +786,10 @@ function NewLotForm({
       ) : null}
 
       <ChipGroup
-        label="ความสุก"
+        label={t.sell.ripeness}
         name="ripeness"
-        options={RIPENESS_LABELS.map((label, index) => ({ key: String(index), label }))}
-        value={String(ripeness)}
+        options={t.ripenessLabels.map((label, index) => ({ key: String(index), label }))}
+        value={ripeness === null ? null : String(ripeness)}
         onChange={(next) => {
           const value = Number(Array.isArray(next) ? next[0] : next);
           applyRipeness(value, false);
@@ -943,8 +958,10 @@ function NewLotForm({
       <Card style={tone !== null ? { borderColor: tone.fg, backgroundColor: tone.bg } : undefined}>
         {estimateError !== null ? (
           <Text style={styles.previewError}>{estimateError}</Text>
+        ) : ripeness === null ? (
+          <Text style={styles.previewMuted}>{t.sell.ripenessInvite}</Text>
         ) : estimate === null ? (
-          <Text style={styles.previewMuted}>กำลังประเมิน…</Text>
+          <Text style={styles.previewMuted}>{t.sell.assessing}</Text>
         ) : (
           <>
             <Text style={[styles.previewUrgency, { color: tone?.fg }]}>
@@ -961,11 +978,18 @@ function NewLotForm({
               <Text style={styles.previewPrice}>โหมดบริจาค — ไม่คิดเงิน</Text>
             )}
             <Text style={styles.previewMuted}>
-              คำนวณจากพยากรณ์อากาศ 3 วันข้างหน้า (เฉลี่ยกลางวัน {estimate.temp_c}°C ความชื้น{' '}
-              {estimate.humidity}%)
+              {ripenessSource === 'ai' && !aiEdited
+                ? t.sell.ripenessSourceAi
+                : t.sell.ripenessSourceUser}
+            </Text>
+            <Text style={styles.previewMuted}>
+              {formatTemplate(t.sell.weatherForecast, {
+                temp: estimate.temp_c,
+                humidity: estimate.humidity,
+              })}
             </Text>
             {estimate.weather_source === 'fallback' ? (
-              <Text style={styles.previewMuted}>ใช้ค่าอากาศสำรอง</Text>
+              <Text style={styles.previewMuted}>{t.sell.weatherFallback}</Text>
             ) : null}
           </>
         )}
@@ -973,10 +997,17 @@ function NewLotForm({
 
       {submitError !== null ? <Text style={styles.previewError}>{submitError}</Text> : null}
       <PrimaryButton
-        label={isEditing ? 'บันทึกการแก้ไข' : 'ลงประกาศ'}
-        onPress={onSubmit}
+        label={isEditing ? t.sell.saveEdit : t.sell.publish}
+        onPress={() => {
+          if (ripeness === null) {
+            setFieldErrors((prev) => ({ ...prev, ripeness: t.sell.ripenessRequired }));
+            setSubmitError(t.sell.ripenessRequired);
+            return;
+          }
+          void onSubmit();
+        }}
         loading={submitting}
-        disabled={!(weightNum > 0)}
+        disabled={!(weightNum > 0) || ripeness === null}
       />
       {isEditing ? <SecondaryButton label="ยกเลิกการแก้ไข" onPress={onCancelEdit} /> : null}
     </Body>

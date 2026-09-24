@@ -5,6 +5,7 @@ import { ApiError } from '../../src/api/client';
 import {
   Body,
   Card,
+  Chip,
   LoginPrompt,
   PrimaryButton,
   Screen,
@@ -12,6 +13,7 @@ import {
   SectionTitle,
 } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
+import { useI18n } from '../../src/i18n';
 import { C } from '../../src/theme';
 
 function donorStatusLabel(user: NonNullable<ReturnType<typeof useAuth>['user']>): string {
@@ -44,6 +46,7 @@ function donorStatusLabel(user: NonNullable<ReturnType<typeof useAuth>['user']>)
 
 export default function AccountTab(): React.ReactElement {
   const { user, logout, api, refreshUser } = useAuth();
+  const { t, locale, setLocale } = useI18n();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -53,10 +56,19 @@ export default function AccountTab(): React.ReactElement {
     return (
       <Screen>
         <LoginPrompt
-          title="บัญชีของฉัน"
-          message="เข้าสู่ระบบเพื่อจัดการโปรไฟล์ สิทธิ์ขาย/ซื้อ และการรับบริจาค"
+          title={t.account.title}
+          message={t.account.loginMessage}
           returnTo="/(tabs)/account"
         />
+        <Body>
+          <SectionTitle>{t.account.language}</SectionTitle>
+          <Card>
+            <View style={styles.langRow}>
+              <Chip label={t.common.thai} selected={locale === 'th'} onPress={() => setLocale('th')} />
+              <Chip label={t.common.english} selected={locale === 'en'} onPress={() => setLocale('en')} />
+            </View>
+          </Card>
+        </Body>
       </Screen>
     );
   }
@@ -108,10 +120,10 @@ export default function AccountTab(): React.ReactElement {
         <Card>
           {(user.can_sell || user.is_admin) ? (
             <View style={styles.gap}>
-              <PrimaryButton label="แดชบอร์ด" onPress={() => router.push('/dashboard')} />
+              <PrimaryButton label={t.account.dashboard} onPress={() => router.push('/dashboard')} />
             </View>
           ) : null}
-          <PrimaryButton label="โปรไฟล์" onPress={() => router.push('/profile')} />
+          <PrimaryButton label={t.account.profile} onPress={() => router.push('/profile')} />
           {!user.can_sell ? (
             <View style={styles.gap}>
               <PrimaryButton label="เปิดการขาย" onPress={() => void enableSell()} loading={busy} />
@@ -130,6 +142,14 @@ export default function AccountTab(): React.ReactElement {
           <PrimaryButton label="สมัคร / จัดการคำขอรับบริจาค" onPress={() => router.push('/donor-apply')} />
         </Card>
 
+        <SectionTitle>{t.account.language}</SectionTitle>
+        <Card>
+          <View style={styles.langRow}>
+            <Chip label={t.common.thai} selected={locale === 'th'} onPress={() => setLocale('th')} />
+            <Chip label={t.common.english} selected={locale === 'en'} onPress={() => setLocale('en')} />
+          </View>
+        </Card>
+
         <SectionTitle>อื่นๆ</SectionTitle>
         <Card>
           <PrimaryButton label="ผลลัพธ์" onPress={() => router.push('/impact')} />
@@ -143,7 +163,7 @@ export default function AccountTab(): React.ReactElement {
           ) : null}
           <View style={styles.gap}>
             <SecondaryButton
-              label="ออกจากระบบ"
+              label={t.common.logout}
               onPress={() => {
                 logout();
                 router.replace('/(tabs)');
@@ -163,4 +183,5 @@ const styles = StyleSheet.create({
   err: { color: C.chili, marginTop: 8, fontWeight: '600' },
   cardLine: { color: C.ink, marginBottom: 10 },
   gap: { marginTop: 8 },
+  langRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
 });

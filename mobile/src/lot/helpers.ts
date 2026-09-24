@@ -52,16 +52,22 @@ export function availableAsOf(lot: MarketLot): AvailableAs[] {
   return [];
 }
 
-export function marketSaleBadge(lot: MarketLot): { text: string; donate: boolean } | null {
+export function marketSaleBadge(
+  lot: MarketLot,
+  labels?: { sell: string; donate: string; donateOk: string },
+): { text: string; donate: boolean } | null {
+  const sell = labels?.sell ?? 'ขาย';
+  const donate = labels?.donate ?? 'บริจาค';
+  const donateOk = labels?.donateOk ?? 'รับบริจาคได้';
   const available = availableAsOf(lot);
   if (available.includes('donate') && !available.includes('buy')) {
-    return { text: 'บริจาค', donate: true };
+    return { text: donate, donate: true };
   }
   if (available.includes('donate') && available.includes('buy')) {
-    return { text: 'รับบริจาคได้', donate: true };
+    return { text: donateOk, donate: true };
   }
   if (available.includes('buy')) {
-    return { text: 'ขาย', donate: false };
+    return { text: sell, donate: false };
   }
   return null;
 }
