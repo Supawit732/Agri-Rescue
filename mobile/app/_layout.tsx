@@ -68,12 +68,22 @@ function AuthGate(): React.ReactElement {
 
     // Authenticated: do not force sell/buy mode homes.
     if (root === 'login' || root === 'register' || root === 'index' || root === '') {
-      router.replace('/(tabs)' as never);
+      if (user.is_admin) {
+        router.replace('/admin' as never);
+      } else {
+        router.replace('/(tabs)' as never);
+      }
       return;
     }
 
     if (root === 'admin' && !user.is_admin) {
       router.replace('/profile' as never);
+      return;
+    }
+
+    // Admin home is the console, not marketplace tabs.
+    if (user.is_admin && root === '(tabs)') {
+      router.replace('/admin' as never);
       return;
     }
 
@@ -85,6 +95,7 @@ function AuthGate(): React.ReactElement {
       router.replace('/(tabs)' as never);
     }
   }, [ready, user, segments, router]);
+
 
   if (!ready) {
     return (

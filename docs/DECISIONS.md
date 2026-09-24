@@ -301,3 +301,20 @@ JWT เก็บ `sub`, `role`, `can_sell`, `can_buy`, `is_admin` (อายุ 
 | i18n | `identity.*` th/en (รวม `optional` สำหรับป้ายอีเมลสมัคร) |
 | Test | สมัครไม่มีเบอร์ → 400 พร้อม `error.fields.phone` |
 
+
+## D032 — Admin Console + segregation of duties
+
+| รายการ | ค่า |
+|---|---|
+| เหตุผล | แบ่งแยกหน้าที่ (segregation of duties): `is_admin` แยกจาก `can_sell`/`can_buy` |
+| Server | `PATCH /auth/profile` ปฏิเสธ admin เปิดขาย/ซื้อ (403); seed `can_sell=0, can_buy=0` เมื่อ `is_admin` |
+| Migration | `022_admin_console.sql` — แก้ผู้ใช้เดิมให้ admin ไม่ขาย/ซื้อ, ชื่อ `0800000005` = `admin`, คำขอ individual ค้าง → volunteer approved |
+| หน้าเข้าสู่ระบบแล้ว | admin → `/admin` ทันที (ไม่ใช่ marketplace tabs); ซ่อนแท็บขาย/คำสั่งซื้อเมื่อเป็น admin |
+| Shell | 4 แท็บ: ภาพรวม · ตลาด · งานรอจัดการ (badge) · ข้อมูลระบบ; หัว light + เมนู ภาษา/ออกจากระบบ |
+| Overview API | `GET /api/admin/overview` — คำนวณจาก DB จริง (ผู้ใช้/ล็อต/impact/คิว/สุขภาพ/กราฟ) + test |
+| ตลาดแอดมิน | `GET /api/admin/lots`, `POST hide/unhide` + log เหตุผล |
+| งานรอจัดการ | `GET /api/admin/inbox` — org/support/weight/otp/proof รวม badge |
+| ข้อมูลระบบ | DIT เดิม + `GET /api/admin/users` อ่านอย่างเดียว + คิว OTP/weight |
+| Org queue | แสดงเฉพาะ `application_kind = organization` |
+| Checklist | checkbox จริง (ไม่ใช่ Chip) |
+| i18n | `admin.tabOverview` ฯลฯ th/en |

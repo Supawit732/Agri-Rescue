@@ -14,6 +14,7 @@ export default function TabsLayout(): React.ReactElement {
   const isWide = width >= SIDEBAR_BREAKPOINT;
   const { t } = useI18n();
   const { user, api } = useAuth();
+  const isAdmin = user?.is_admin === true;
   const [unread, setUnread] = useState(0);
 
   const refreshUnread = useCallback(async () => {
@@ -80,20 +81,32 @@ export default function TabsLayout(): React.ReactElement {
               ),
             }}
           />
-          <Tabs.Screen
-            name="sell"
-            options={{
-              title: t.tabs.sell,
-              tabBarIcon: ({ color, size }) => <Feather name="plus-circle" size={size} color={color} />,
-            }}
-          />
-          <Tabs.Screen
-            name="orders"
-            options={{
-              title: t.tabs.orders,
-              tabBarIcon: ({ color, size }) => <Feather name="file-text" size={size} color={color} />,
-            }}
-          />
+          {!isAdmin ? (
+            <Tabs.Screen
+              name="sell"
+              options={{
+                title: t.tabs.sell,
+                tabBarIcon: ({ color, size }) => (
+                  <Feather name="plus-circle" size={size} color={color} />
+                ),
+              }}
+            />
+          ) : (
+            <Tabs.Screen name="sell" options={{ href: null, title: t.tabs.sell }} />
+          )}
+          {!isAdmin ? (
+            <Tabs.Screen
+              name="orders"
+              options={{
+                title: t.tabs.orders,
+                tabBarIcon: ({ color, size }) => (
+                  <Feather name="file-text" size={size} color={color} />
+                ),
+              }}
+            />
+          ) : (
+            <Tabs.Screen name="orders" options={{ href: null, title: t.tabs.orders }} />
+          )}
           <Tabs.Screen
             name="notifications"
             options={{

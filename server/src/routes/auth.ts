@@ -407,6 +407,14 @@ authRouter.patch(
       }
       let canSell = asBool(current.can_sell);
       let canBuy = asBool(current.can_buy);
+      // Segregation of duties (D032): admin must not buy or sell.
+      if (asBool(current.is_admin)) {
+        if (body.can_sell === true || body.can_buy === true) {
+          throw new HttpError(403, 'FORBIDDEN', 'บัญชีผู้ดูแลระบบขายหรือซื้อไม่ได้');
+        }
+        canSell = false;
+        canBuy = false;
+      }
       if (body.can_sell === true) {
         canSell = true;
       }

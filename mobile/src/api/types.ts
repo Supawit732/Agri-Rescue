@@ -454,6 +454,95 @@ export interface DashboardPayload {
   };
 }
 
+export interface AdminOverview {
+  users: {
+    total: number;
+    sellers: number;
+    buyers: number;
+    donors: number;
+    new_7d: number;
+  };
+  lots: { open: number; sold: number; expired: number };
+  impact: {
+    kg_saved: number;
+    co2e_kg: number;
+    farmer_income: number;
+    donated_kg: number;
+  };
+  actions: {
+    org_pending: number;
+    support_open: number;
+    weight_flags: number;
+    otp_locked: number;
+    donation_proof_overdue: number;
+  };
+  health: {
+    sell_through_rate: number;
+    cancelled_orders: number;
+    ai_accuracy: number | null;
+  };
+  charts: {
+    daily_kg: { date: string; kg: number }[];
+    by_crop: { name: string; kg: number }[];
+    top_shops: { name: string; kg: number }[];
+  };
+}
+
+export interface AdminInboxItem {
+  kind: 'org' | 'support' | 'weight' | 'otp' | 'proof';
+  id: number;
+  title: string;
+  subtitle: string | null;
+  status: string;
+  updated_at: string;
+  link: string;
+  badge?: string | null;
+}
+
+export interface AdminInboxPayload {
+  counts: {
+    org: number;
+    support: number;
+    weight: number;
+    otp: number;
+    proof: number;
+    total: number;
+  };
+  items: AdminInboxItem[];
+}
+
+export interface AdminLotRow {
+  id: number;
+  status: string;
+  hidden: boolean;
+  hide_reason: string | null;
+  crop_name: string;
+  crop_name_en: string | null;
+  weight_kg: number;
+  reserved_kg: number;
+  grade: Grade;
+  ripeness: number;
+  price: number | null;
+  expires_at: string;
+  farmer_id: number;
+  seller_name: string;
+  shop_name: string | null;
+}
+
+export interface AdminUserRow {
+  id: number;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  role: string;
+  can_sell: boolean;
+  can_buy: boolean;
+  is_admin: boolean;
+  donor_tier: string | null;
+  org_status: string | null;
+  created_at: string;
+}
+
 export interface Shop {
   id: number;
   user_id: number;

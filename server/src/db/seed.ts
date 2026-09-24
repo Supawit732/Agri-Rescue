@@ -175,10 +175,13 @@ async function upsertUser(connection: PoolConnection, user: NewUser): Promise<nu
   const canSell = user.role === 'farmer' ? 1 : 0;
   const canBuy = user.role === 'buyer' || user.role === 'driver' ? 1 : 0;
   const isAdmin = user.role === 'coordinator' ? 1 : 0;
+  // Admin is separate from buy/sell (D032)
+  const sellFlag = isAdmin ? 0 : canSell;
+  const buyFlag = isAdmin ? 0 : canBuy;
   const [result] = await connection.query<ResultSetHeader>(
     `INSERT INTO users (name, phone, password_hash, role, can_sell, can_buy, is_admin, line_id, lat, lng)
      VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
-    [user.name, user.phone, user.passwordHash, user.role, canSell, canBuy, isAdmin, user.lat, user.lng],
+    [user.name, user.phone, user.passwordHash, user.role, sellFlag, buyFlag, isAdmin, user.lat, user.lng],
   );
   if (user.buyerType !== null) {
     const isCharity = user.buyerType === 'charity';
