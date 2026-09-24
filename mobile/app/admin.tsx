@@ -76,7 +76,7 @@ export default function AdminScreen(): React.ReactElement {
   const { user } = useAuth();
   const { t } = useI18n();
   const router = useRouter();
-  const [tab, setTab] = useState<'orgs' | 'dit'>('orgs');
+  const [tab, setTab] = useState<'orgs' | 'dit' | 'support'>('orgs');
 
   return (
     <Screen>
@@ -84,16 +84,116 @@ export default function AdminScreen(): React.ReactElement {
       <Segmented
         options={[
           { key: 'orgs', label: t.admin.tabOrgs },
+          { key: 'support', label: t.admin.tabSupport },
           { key: 'dit', label: t.admin.tabDit },
         ]}
         value={tab}
-        onChange={(key) => setTab(key as 'orgs' | 'dit')}
+        onChange={(key) => setTab(key as 'orgs' | 'dit' | 'support')}
       />
       {user !== null ? (
         <Text style={styles.metaPad}>{formatTemplate(t.admin.loggedInAs, { name: user.name })}</Text>
       ) : null}
-      {tab === 'orgs' ? <OrgApplicationsPanel /> : <DitMappingPanel />}
+      {tab === 'orgs' ? <OrgApplicationsPanel /> : null}
+      {tab === 'dit' ? <DitMappingPanel /> : null}
+      {tab === 'support' ? <SupportInboxPanel /> : null}
     </Screen>
+  );
+}
+
+function SupportInboxPanel(): React.ReactElement {
+  const { api } = useAuth();
+  const { t, formatDateTime } = useI18n();
+  const router = useRouter();
+  const [filter, setFilter] = useState<'open' | 'in_progress' | 'closed' | 'all'>('open');
+  const [refreshKey, setRefreshKey] = useState(0);
+  const list = useApiData(
+    () =>
+      api.listSupportTickets({
+        status: filter === 'all' ? undefined : filter,
+        limit: 50,
+      }),
+    [api, filter, refreshKey],
+  );
+  const openCount = list.data?.unread_count ?? 0;
+
+  const statusLabel = (status: string): string => {
+    if (status === 'in_progress') return t.support.statusInProgress;
+    if (status === 'closed') return t.support.statusClosed;
+    return t.support.statusOpen;
+  };
+
+  return (
+    <View style={styles.metaPad}>
+      <View style={styles.supportFilters}>
+        {(
+          [
+            { key: 'open' as const, label: t.support.filterOpen },
+            { key: 'in_progress' as const, label: t.support.filterInProgress },
+            { key: 'closed' as const, label: t.support.filterClosed },
+            { key: 'all' as const, label: t.support.filterAll },
+          ] as const
+        ).map((opt) => {
+          const active = filter === opt.key;
+          return (
+            <Pressable
+              key={opt.key}
+              style={[styles.supportChip, active ? styles.supportChipOn : null]}
+              onPress={() => setFilter(opt.key)}
+            >
+              <Text style={[styles.supportChipText, active ? styles.supportChipTextOn : null]}>
+                {opt.label}
+                {opt.key === 'open' && openCount > 0 ? ` ${openCount}` : ''}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      <DataState
+        loading={list.loading}
+        error={list.error}
+        data={list.data}
+        onRetry={() => {
+          list.reload();
+          setRefreshKey((k) => k + 1);
+        }}
+        isEmpty={(payload) => payload.tickets.length === 0}
+        emptyText={t.support.empty}
+      >
+        {(payload) => (
+          <View style={styles.supportList}>
+            {payload.tickets.map((ticket) => (
+              <Pressable
+                key={ticket.id}
+                style={styles.supportRow}
+                onPress={() =>
+                  router.push({ pathname: '/support/[id]', params: { id: String(ticket.id) } })
+                }
+              >
+                <View
+                  style={[
+                    styles.supportDot,
+                    { backgroundColor: ticket.status === 'closed' ? C.line : C.leaf },
+                  ]}
+                />
+                <View style={styles.supportText}>
+                  <Text style={styles.supportTitle} numberOfLines={1}>
+                    {ticket.user_name ?? ticket.user_id} · {ticket.topic_label}
+                  </Text>
+                  <Text style={styles.supportMeta} numberOfLines={1}>
+                    {statusLabel(ticket.status)}
+                    {ticket.order_id != null ? ` · #${ticket.order_id}` : ''}
+                    {ticket.order_status != null
+                      ? ` · ${formatTemplate(t.support.orderStatus, { status: ticket.order_status })}`
+                      : ''}
+                  </Text>
+                </View>
+                <Text style={styles.supportTime}>{formatDateTime(ticket.updated_at)}</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
+      </DataState>
+    </View>
   );
 }
 
@@ -908,4 +1008,40 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: C.mute,
   },
+  supportFilters: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+    marginHorizontal: 16,
+  },
+  supportChip: {
+    height: 34,
+    paddingHorizontal: 14,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: C.line,
+    backgroundColor: C.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  supportChipOn: { backgroundColor: C.leafDeep, borderColor: C.leafDeep },
+  supportChipText: { fontSize: 13, color: C.ink },
+  supportChipTextOn: { color: C.white, fontWeight: '600' },
+  supportList: { paddingHorizontal: 16, gap: 10, paddingBottom: 24 },
+  supportRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.line,
+    borderRadius: 18,
+    padding: 14,
+  },
+  supportDot: { width: 10, height: 10, borderRadius: 5, flexShrink: 0 },
+  supportText: { flex: 1, gap: 3, minWidth: 0 },
+  supportTitle: { fontSize: 14, fontWeight: '600', color: C.ink },
+  supportMeta: { fontSize: 13, color: C.mute },
+  supportTime: { fontSize: 12, color: C.mute },
 });

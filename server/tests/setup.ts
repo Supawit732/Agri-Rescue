@@ -30,6 +30,9 @@ beforeAll(async () => {
     DELETE FROM notifications;
     DELETE FROM shop_follows;
     DELETE FROM shops;
+    DELETE FROM support_attachments;
+    DELETE FROM support_messages;
+    DELETE FROM support_tickets;
     DELETE FROM users;
   `);
 });

@@ -17,8 +17,9 @@
 | 6.1f โครงนำทาง | เสร็จ | [#19](https://github.com/Supawit732/Agri-Rescue/pull/19) |
 | 6.2 ตลาดสาธารณะ | เสร็จ | [#24](https://github.com/Supawit732/Agri-Rescue/pull/24) |
 | UI PR A (shell/market/profile/login) | เสร็จ | [#25](https://github.com/Supawit732/Agri-Rescue/pull/25) |
-| UI PR B (shops/follows/notifications) | กำลังทำ | สาขา `ui/pr-b-shops-follows-notifications` |
-| 6.3–6.12 / UI PR C–D | ยังไม่ทำ | — |
+| UI PR B (shops/follows/notifications) | เสร็จ | [#26](https://github.com/Supawit732/Agri-Rescue/pull/26) |
+| UI PR C (contact us / support) | กำลังทำ | สาขา `ui/pr-c-contact-us` |
+| 6.3–6.12 / UI PR D | ยังไม่ทำ | — |
 
 หมายเหตุ: โค้ดหน้าจอรอบวิ่งเก่ายังอยู่ใน repo เพื่อให้ test/delivery เดิมผ่าน — **ลบใน 6.11** ไม่ใช่ส่วนของ UX ปัจจุบัน (แท็บหลักเป็นตลาด/ขาย/คำสั่งซื้อ/แจ้งเตือน/บัญชี)
 

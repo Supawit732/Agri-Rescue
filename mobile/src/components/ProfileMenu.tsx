@@ -55,6 +55,12 @@ export function ProfileMenu({
         label: t.shell.followedShops,
         onPress: () => go('/followed-shops'),
       },
+      {
+        key: 'contact',
+        icon: 'message-circle',
+        label: t.shell.contactUs,
+        onPress: () => go('/contact-us'),
+      },
     );
     items.push({
       key: 'donor',

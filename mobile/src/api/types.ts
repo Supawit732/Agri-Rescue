@@ -499,7 +499,7 @@ export interface ShopLotRow {
 
 export type NotificationFilter = 'all' | 'shop' | 'order';
 
-export interface AppNotification {
+export type AppNotification = {
   id: number;
   type: string;
   title_key: string;
@@ -507,4 +507,63 @@ export interface AppNotification {
   link: string | null;
   read_at: string | null;
   created_at: string;
+};
+
+export type SupportTopic =
+  | 'order_pickup'
+  | 'item_mismatch'
+  | 'account_login'
+  | 'donation'
+  | 'other';
+
+export type SupportTicketStatus = 'open' | 'in_progress' | 'closed';
+export type SupportReplyVia = 'app' | 'phone';
+
+export interface SupportTicket {
+  id: number;
+  user_id: number;
+  topic: SupportTopic | string;
+  topic_label: string;
+  order_id: number | null;
+  status: SupportTicketStatus | string;
+  reply_via: SupportReplyVia | string;
+  has_new_reply: boolean;
+  created_at: string;
+  updated_at: string;
+  user_name?: string;
+  order_status?: string;
+  order_summary?: string;
+}
+
+export interface SupportAttachment {
+  id: number;
+  original_name: string | null;
+  mime: string;
+}
+
+export interface SupportMessage {
+  id: number;
+  ticket_id: number;
+  sender_role: 'user' | 'admin';
+  body: string;
+  created_at: string;
+  attachments: SupportAttachment[];
+}
+
+export interface SupportTicketDetail {
+  ticket: SupportTicket;
+  messages: SupportMessage[];
+}
+
+export interface SupportCreateInput {
+  topic: SupportTopic;
+  details: string;
+  order_id?: number | null;
+  reply_via: SupportReplyVia;
+  attachments?: Array<{
+    filename: string;
+    mime: string;
+    base64: string;
+    original_name?: string;
+  }>;
 }
