@@ -108,6 +108,8 @@ interface Api {
   getMyLots: () => Promise<MyLot[]>;
   getMarket: (lat: number, lng: number, radiusKm: number) => Promise<MarketLot[]>;
   getMarketLot: (id: number, lat?: number, lng?: number) => Promise<MarketLot>;
+  getPublicMarket: (lat?: number, lng?: number, radiusKm?: number) => Promise<MarketLot[]>;
+  getPublicMarketLot: (id: number, lat?: number, lng?: number) => Promise<MarketLot>;
   createOrder: (
     lotId: number,
     donation: boolean,
@@ -329,6 +331,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
         const qs =
           lat !== undefined && lng !== undefined ? `?lat=${lat}&lng=${lng}` : '';
         return authed<{ lot: MarketLot }>('GET', `/api/market/lots/${id}${qs}`).then((r) => r.lot);
+      },
+      getPublicMarket: (lat, lng, radiusKm) => {
+        const params = new URLSearchParams();
+        if (lat !== undefined) {
+          params.set('lat', String(lat));
+        }
+        if (lng !== undefined) {
+          params.set('lng', String(lng));
+        }
+        if (radiusKm !== undefined) {
+          params.set('radius_km', String(radiusKm));
+        }
+        const qs = params.toString();
+        return apiRequest<{ lots: MarketLot[] }>({
+          method: 'GET',
+          path: `/api/public/market${qs !== '' ? `?${qs}` : ''}`,
+        }).then((r) => r.lots);
+      },
+      getPublicMarketLot: (id, lat, lng) => {
+        const params = new URLSearchParams();
+        if (lat !== undefined) {
+          params.set('lat', String(lat));
+        }
+        if (lng !== undefined) {
+          params.set('lng', String(lng));
+        }
+        const qs = params.toString();
+        return apiRequest<{ lot: MarketLot }>({
+          method: 'GET',
+          path: `/api/public/lots/${id}${qs !== '' ? `?${qs}` : ''}`,
+        }).then((r) => r.lot);
       },
       createOrder: (lotId, donation, quantityKg, extras) =>
         authed<{ order: Order }>('POST', '/api/orders', {

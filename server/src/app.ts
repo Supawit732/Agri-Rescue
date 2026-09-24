@@ -12,6 +12,7 @@ import { lotsRouter } from './routes/lots';
 import { marketRouter } from './routes/market';
 import { ordersRouter } from './routes/orders';
 import { plotsRouter } from './routes/plots';
+import { publicMarketRouter } from './routes/publicMarket';
 import { stopsRouter } from './routes/stops';
 
 export function createApp(): Express {
@@ -43,6 +44,7 @@ export function createApp(): Express {
   app.use('/api/dashboard', dashboardRouter);
   app.use('/api/plots', plotsRouter);
   app.use('/api/lots', lotsRouter);
+  app.use('/api/public', publicMarketRouter);
   app.use('/api/market', marketRouter);
   app.use('/api/orders', ordersRouter);
   app.use('/api/batches', batchesRouter);

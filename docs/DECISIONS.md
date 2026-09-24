@@ -188,3 +188,16 @@ JWT เก็บ `sub`, `role`, `can_sell`, `can_buy`, `is_admin` (อายุ 
 | Seller confirm | `POST /api/orders/:id/seller-confirm` — OTP + น้ำหนัก; ออเดอร์ `reserved` → `delivered` โดยไม่ผ่าน batch (เดโมรับที่ฟาร์ม); ไม่มีคอลัมน์ `weight_flag` บน orders จึงใช้น้ำหนักเข้า `impact_logs` อย่างเดียว |
 | seed:demo | เติมประวัติ ~14 วัน (marker `photo_url = 'seed:demo'`); รันซ้ำแล้วลบแถว marker ก่อน; ต้อง `migrate`+`seed` ก่อน; ล็อตเปิดจาก seed ปกติยังอยู่สำหรับเดโมสด |
 | Listen | API ฟังที่ `0.0.0.0` เพื่อให้มือถือในเครือข่ายเดียวกันเรียกได้ |
+
+## D024 — Phase 6.2 lite: ตลาดสาธารณะ (ไม่ login)
+
+| รายการ | ค่า |
+|---|---|
+| Endpoints | `GET /api/public/market`, `GET /api/public/lots/:id` — ไม่ต้อง token |
+| Rate limit | 60 ครั้ง/นาที/IP (`publicRateLimit`, MemoryStore; รีสตาร์ทแล้วรีเซ็ต) |
+| ฟิลด์ที่คืน | `crop_name_th`/`crop_name_en`, grade, ripeness, weight/remaining, min_order_kg, price_per_kg, hours_left, distance_km (ปัด 0.5), `subdistrict_th`/`district_th` (null จนกว่า plots มีที่อยู่), `area_th` (= plot_name), `available_as` |
+| ฟิลด์ห้าม | lat/lng, ชื่อ/เบอร์/LINE ผู้ขาย, `sale_mode`, `plot_id`, `user_id` / `farmer_id` |
+| ระยะทาง | มี lat/lng → คำนวณ+กรองรัศมี (ดีฟอลต์ 15 กม.) เรียงใกล้ก่อน; ไม่มี → `distance_km = null` เรียงตาม `hours_left` |
+| ชื่ออังกฤษ | แมปชั่วคราวจากชื่อไทยของพืช seed จนกว่า 6.3 จะมี `crops.name_en` |
+| นอกขอบ lite | `lot_photos`, ตัวกรองพืช, เรียงหลายโหมด (ใกล้/ด่วน/ถูก) — PR ถัดไป |
+| แอป | guest ใช้ `/api/public/*`; login แล้วใช้ `/api/market/*` ตามเดิม |
