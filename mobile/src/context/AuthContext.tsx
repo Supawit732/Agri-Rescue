@@ -35,6 +35,11 @@ import type {
   ShopListItem,
   ShopLotRow,
   Stop,
+  SupportCreateInput,
+  SupportMessage,
+  SupportTicket,
+  SupportTicketDetail,
+  SupportTicketStatus,
   User,
   UserRole,
 } from '../api/types';
@@ -144,6 +149,23 @@ interface Api {
   markNotificationRead: (id: number) => Promise<{ ok: boolean; unread_count: number }>;
   markAllNotificationsRead: () => Promise<{ updated: number; unread_count: number }>;
   unreadNotificationCount: () => Promise<{ unread_count: number }>;
+  listSupportTickets: (options?: {
+    status?: SupportTicketStatus | 'all';
+    mine?: boolean;
+    limit?: number;
+  }) => Promise<{ tickets: SupportTicket[]; unread_count: number }>;
+  createSupportTicket: (input: SupportCreateInput) => Promise<{ ticket: SupportTicket }>;
+  getSupportTicket: (id: number) => Promise<SupportTicketDetail>;
+  replySupportTicket: (
+    id: number,
+    body: string,
+    attachments?: SupportCreateInput['attachments'],
+  ) => Promise<{ message: SupportMessage }>;
+  updateSupportTicketStatus: (
+    id: number,
+    status: SupportTicketStatus,
+  ) => Promise<{ ticket: SupportTicket }>;
+  getOrdersMine: () => Promise<Order[]>;
   createOrder: (
     lotId: number,
     donation: boolean,
@@ -442,6 +464,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
         authed<{ updated: number; unread_count: number }>('POST', '/api/notifications/read-all'),
       unreadNotificationCount: () =>
         authed<{ unread_count: number }>('GET', '/api/notifications/unread-count'),
+      listSupportTickets: (options = {}) => {
+        const params = new URLSearchParams();
+        if (options.status !== undefined && options.status !== 'all') {
+          params.set('status', options.status);
+        }
+        if (options.mine === true) {
+          params.set('mine', '1');
+        }
+        if (options.limit !== undefined) {
+          params.set('limit', String(options.limit));
+        }
+        const qs = params.toString();
+        return authed<{ tickets: SupportTicket[]; unread_count: number }>(
+          'GET',
+          `/api/support${qs !== '' ? `?${qs}` : ''}`,
+        );
+      },
+      createSupportTicket: (input) =>
+        authed<{ ticket: SupportTicket }>('POST', '/api/support/tickets', input),
+      getSupportTicket: (id) =>
+        authed<SupportTicketDetail>('GET', `/api/support/tickets/${id}`),
+      replySupportTicket: (id, body, attachments) =>
+        authed<{ message: SupportMessage }>('POST', `/api/support/tickets/${id}/messages`, {
+          body,
+          ...(attachments !== undefined ? { attachments } : {}),
+        }),
+      updateSupportTicketStatus: (id, status) =>
+        authed<{ ticket: SupportTicket }>('PATCH', `/api/support/tickets/${id}`, { status }),
+      getOrdersMine: () => authed<{ orders: Order[] }>('GET', '/api/orders/mine').then((r) => r.orders),
       getCropCategories: () =>
         apiRequest<{ categories: CropCategory[] }>({
           method: 'GET',

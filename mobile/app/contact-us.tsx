@@ -1,0 +1,363 @@
+import { Feather } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { useCallback, useState } from 'react';
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import type { SupportReplyVia, SupportTopic } from '../src/api/types';
+import { FormField, useFieldErrors, useFieldScroll } from '../src/components/form';
+import { PrimaryButton, Screen, StackHeader } from '../src/components/ui';
+import { useAuth } from '../src/context/AuthContext';
+import { useApiData } from '../src/hooks/useApiData';
+import { formatDateTime, formatTemplate, useI18n } from '../src/i18n';
+import { C, fonts, radius } from '../src/theme';
+
+const TOPICS: Array<{ key: SupportTopic; labelKey: keyof ReturnType<typeof useI18n>['t']['support'] }> = [
+  { key: 'order_pickup', labelKey: 'topicOrderPickup' },
+  { key: 'item_mismatch', labelKey: 'topicItemMismatch' },
+  { key: 'account_login', labelKey: 'topicAccount' },
+  { key: 'donation', labelKey: 'topicDonation' },
+  { key: 'other', labelKey: 'topicOther' },
+];
+
+function statusLabelKey(status: string): 'statusOpen' | 'statusInProgress' | 'statusClosed' {
+  if (status === 'in_progress') return 'statusInProgress';
+  if (status === 'closed') return 'statusClosed';
+  return 'statusOpen';
+}
+
+export default function ContactUsScreen(): React.ReactElement {
+  const { user, api } = useAuth();
+  const { t, formatDateTime, formatNumber } = useI18n();
+  const router = useRouter();
+  const [topic, setTopic] = useState<SupportTopic>('order_pickup');
+  const [details, setDetails] = useState('');
+  const [replyVia, setReplyVia] = useState<SupportReplyVia>('app');
+  const [orderId, setOrderId] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const { errors, setErrors, setFieldError } = useFieldErrors();
+  const { scrollRef, registerY, scrollToField } = useFieldScroll();
+
+  const fetchTickets = useCallback(
+    () => api.listSupportTickets({ mine: true }),
+    [api],
+  );
+  const tickets = useApiData(fetchTickets, [user?.id ?? null]);
+  const orders = useApiData(() => api.getMyOrders(), [user?.id ?? null]);
+
+  const validate = (): Record<string, string> => {
+    const next: Record<string, string> = {};
+    if (details.trim().length === 0) {
+      next.details = t.support.needDetails;
+    } else if (details.trim().length > 1000) {
+      next.details = t.support.detailsCount.replace('{count}', String(details.trim().length));
+    }
+    return next;
+  };
+
+  const submit = async (): Promise<void> => {
+    const next = validate();
+    setErrors(next);
+    if (Object.keys(next).length > 0) {
+      setFieldError('details', next.details ?? null);
+      scrollToField('details');
+      return;
+    }
+    setFormError(null);
+    setBusy(true);
+    try {
+      const { ticket } = await api.createSupportTicket({
+        topic,
+        details: details.trim(),
+        order_id: orderId,
+        reply_via: replyVia,
+      });
+      setDetails('');
+      setOrderId(null);
+      setTopic('order_pickup');
+      tickets.reload();
+      router.push({ pathname: '/support/[id]', params: { id: String(ticket.id) } });
+    } catch {
+      setFormError(t.support.failed);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (user === null) {
+    return (
+      <Screen>
+        <StackHeader title={t.support.title} onBack={() => router.replace('/(tabs)')} />
+        <View style={styles.pad}>
+          <Text style={styles.muted}>{t.support.loginRequired}</Text>
+          <PrimaryButton
+            label={t.common.login}
+            onPress={() =>
+              router.push({ pathname: '/login', params: { returnTo: '/contact-us' } })
+            }
+          />
+        </View>
+      </Screen>
+    );
+  }
+
+  return (
+    <Screen>
+      <StackHeader title={t.support.title} onBack={() => router.replace('/(tabs)')} />
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.body}>
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>{t.support.myTickets}</Text>
+            <Text style={styles.muted}>
+              {formatTemplate(t.support.ticketCount, {
+                count: tickets.data?.tickets.length ?? 0,
+              })}
+            </Text>
+          </View>
+          {tickets.data?.tickets.map((ticket) => (
+            <Pressable
+              key={ticket.id}
+              style={styles.ticketRow}
+              onPress={() =>
+                router.push({ pathname: '/support/[id]', params: { id: String(ticket.id) } })
+              }
+            >
+              <View style={styles.ticketText}>
+                <Text style={styles.ticketTitle} numberOfLines={1}>
+                  {ticket.topic_label} {ticket.order_id != null ? `· #${ticket.order_id}` : ''}
+                </Text>
+                <Text style={styles.muted}>
+                  {t.support[statusLabelKey(ticket.status)]} · {formatDateTime(ticket.updated_at)}
+                </Text>
+              </View>
+              {ticket.has_new_reply ? (
+                <View style={styles.badgeNew}>
+                  <Text style={styles.badgeNewText}>{t.support.newReply}</Text>
+                </View>
+              ) : null}
+            </Pressable>
+          ))}
+          {tickets.data?.tickets.length === 0 ? (
+            <Text style={styles.muted}>{t.support.empty}</Text>
+          ) : null}
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.h2}>{t.support.newTicket}</Text>
+          <Text style={styles.muted}>{t.support.replyWithin}</Text>
+
+          <Text style={styles.label}>{t.support.details}</Text>
+          <View style={styles.chipWrap}>
+            {TOPICS.map((item) => {
+              const selected = topic === item.key;
+              return (
+                <Pressable
+                  key={item.key}
+                  accessibilityRole="button"
+                  onPress={() => setTopic(item.key)}
+                  style={[styles.chip, selected ? styles.chipOn : null]}
+                >
+                  <Text style={[styles.chipText, selected ? styles.chipTextOn : null]}>
+                    {t.support[item.labelKey as keyof typeof t.support] as string}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <Text style={styles.label}>{t.support.relatedOrder}</Text>
+          <Pressable
+            style={styles.select}
+            onPress={() => {
+              const list = orders.data ?? [];
+              if (list.length === 0) return;
+              const idx = list.findIndex((o) => o.id === orderId);
+              const next = idx < 0 ? list[0] : list[(idx + 1) % list.length];
+              setOrderId(next?.id ?? null);
+            }}
+          >
+            <Text style={styles.selectText}>
+              {orderId === null
+                ? t.support.noOrder
+                : (() => {
+                    const order = orders.data?.find((o) => o.id === orderId);
+                    if (order === undefined) return `#${orderId}`;
+                    const kg = order.quantity_kg ?? 0;
+                    return `#${orderId} · ${formatNumber(kg)} ${t.dashboard.unitKg}`;
+                  })()}
+            </Text>
+            <Feather name="chevron-down" size={18} color={C.mute} />
+          </Pressable>
+
+          <FormField
+            label={t.support.details}
+            name="details"
+            value={details}
+            onChangeText={(text) => {
+              setDetails(text);
+              if (text.trim().length > 0) setFieldError('details', null);
+            }}
+            onBlurField={() => {
+              const msg = details.trim().length === 0 ? t.support.needDetails : null;
+              setFieldError('details', msg);
+            }}
+            fieldRef={registerY}
+            error={errors.details}
+            multiline
+            numberOfLines={4}
+            textAlignVertical="top"
+            placeholder={t.support.detailsPlaceholder}
+            style={styles.textarea}
+          />
+          <Text style={styles.counter}>
+            {formatTemplate(t.support.detailsCount, { count: details.length })}
+          </Text>
+
+          <Text style={styles.label}>{t.support.photos}</Text>
+          <View style={styles.photoRow}>
+            <View style={styles.photoAdd} accessibilityLabel={t.support.photosHint}>
+              <Feather name="camera" size={22} color={C.mute} />
+            </View>
+          </View>
+          <Text style={styles.muted}>{t.support.photosHint}</Text>
+
+          <Text style={styles.label}>{t.support.replyVia}</Text>
+          {(
+            [
+              { key: 'app' as const, label: t.support.replyViaApp },
+              { key: 'phone' as const, label: t.support.replyViaPhone },
+            ] as const
+          ).map((opt) => {
+            const selected = replyVia === opt.key;
+            return (
+              <Pressable
+                key={opt.key}
+                accessibilityRole="radio"
+                accessibilityState={{ selected }}
+                onPress={() => setReplyVia(opt.key)}
+                style={styles.radioRow}
+              >
+                <View style={[styles.radio, selected ? styles.radioOn : null]}>
+                  {selected ? <View style={styles.radioDot} /> : null}
+                </View>
+                <Text style={styles.radioLabel}>{opt.label}</Text>
+              </Pressable>
+            );
+          })}
+
+          {formError !== null ? <Text style={styles.error}>{formError}</Text> : null}
+          <PrimaryButton label={t.support.submit} onPress={() => void submit()} loading={busy} />
+        </View>
+
+        <View style={styles.warning}>
+          <Feather name="alert-circle" size={22} color={C.soonFg} />
+          <Text style={styles.warningText}>{t.support.otpWarning}</Text>
+        </View>
+      </ScrollView>
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  body: { padding: 16, paddingBottom: 40, gap: 14 },
+  pad: { padding: 16, gap: 12 },
+  muted: { fontSize: 12, color: C.mute, fontFamily: fonts.body },
+  card: {
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.line,
+    borderRadius: radius.cardLg,
+    padding: 16,
+    gap: 10,
+  },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  cardTitle: { fontSize: 15, fontWeight: '600', color: C.ink, fontFamily: fonts.bodySemi },
+  h2: { fontFamily: fonts.titleBold, fontSize: 18, fontWeight: '700', color: C.ink },
+  ticketRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    minHeight: 52,
+    borderTopWidth: 1,
+    borderTopColor: '#E9ECE6',
+    paddingTop: 10,
+  },
+  ticketText: { flex: 1, gap: 2, minWidth: 0 },
+  ticketTitle: { fontSize: 14, fontWeight: '600', color: C.ink, fontFamily: fonts.bodySemi },
+  badgeNew: {
+    backgroundColor: C.okBg,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  badgeNewText: { fontSize: 11, fontWeight: '700', color: C.okFg, fontFamily: fonts.bodySemi },
+  label: { fontSize: 14, fontWeight: '600', color: C.ink, fontFamily: fonts.bodySemi, marginTop: 4 },
+  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: {
+    minHeight: 36,
+    paddingHorizontal: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: C.line,
+    backgroundColor: C.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chipOn: { borderColor: C.leaf, borderWidth: 1.5, backgroundColor: C.leafSoft },
+  chipText: { fontSize: 14, color: C.ink, fontFamily: fonts.body },
+  chipTextOn: { color: C.leafDeep, fontWeight: '600', fontFamily: fonts.bodySemi },
+  select: {
+    height: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: C.lineStrong,
+    borderRadius: radius.control,
+    paddingHorizontal: 14,
+    backgroundColor: C.surface,
+  },
+  selectText: { fontSize: 15, color: C.ink, fontFamily: fonts.body },
+  textarea: { minHeight: 110, paddingTop: 12 },
+  counter: { fontSize: 12, color: C.mute, textAlign: 'right', fontFamily: fonts.body },
+  photoRow: { flexDirection: 'row', gap: 8 },
+  photoAdd: {
+    width: 72,
+    height: 72,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: C.lineStrong,
+    backgroundColor: C.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radioRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 40 },
+  radio: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: C.leaf,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radioOn: { borderColor: C.leaf },
+  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: C.leaf },
+  radioLabel: { fontSize: 15, color: C.ink, fontFamily: fonts.body },
+  error: { color: C.danger, fontFamily: fonts.body },
+  warning: {
+    flexDirection: 'row',
+    gap: 12,
+    backgroundColor: C.soonBg,
+    borderRadius: radius.cardLg,
+    padding: 14,
+    alignItems: 'flex-start',
+  },
+  warningText: { flex: 1, fontSize: 13, color: '#3B2A06', lineHeight: 20, fontFamily: fonts.body },
+});

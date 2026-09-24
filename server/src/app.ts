@@ -16,6 +16,7 @@ import { publicMarketRouter } from './routes/publicMarket';
 import { stopsRouter } from './routes/stops';
 import { shopsRouter } from './routes/shops';
 import { notificationsRouter } from './routes/notifications';
+import { supportRouter } from './routes/support';
 import { ensurePublicUploadsDir, PUBLIC_UPLOADS_DIR } from './storage/publicUploads';
 
 void ensurePublicUploadsDir().catch((err: unknown) => {
@@ -55,6 +56,7 @@ export function createApp(): Express {
   app.use('/api/public', publicMarketRouter);
   app.use('/api/shops', shopsRouter);
   app.use('/api/notifications', notificationsRouter);
+  app.use('/api/support', supportRouter);
   app.use('/api/market', marketRouter);
   app.use('/api/orders', ordersRouter);
   app.use('/api/batches', batchesRouter);

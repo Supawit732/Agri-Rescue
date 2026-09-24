@@ -10,6 +10,7 @@ const mimeToExt: Record<string, string> = {
   'application/pdf': 'pdf',
   'image/jpeg': 'jpg',
   'image/png': 'png',
+  'image/webp': 'webp',
 };
 
 export function assertOrgDocMime(mime: string): void {
@@ -18,19 +19,40 @@ export function assertOrgDocMime(mime: string): void {
   }
 }
 
+/** Support photos: jpeg/png/webp, ≤ 1MB (reuse private_uploads store). */
+export function assertSupportImageMime(mime: string): void {
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(mime)) {
+    throw new HttpError(400, 'VALIDATION', 'รองรับเฉพาะ JPEG, PNG หรือ WebP');
+  }
+}
+
+export const SUPPORT_IMAGE_MAX_BYTES = 1_000_000;
+
 export async function savePrivateUpload(input: {
   userId: number;
   originalName: string;
   mime: string;
   base64: string;
+  /** When true, allow webp + 1MB support images instead of org-doc rules. */
+  supportImage?: boolean;
 }): Promise<{ storedName: string; sizeBytes: number }> {
-  assertOrgDocMime(input.mime);
+  if (input.supportImage === true) {
+    assertSupportImageMime(input.mime);
+  } else {
+    assertOrgDocMime(input.mime);
+  }
   const buffer = Buffer.from(input.base64, 'base64');
   if (buffer.length === 0) {
     throw new HttpError(400, 'VALIDATION', 'ไฟล์ว่าง');
   }
-  if (buffer.length > DONOR_CONFIG.orgDocMaxBytes) {
-    throw new HttpError(400, 'VALIDATION', 'ไฟล์ใหญ่เกิน 5MB');
+  const maxBytes =
+    input.supportImage === true ? SUPPORT_IMAGE_MAX_BYTES : DONOR_CONFIG.orgDocMaxBytes;
+  if (buffer.length > maxBytes) {
+    throw new HttpError(
+      400,
+      'VALIDATION',
+      input.supportImage === true ? 'ไฟล์ใหญ่เกิน 1MB' : 'ไฟล์ใหญ่เกิน 5MB',
+    );
   }
   const ext = mimeToExt[input.mime] ?? 'bin';
   const storedName = `${input.userId}/${randomUUID()}.${ext}`;

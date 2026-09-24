@@ -247,3 +247,17 @@ JWT เก็บ `sub`, `role`, `can_sell`, `can_buy`, `is_admin` (อายุ 
 | ชื่อฟอนต์ข้อความ | แคตตาล็อก `t.notif.*` ใช้ template `{param}` จาก `params_json` |
 | เมนู | เพิ่ม «ร้านที่ติดตาม» → `/followed-shops` |
 
+## D028 — UI PR C: ติดต่อเรา (support tickets)
+
+| รายการ | ค่า |
+|---|---|
+| ตาราง | migration `020_support_tickets.sql` — `support_tickets` / `support_messages` / `support_attachments` (ไม่มี FK) |
+| หัวข้อ | `order_pickup` · `item_mismatch` · `account_login` · `donation` · `other` (label จาก server เป็น fallback; UI ไทย/อังกฤษจาก i18n) |
+| สถานะ | `open → in_progress → closed` — admin เท่านั้นแก้สถานะ; user ตอบได้จนกว่าปิด |
+| รูปแนบ | ≤ 3 รูป JPEG/PNG/WebP ≤ 1MB ต่อรูป ใน `private_uploads/` ดาวน์โหลดเฉพาะ owner/admin ที่ `GET /api/support/tickets/:id/attachments/:attachmentId` |
+| Rate limit | สร้างเรื่อง **5 เรื่อง/ชม./ผู้ใช้** (`supportCreateRateLimit`) |
+| แจ้งเตือน | ฝั่ง admin ตอบ → `notifications` type `support_reply` + link `/support/:id` |
+| ยังไม่ทำ | ปุ่มยกเลิกออเดอร์จากหน้านี้, สถิติผู้ซื้อ/ผู้ขาย (ตาม UI_PLAN) |
+| เมนู | เพิ่ม «ติดต่อเรา» → `/contact-us`; admin มีแท็บ «ติดต่อเรา» ใน `/admin` |
+| กล่องเตือน OTP | ข้อความเตือนบนหน้า `contact-us` ไม่ให้ OTP เมื่อของไม่ตรงตามรูป |
+
