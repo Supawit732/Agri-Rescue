@@ -12,6 +12,7 @@ import { HttpError } from '../http/errors';
 import { requireAuth, requireCapability } from '../middleware/auth';
 import { loadPublicUser } from './auth';
 import { readPrivateUpload, savePrivateUpload } from '../storage/privateUploads';
+import { notifyUser } from '../notifications/notificationService';
 
 export const donorsRouter = Router();
 
@@ -1103,6 +1104,11 @@ donorsRouter.post(
     } finally {
       connection.release();
     }
+    try {
+      await notifyUser(userId, 'donor_review', 'notif.donor_review', { status: 'approved' }, '/donor-apply');
+    } catch {
+      // ignore
+    }
     res.json({ user: await loadPublicUser(userId) });
   }),
 );
@@ -1135,6 +1141,11 @@ donorsRouter.post(
       throw error;
     } finally {
       connection.release();
+    }
+    try {
+      await notifyUser(userId, 'donor_review', 'notif.donor_review', { status: 'rejected' }, '/donor-apply');
+    } catch {
+      // ignore
     }
     res.json({ user: await loadPublicUser(userId) });
   }),
@@ -1176,6 +1187,17 @@ donorsRouter.post(
       throw error;
     } finally {
       connection.release();
+    }
+    try {
+      await notifyUser(
+        userId,
+        'donor_review',
+        'notif.donor_review',
+        { status: 'needs_more_info' },
+        '/donor-apply',
+      );
+    } catch {
+      // ignore
     }
     res.json({ user: await loadPublicUser(userId) });
   }),

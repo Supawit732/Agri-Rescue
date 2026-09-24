@@ -61,6 +61,11 @@ export async function seed(): Promise<void> {
         createdAt: seedAt,
         expiresAt,
       });
+      await connection.query(
+        `INSERT INTO shops (user_id, name) VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE name = VALUES(name)`,
+        [farmerId, `สวน${farmer.name}`],
+      );
     }
 
     for (const person of staff) {

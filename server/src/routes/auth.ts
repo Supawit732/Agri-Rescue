@@ -13,6 +13,7 @@ import {
 import { asyncHandler } from '../http/asyncHandler';
 import { HttpError } from '../http/errors';
 import { requireAuth, requireCapability, signAccessToken } from '../middleware/auth';
+import { ensureShop } from '../shops/shopService';
 import type { UserRole } from '../types/express';
 
 export const authRouter = Router();
@@ -273,6 +274,7 @@ authRouter.post(
     const passwordHash = await bcrypt.hash(body.password, 10);
     const charityApproved = body.buyer_type === 'charity' ? 0 : 1;
     const connection = await pool.getConnection();
+    let newUserId = 0;
     try {
       await connection.beginTransaction();
       const [result] = await connection.query<ResultSetHeader>(
@@ -291,6 +293,7 @@ authRouter.post(
           body.lng ?? null,
         ],
       );
+      newUserId = result.insertId;
       if (body.can_buy && body.buyer_type !== undefined && body.buyer_type !== null) {
         const isCharity = body.buyer_type === 'charity';
         await connection.query(
@@ -306,9 +309,10 @@ authRouter.post(
           ],
         );
       }
+      if (body.can_sell) {
+        await ensureShop(result.insertId, connection);
+      }
       await connection.commit();
-      const publicUser = await loadPublicUser(result.insertId);
-      res.status(201).json({ token: tokenFor(publicUser), user: publicUser });
     } catch (error) {
       await connection.rollback();
       if (isDuplicate(error)) {
@@ -318,6 +322,8 @@ authRouter.post(
     } finally {
       connection.release();
     }
+    const publicUser = await loadPublicUser(newUserId);
+    res.status(201).json({ token: tokenFor(publicUser), user: publicUser });
   }),
 );
 
@@ -418,6 +424,9 @@ authRouter.patch(
         `UPDATE users SET can_sell = ?, can_buy = ?, email = ?, line_id = ?, role = ? WHERE id = ?`,
         [canSell ? 1 : 0, canBuy ? 1 : 0, email, lineId, role, userId],
       );
+      if (body.can_sell === true || (canSell && !current.can_sell)) {
+        await ensureShop(userId, connection);
+      }
       await connection.commit();
     } catch (error) {
       await connection.rollback();

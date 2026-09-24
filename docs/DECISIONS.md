@@ -231,3 +231,19 @@ JWT เก็บ `sub`, `role`, `can_sell`, `can_buy`, `is_admin` (อายุ 
 | ปุ่ม PR B/C ในเมนู | ร้านที่ติดตาม / ติดต่อเรา **ยังไม่แสดง** จนกว่า PR B/C (เลี่ยงเมนูผี) |
 | Login mockup | ยังไม่มีปุ่ม LINE (PR D) และ "ลืมรหัสผ่าน" แสดงเป็นข้อความ disabled |
 
+## D027 — UI PR B: ร้านค้า · ติดตาม · แจ้งเตือนในแอป
+
+| รายการ | ค่า |
+|---|---|
+| `shops` / `shop_follows` | migration `018_shops.sql`; ไม่มี FK; PK `shops.user_id` = เจ้าของ; `shop_follows(user_id, shop_id)` unique PK คู่ |
+| สร้างร้าน | อัตโนมัติเมื่อ register/open `can_sell` และตอนสร้างล็อต; ชื่อเริ่มต้น = ชื่อผู้ใช้ แก้ที่ `PATCH /api/shops/mine` |
+| Public shop | `GET /api/shops/:userId` คืนชื่อร้าน/คำอธิบาย/สถิติจริง (ส่งมอบ, ผู้ติดตาม, กก.) ชื่อแปลง · ระยะ (ถ้ามี lat/lng query) พืชขายบ่อย; **ไม่คืน** ตำแหน่ง/เบอร์/phone |
+| ตำบล/อำเภอ | ยังไม่มีใน `plots` (D022) — ใช้ `plot_name` แทน |
+| ค้นหาตลาด | `GET /api/public/market?q=` จับคู่ crop หรือ `shop_name` |
+| การ์ดตลาด | คืน `shop_name` + `farmer_id`; ไม่คืน `farmer_name` |
+| `notifications` | migration `019_notifications.sql`; เก็บ `title_key` + `params_json` + `link`; อ่านเฉพาะ `user_id` ของตน |
+| เหตุการณ์ PR B | `shop_new_lot` (ผู้ติดตาม), `lot_booked` (ผู้ขาย), `order_delivered` (ผู้ซื้อ), `donor_review` (อนุมัติ/ปฏิเสธ/ขอเพิ่ม), `donor_proof_due` (หลังยืนยันรับบริจาค); `support_reply` เตรียมไว้สำหรับ PR C |
+| push | ยังไม่ทำ — เฉพาะ in-app + badge แท็บ |
+| ชื่อฟอนต์ข้อความ | แคตตาล็อก `t.notif.*` ใช้ template `{param}` จาก `params_json` |
+| เมนู | เพิ่ม «ร้านที่ติดตาม» → `/followed-shops` |
+

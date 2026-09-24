@@ -33,6 +33,7 @@ describe('public market', () => {
     expect(lot.photos).toEqual([]);
     expect(lot.sale_mode).toBeUndefined();
     expect(lot.farmer_name).toBeUndefined();
+    expect(lot.phone).toBeUndefined();
     expect(lot.lat).toBeUndefined();
     expect(lot.lng).toBeUndefined();
     expect(lot.can_request_donation).toBeUndefined();
@@ -40,9 +41,9 @@ describe('public market', () => {
     const raw = JSON.stringify(response.body);
     expect(raw).not.toContain('sale_mode');
     expect(raw).not.toContain('farmer_name');
+    expect(raw).not.toContain('"phone"');
     expect(raw).not.toContain('"lat"');
     expect(raw).not.toContain('"lng"');
-    expect(raw).not.toContain('ลุงลับ');
   });
 
   it('hides donate wording for sell_then_donate before open; donate-only has null price', async () => {

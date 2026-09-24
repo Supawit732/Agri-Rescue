@@ -287,6 +287,8 @@ export interface MarketLot {
   subdistrict_th?: string | null;
   district_th?: string | null;
   area_rai?: number;
+  shop_name?: string | null;
+  farmer_id?: number;
   photo_url?: string | null;
   photos?: string[];
   can_request_donation?: boolean;
@@ -450,4 +452,59 @@ export interface DashboardPayload {
     orders_by_status: { status: string; count: number }[];
     ai_accuracy: { total: number; matched: number; accuracy: number | null };
   };
+}
+
+export interface Shop {
+  id: number;
+  user_id: number;
+  name: string;
+  avatar: string | null;
+  cover: string | null;
+  description: string | null;
+  location_label: string | null;
+  distance_km: number | null;
+  common_crops: string[];
+  stats: {
+    delivered_orders: number;
+    followers: number;
+    kg_saved: number;
+  };
+  is_following: boolean;
+}
+
+export interface ShopListItem {
+  user_id: number;
+  name: string;
+  avatar: string | null;
+  description: string | null;
+}
+
+export interface ShopLotRow {
+  id: number;
+  crop_id: number;
+  weight_kg: number;
+  reserved_kg?: number;
+  grade: Grade;
+  ripeness: number;
+  expires_at: string;
+  status: string;
+  start_price_per_kg: number | null;
+  floor_price_per_kg: number | null;
+  sale_mode?: SaleMode;
+  donation_opened?: boolean;
+  photo_url: string | null;
+  crop_name_th: string;
+  crop_name_en?: string | null;
+}
+
+export type NotificationFilter = 'all' | 'shop' | 'order';
+
+export interface AppNotification {
+  id: number;
+  type: string;
+  title_key: string;
+  params: Record<string, string | number | boolean | null>;
+  link: string | null;
+  read_at: string | null;
+  created_at: string;
 }

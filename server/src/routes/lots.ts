@@ -24,6 +24,8 @@ import { sumReservedQuantityKg } from '../orders/lotInventoryService';
 import { defaultLotPrices, resolveMarketPrice } from '../pricing/referencePrices';
 import { lotPhotoStoragePath, savePublicLotPhoto } from '../storage/publicUploads';
 import { fetchWeather, WEATHER_BASIS } from '../weather/openMeteo';
+import { ensureShop, followerIds } from '../shops/shopService';
+import { notifyMany } from '../notifications/notificationService';
 
 async function insertLotPhoto(connection: PoolConnection, lotId: number, photoUrl: string): Promise<void> {
   const storagePath = lotPhotoStoragePath(photoUrl) ?? photoUrl;
@@ -312,7 +314,30 @@ lotsRouter.post(
       if (photoUrl !== null && photoUrl !== '') {
         await insertLotPhoto(connection, lotResult.insertId, photoUrl);
       }
+      await ensureShop(farmerId, connection);
       await connection.commit();
+      // Notify followers after commit (best-effort).
+      try {
+        const followers = (await followerIds(farmerId)).filter((id) => id !== farmerId);
+        const [cropRows] = await pool.query<RowDataPacket[]>(
+          `SELECT name_th FROM crops WHERE id = ?`,
+          [body.crop_id],
+        );
+        const cropName = String(cropRows[0]?.name_th ?? '');
+        await notifyMany(
+          followers,
+          'shop_new_lot',
+          'notif.shop_new_lot',
+          {
+            weight_kg: body.weight_kg,
+            crop: cropName,
+            lot_id: Number(lotResult.insertId),
+          },
+          () => `/lots/${lotResult.insertId}`,
+        );
+      } catch {
+        // notifications must not fail lot create
+      }
       const pricePerKg =
         body.sale_mode === 'donate'
           ? 0
