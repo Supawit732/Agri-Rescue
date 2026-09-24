@@ -27,6 +27,9 @@ beforeAll(async () => {
     DELETE FROM plots;
     DELETE FROM crops;
     DELETE FROM buyer_profiles;
+    DELETE FROM notifications;
+    DELETE FROM shop_follows;
+    DELETE FROM shops;
     DELETE FROM users;
   `);
 });

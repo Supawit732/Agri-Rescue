@@ -28,12 +28,15 @@ const querySchema = z.object({
   price_min: z.coerce.number().nonnegative().optional(),
   price_max: z.coerce.number().positive().optional(),
   max_hours: z.coerce.number().positive().optional(),
+  q: z.string().trim().max(80).optional(),
   sort: z.enum(['near', 'urgent', 'cheap']).optional(),
 });
 
 interface PublicMarketRow extends RowDataPacket {
   id: number;
   crop_id: number;
+  farmer_id: number;
+  shop_name: string | null;
   weight_kg: number;
   split_allowed: number;
   min_order_kg: number;
@@ -57,7 +60,8 @@ interface PublicMarketRow extends RowDataPacket {
   plot_name: string;
 }
 
-const PUBLIC_LOT_SELECT = `SELECT h.id, h.crop_id, h.weight_kg, h.split_allowed, h.min_order_kg, h.order_step_kg,
+const PUBLIC_LOT_SELECT = `SELECT h.id, h.crop_id, p.farmer_id, s.name AS shop_name,
+              h.weight_kg, h.split_allowed, h.min_order_kg, h.order_step_kg,
               h.grade, h.ripeness, h.donation_audience, h.photo_url,
               h.start_price_per_kg, h.floor_price_per_kg, h.sale_mode, h.donation_opened,
               h.market_price_snapshot, h.expires_at,
@@ -69,7 +73,8 @@ const PUBLIC_LOT_SELECT = `SELECT h.id, h.crop_id, h.weight_kg, h.split_allowed,
               ), 0) AS reserved_kg
        FROM harvest_lots h
        JOIN crops c ON c.id = h.crop_id
-       JOIN plots p ON p.id = h.plot_id`;
+       JOIN plots p ON p.id = h.plot_id
+       LEFT JOIN shops s ON s.user_id = p.farmer_id`;
 
 /** Round distance to nearest 0.5 km (D023). */
 export function roundDistanceKm(km: number): number {
@@ -79,6 +84,8 @@ export function roundDistanceKm(km: number): number {
 export interface PublicLotView {
   id: number;
   crop_id: number;
+  farmer_id: number;
+  shop_name: string | null;
   crop_name_th: string;
   crop_name_en: string | null;
   plot_name: string;
@@ -192,6 +199,10 @@ function presentPublicLot(
   const view: PublicLotView = {
     id: Number(row.id),
     crop_id: Number(row.crop_id),
+    farmer_id: Number(row.farmer_id),
+    shop_name: row.shop_name === null || row.shop_name === undefined || row.shop_name === ''
+      ? null
+      : String(row.shop_name),
     crop_name_th: row.crop_name_th,
     crop_name_en: row.crop_name_en === null || row.crop_name_en === '' ? null : String(row.crop_name_en),
     plot_name: row.plot_name,
@@ -366,6 +377,15 @@ publicMarketRouter.get(
     if (query.max_hours !== undefined) {
       const maxHours = query.max_hours;
       lots = lots.filter((lot) => lot.hours_left <= maxHours);
+    }
+    if (query.q !== undefined && query.q.trim() !== '') {
+      const q = query.q.trim().toLowerCase();
+      lots = lots.filter((lot) => {
+        const cropTh = lot.crop_name_th.toLowerCase();
+        const cropEn = (lot.crop_name_en ?? '').toLowerCase();
+        const shop = (lot.shop_name ?? '').toLowerCase();
+        return cropTh.includes(q) || cropEn.includes(q) || (q.length > 0 && shop.includes(q));
+      });
     }
     lots = sortLots(lots, sort, hasCoords);
     res.json({ lots });

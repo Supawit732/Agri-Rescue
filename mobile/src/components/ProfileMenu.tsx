@@ -49,6 +49,12 @@ export function ProfileMenu({
         label: t.shell.dashboard,
         onPress: () => go('/dashboard'),
       },
+      {
+        key: 'followed',
+        icon: 'users',
+        label: t.shell.followedShops,
+        onPress: () => go('/followed-shops'),
+      },
     );
     items.push({
       key: 'donor',

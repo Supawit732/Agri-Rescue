@@ -62,6 +62,26 @@ export type Messages = {
     buyer: string;
     viewEditProfile: string;
   };
+  shop: {
+    title: string;
+    follow: string;
+    unfollow: string;
+    followHint: string;
+    delivered: string;
+    followers: string;
+    kgSaved: string;
+    selling: string;
+    sold: string;
+    emptySelling: string;
+    emptySold: string;
+    distance: string;
+    commonCrops: string;
+    notFound: string;
+    followedTitle: string;
+    followedEmpty: string;
+    editShopName: string;
+    editShopNameHint: string;
+  };
   market: {
     title: string;
     empty: string;
@@ -784,6 +804,27 @@ export type Messages = {
   notifications: {
     empty: string;
     goMarket: string;
+    markAll: string;
+    filterAll: string;
+    filterShop: string;
+    filterOrder: string;
+    today: string;
+    yesterday: string;
+    older: string;
+    catShop: string;
+    catOrder: string;
+    catDonor: string;
+    catOther: string;
+    unreadLabel: string;
+    loginRequired: string;
+  };
+  notif: {
+    shop_new_lot: string;
+    lot_booked: string;
+    order_delivered: string;
+    donor_review: string;
+    donor_proof_due: string;
+    support_reply: string;
   };
   register: {
     title: string;

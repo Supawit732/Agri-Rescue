@@ -25,6 +25,7 @@ import { asyncHandler } from '../http/asyncHandler';
 import { HttpError } from '../http/errors';
 import { requireAuth, requireCapability } from '../middleware/auth';
 import { finalizeLotIfComplete, sumReservedQuantityKg, syncLotBookableStatus } from '../orders/lotInventoryService';
+import { notifyUser } from '../notifications/notificationService';
 
 export const ordersRouter = Router();
 
@@ -217,6 +218,22 @@ ordersRouter.post(
         lot_status: lotStatus,
         remaining_kg: remainingLotKg(weightKg, reservedSum + body.quantity_kg),
       });
+      try {
+        await notifyUser(
+          Number(lot.farmer_id),
+          'lot_booked',
+          'notif.lot_booked',
+          {
+            quantity_kg: body.quantity_kg,
+            order_id: result.insertId,
+            lot_id: lot.id,
+            is_donation: donation,
+          },
+          `/orders/${result.insertId}`,
+        );
+      } catch {
+        // ignore notify failure
+      }
     } catch (error) {
       await connection.rollback();
       throw error;
@@ -415,6 +432,31 @@ ordersRouter.post(
         },
         lot_status: lotStatus,
       });
+      try {
+        await notifyUser(
+          Number(order.buyer_id),
+          'order_delivered',
+          'notif.order_delivered',
+          {
+            quantity_kg: Number(order.quantity_kg),
+            order_id: Number(order.id),
+            is_donation: Number(order.is_donation) === 1,
+            weight_kg: kgSaved,
+          },
+          `/orders/${Number(order.id)}`,
+        );
+        if (Number(order.is_donation) === 1) {
+          await notifyUser(
+            Number(order.buyer_id),
+            'donor_proof_due',
+            'notif.donor_proof_due',
+            { order_id: Number(order.id) },
+            `/orders/${Number(order.id)}`,
+          );
+        }
+      } catch {
+        // ignore notify failure
+      }
     } catch (error) {
       await connection.rollback();
       throw error;

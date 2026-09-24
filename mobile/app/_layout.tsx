@@ -27,7 +27,7 @@ export const unstable_settings = {
 void SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 /** Routes reachable without login (tabs invite internally). */
-const openRoots = new Set(['index', '(tabs)', 'login', 'register', 'terms', 'lots', 'profile']);
+const openRoots = new Set(['index', '(tabs)', 'login', 'register', 'terms', 'lots', 'profile', 'shops', 'followed-shops']);
 
 function AuthGate(): React.ReactElement {
   const { ready, user } = useAuth();
@@ -103,6 +103,8 @@ function AuthGate(): React.ReactElement {
       <Stack.Screen name="driver" />
       <Stack.Screen name="coordinator" />
       <Stack.Screen name="impact" />
+      <Stack.Screen name="shops/[userId]" />
+      <Stack.Screen name="followed-shops" />
     </Stack>
   );
 }

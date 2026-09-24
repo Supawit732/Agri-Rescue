@@ -21,6 +21,7 @@ export default function ProfileScreen(): React.ReactElement {
   const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState(user?.email ?? '');
   const [lineId, setLineId] = useState(user?.line_id ?? '');
+  const [shopName, setShopName] = useState(user?.name ?? '');
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(
     user?.lat != null && user?.lng != null ? { lat: user.lat, lng: user.lng } : null,
   );
@@ -172,16 +173,47 @@ export default function ProfileScreen(): React.ReactElement {
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>{t.profile.myShop}</Text>
-          <Pressable style={styles.linkRow} onPress={() => router.push('/(tabs)/sell')}>
+          <Pressable
+            style={styles.linkRow}
+            onPress={() => router.push({ pathname: '/shops/[userId]', params: { userId: String(user.id) } })}
+          >
             <View style={styles.shopIcon}>
               <Text style={styles.shopIconText}>{initialsOf(user.name)}</Text>
             </View>
             <View style={styles.switchText}>
               <Text style={styles.rowTitle}>{user.name}</Text>
-              <Text style={styles.muted}>{t.profile.myShopDesc}</Text>
+              <Text style={styles.muted}>{t.shop.editShopNameHint}</Text>
             </View>
             <Feather name="chevron-right" size={18} color={C.mute} />
           </Pressable>
+          <FormField
+            label={t.shop.editShopName}
+            name="shop_name"
+            value={shopName}
+            onChangeText={setShopName}
+            onBlurField={() => undefined}
+            fieldRef={registerY}
+            placeholder={user.name}
+          />
+          <PrimaryButton
+            label={t.shop.editShopName}
+            onPress={() => {
+              void (async () => {
+                setBusy(true);
+                setError(null);
+                try {
+                  await api.ensureMyShop();
+                  await api.updateMyShop({ name: shopName.trim() || user.name });
+                  setMessage(t.profile.saved);
+                } catch (err) {
+                  setError(err instanceof ApiError ? translateError(err.code, err.message) : t.profile.saveFailed);
+                } finally {
+                  setBusy(false);
+                }
+              })();
+            }}
+            loading={busy}
+          />
         </View>
 
         <View style={styles.card}>

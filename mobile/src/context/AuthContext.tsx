@@ -3,6 +3,7 @@ import { apiRequest, setUnauthorizedHandler } from '../api/client';
 import { clearAppMode, clearToken, loadAppMode, loadToken, saveAppMode, saveToken } from '../api/storage';
 import type {
   AppMode,
+  AppNotification,
   AssessPhotoResponse,
   AuthResponse,
   Batch,
@@ -24,11 +25,15 @@ import type {
   MarketLot,
   MyDonorApplication,
   MyLot,
+  NotificationFilter,
   Order,
   OrgApplication,
   OrgChecklist,
   Plot,
   SaleMode,
+  Shop,
+  ShopListItem,
+  ShopLotRow,
   Stop,
   User,
   UserRole,
@@ -120,10 +125,25 @@ interface Api {
     price_min?: number;
     price_max?: number;
     max_hours?: number;
+    q?: string;
     sort?: 'near' | 'urgent' | 'cheap';
   }) => Promise<MarketLot[]>;
   getCropCategories: () => Promise<CropCategory[]>;
   getPublicMarketLot: (id: number, lat?: number, lng?: number) => Promise<MarketLot>;
+  getShop: (userId: number, lat?: number, lng?: number) => Promise<Shop>;
+  updateMyShop: (input: { name?: string; description?: string | null }) => Promise<Shop>;
+  ensureMyShop: () => Promise<Shop>;
+  followShop: (userId: number) => Promise<Shop>;
+  unfollowShop: (userId: number) => Promise<Shop>;
+  listFollowedShops: () => Promise<ShopListItem[]>;
+  getShopLots: (userId: number, status: 'selling' | 'sold') => Promise<ShopLotRow[]>;
+  listNotifications: (filter?: NotificationFilter) => Promise<{
+    notifications: AppNotification[];
+    unread_count: number;
+  }>;
+  markNotificationRead: (id: number) => Promise<{ ok: boolean; unread_count: number }>;
+  markAllNotificationsRead: () => Promise<{ updated: number; unread_count: number }>;
+  unreadNotificationCount: () => Promise<{ unread_count: number }>;
   createOrder: (
     lotId: number,
     donation: boolean,
@@ -374,6 +394,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
         if (query.max_hours !== undefined) {
           params.set('max_hours', String(query.max_hours));
         }
+        if (query.q !== undefined && query.q.trim() !== '') {
+          params.set('q', query.q.trim());
+        }
         if (query.sort !== undefined) {
           params.set('sort', query.sort);
         }
@@ -384,6 +407,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
           token,
         }).then((r) => r.lots);
       },
+      getShop: (userId, lat, lng) => {
+        const params = new URLSearchParams();
+        if (lat !== undefined) params.set('lat', String(lat));
+        if (lng !== undefined) params.set('lng', String(lng));
+        const qs = params.toString();
+        return apiRequest<{ shop: Shop }>({
+          method: 'GET',
+          path: `/api/shops/${userId}${qs !== '' ? `?${qs}` : ''}`,
+          token,
+        }).then((r) => r.shop);
+      },
+      updateMyShop: (input) =>
+        authed<{ shop: Shop }>('PATCH', '/api/shops/mine', input).then((r) => r.shop),
+      ensureMyShop: () => authed<{ shop: Shop }>('POST', '/api/shops/mine/ensure').then((r) => r.shop),
+      followShop: (userId) =>
+        authed<{ shop: Shop }>('POST', `/api/shops/${userId}/follow`).then((r) => r.shop),
+      unfollowShop: (userId) =>
+        authed<{ shop: Shop }>('DELETE', `/api/shops/${userId}/follow`).then((r) => r.shop),
+      listFollowedShops: () =>
+        authed<{ shops: ShopListItem[] }>('GET', '/api/shops/mine/followed').then((r) => r.shops),
+      getShopLots: (userId, status) =>
+        authed<{ lots: ShopLotRow[] }>('GET', `/api/shops/${userId}/lots?status=${status}`).then(
+          (r) => r.lots,
+        ),
+      listNotifications: (filter = 'all') =>
+        authed<{ notifications: AppNotification[]; unread_count: number }>(
+          'GET',
+          `/api/notifications?filter=${filter}`,
+        ),
+      markNotificationRead: (id) =>
+        authed<{ ok: boolean; unread_count: number }>('POST', `/api/notifications/${id}/read`),
+      markAllNotificationsRead: () =>
+        authed<{ updated: number; unread_count: number }>('POST', '/api/notifications/read-all'),
+      unreadNotificationCount: () =>
+        authed<{ unread_count: number }>('GET', '/api/notifications/unread-count'),
       getCropCategories: () =>
         apiRequest<{ categories: CropCategory[] }>({
           method: 'GET',

@@ -184,9 +184,10 @@ function MarketCatalog(): React.ReactElement {
       ...(priceMin !== undefined && !Number.isNaN(priceMin) ? { price_min: priceMin } : {}),
       ...(priceMax !== undefined && !Number.isNaN(priceMax) ? { price_max: priceMax } : {}),
       ...(filters.maxHours !== null ? { max_hours: filters.maxHours } : {}),
+      ...(cropQuery.trim() !== '' ? { q: cropQuery.trim() } : {}),
       sort,
     });
-  }, [api, coords, filters, selectedCropId]);
+  }, [api, coords, filters, selectedCropId, cropQuery]);
 
   const { data, loading, error, reload } = useApiData(fetchMarket, [
     coords?.lat,
@@ -198,6 +199,7 @@ function MarketCatalog(): React.ReactElement {
     filters.maxHours,
     filters.sort,
     selectedCropId,
+    cropQuery,
   ]);
 
   const filteredCrops = useMemo(() => {
@@ -404,6 +406,11 @@ function MarketCatalog(): React.ReactElement {
                       {lot.plot_name ?? t.market.plotFallback}
                       {dist !== null ? ` · ${dist}` : ''}
                     </Text>
+                    {lot.shop_name != null && lot.shop_name !== '' ? (
+                      <Text style={styles.cardShop} numberOfLines={1}>
+                        {lot.shop_name}
+                      </Text>
+                    ) : null}
                     {saleBadge !== null ? (
                       <View style={styles.badgeRow}>
                         <Badge
@@ -618,6 +625,7 @@ const styles = StyleSheet.create({
     color: C.ink,
   },
   cardMeta: { fontSize: 12, color: C.mute, fontFamily: fonts.body },
+  cardShop: { fontSize: 12, color: C.leaf, fontWeight: '600', fontFamily: fonts.bodySemi },
   badgeRow: { flexDirection: 'row', marginTop: 2 },
   priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 2, marginTop: 6 },
   price: { fontSize: 20, fontWeight: '700', color: C.ink, fontFamily: fonts.titleBold },
