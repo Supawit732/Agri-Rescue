@@ -40,6 +40,10 @@ import type {
   SupportTicket,
   SupportTicketDetail,
   SupportTicketStatus,
+  AdminOverview,
+  AdminInboxPayload,
+  AdminLotRow,
+  AdminUserRow,
   User,
   UserRole,
 } from '../api/types';
@@ -212,6 +216,12 @@ interface Api {
   unlockStop: (id: number) => Promise<{ id: number; otp_attempts: number; locked: boolean }>;
   getImpact: () => Promise<ImpactSummary>;
   getDashboard: () => Promise<DashboardPayload>;
+  getAdminOverview: () => Promise<AdminOverview>;
+  getAdminInbox: () => Promise<AdminInboxPayload>;
+  listAdminLots: (query?: { status?: string; q?: string }) => Promise<{ lots: AdminLotRow[] }>;
+  hideAdminLot: (id: number, reason: string) => Promise<{ ok: boolean }>;
+  unhideAdminLot: (id: number) => Promise<{ ok: boolean }>;
+  listAdminUsers: (query?: { q?: string }) => Promise<{ users: AdminUserRow[] }>;
   deleteLot: (id: number) => Promise<{ ok: boolean }>;
   sellerConfirmOrder: (
     id: number,
@@ -616,6 +626,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
       unlockStop: (id) => authed<{ id: number; otp_attempts: number; locked: boolean }>('POST', `/api/stops/${id}/unlock`),
       getImpact: () => authed<{ summary: ImpactSummary }>('GET', '/api/impact/summary').then((r) => r.summary),
       getDashboard: () => authed<DashboardPayload>('GET', '/api/dashboard'),
+      getAdminOverview: () => authed<AdminOverview>('GET', '/api/admin/overview'),
+      getAdminInbox: () => authed<AdminInboxPayload>('GET', '/api/admin/inbox'),
+      listAdminLots: (query = {}) => {
+        const params = new URLSearchParams();
+        if (query.status !== undefined) params.set('status', query.status);
+        if (query.q !== undefined && query.q !== '') params.set('q', query.q);
+        const qs = params.toString();
+        return authed<{ lots: AdminLotRow[] }>(
+          'GET',
+          `/api/admin/lots${qs !== '' ? `?${qs}` : ''}`,
+        );
+      },
+      hideAdminLot: (id, reason) =>
+        authed<{ ok: boolean }>('POST', `/api/admin/lots/${id}/hide`, { reason }),
+      unhideAdminLot: (id) => authed<{ ok: boolean }>('POST', `/api/admin/lots/${id}/unhide`),
+      listAdminUsers: (query = {}) => {
+        const params = new URLSearchParams();
+        if (query.q !== undefined && query.q !== '') params.set('q', query.q);
+        const qs = params.toString();
+        return authed<{ users: AdminUserRow[] }>(
+          'GET',
+          `/api/admin/users${qs !== '' ? `?${qs}` : ''}`,
+        );
+      },
       deleteLot: (id) => authed<{ ok: boolean }>('DELETE', `/api/lots/${id}`),
       sellerConfirmOrder: (id, body) =>
         authed<{ order: Order; lot_status: string }>('POST', `/api/orders/${id}/seller-confirm`, body),

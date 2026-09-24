@@ -17,6 +17,7 @@ import { stopsRouter } from './routes/stops';
 import { shopsRouter } from './routes/shops';
 import { notificationsRouter } from './routes/notifications';
 import { supportRouter } from './routes/support';
+import { adminConsoleRouter } from './routes/adminConsole';
 import { ensurePublicUploadsDir, PUBLIC_UPLOADS_DIR } from './storage/publicUploads';
 
 void ensurePublicUploadsDir().catch((err: unknown) => {
@@ -63,6 +64,7 @@ export function createApp(): Express {
   app.use('/api/stops', stopsRouter);
   app.use('/api/impact', impactRouter);
   app.use('/api/admin/dit', adminDitRouter);
+  app.use('/api/admin', adminConsoleRouter);
   app.use(errorHandler);
   return app;
 }

@@ -1034,6 +1034,7 @@ donorsRouter.get(
        FROM buyer_profiles bp
        JOIN users u ON u.id = bp.user_id
        WHERE bp.org_status IN ('pending', 'needs_more_info')
+         AND (bp.application_kind = 'organization' OR bp.application_kind IS NULL)
        ORDER BY bp.created_at ASC, u.id ASC`,
     );
     const apps = [];

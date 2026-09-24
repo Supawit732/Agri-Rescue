@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
-import { ApiError } from '../src/api/client';
-import { API_BASE_URL } from '../src/api/config';
+import { ApiError } from '../api/client';
+import { API_BASE_URL } from '../api/config';
 import {
   Body,
   Card,
@@ -9,38 +9,35 @@ import {
   DataState,
   Field,
   PrimaryButton,
-  Screen,
   SecondaryButton,
-  Segmented,
-  StackHeader,
-} from '../src/components/ui';
+} from '../components/ui';
 import { useRouter } from 'expo-router';
-import { useAuth } from '../src/context/AuthContext';
-import { isDitKgUnit } from '../src/dit/units';
-import { useApiData } from '../src/hooks/useApiData';
+import { useAuth } from '../context/AuthContext';
+import { isDitKgUnit } from '../dit/units';
+import { useApiData } from '../hooks/useApiData';
 import {
   labelApplicationKind,
   labelDistributionMode,
   labelOrgStatus,
   labelOrgType,
   labelReviewAction,
-} from '../src/donorLabels';
-import { formatTemplate, useI18n, type Messages } from '../src/i18n';
-import { C } from '../src/theme';
+} from '../donorLabels';
+import { formatTemplate, useI18n, type Messages } from '../i18n';
+import { C, fonts } from '../theme';
 import type {
   DitCrop,
   DitProductSearchHit,
   DitSyncJob,
   OrgApplication,
   OrgChecklist,
-} from '../src/api/types';
-import { loadToken } from '../src/api/storage';
+} from '../api/types';
+import { loadToken } from '../api/storage';
 
-function quickReasons(t: Messages): string[] {
+export function quickReasons(t: Messages): string[] {
   return [t.admin.quickReasonLatestCert, t.admin.quickReasonUnclear, t.admin.quickReasonNameMismatch];
 }
 
-function requestableFields(t: Messages): { key: string; label: string }[] {
+export function requestableFields(t: Messages): { key: string; label: string }[] {
   return [
     { key: 'org_name', label: t.admin.fieldOrgName },
     { key: 'org_type', label: t.admin.fieldOrgType },
@@ -54,7 +51,7 @@ function requestableFields(t: Messages): { key: string; label: string }[] {
   ];
 }
 
-function docLabels(t: Messages): Record<string, string> {
+export function docLabels(t: Messages): Record<string, string> {
   return {
     registration_cert: t.admin.docRegistrationCert,
     community_cert: t.admin.docCommunityCert,
@@ -64,7 +61,7 @@ function docLabels(t: Messages): Record<string, string> {
 }
 
 /** "บาท/หวี" → "หวี" for conversion labels. */
-function unitBaseFromDit(unit: string | null, fallback: string): string {
+export function unitBaseFromDit(unit: string | null, fallback: string): string {
   if (unit === null || unit.trim() === '') {
     return fallback;
   }
@@ -72,35 +69,7 @@ function unitBaseFromDit(unit: string | null, fallback: string): string {
   return slash >= 0 ? unit.slice(slash + 1).trim() || unit : unit.trim();
 }
 
-export default function AdminScreen(): React.ReactElement {
-  const { user } = useAuth();
-  const { t } = useI18n();
-  const router = useRouter();
-  const [tab, setTab] = useState<'orgs' | 'dit' | 'support'>('orgs');
-
-  return (
-    <Screen>
-      <StackHeader title={t.admin.title} onBack={() => router.replace('/profile')} />
-      <Segmented
-        options={[
-          { key: 'orgs', label: t.admin.tabOrgs },
-          { key: 'support', label: t.admin.tabSupport },
-          { key: 'dit', label: t.admin.tabDit },
-        ]}
-        value={tab}
-        onChange={(key) => setTab(key as 'orgs' | 'dit' | 'support')}
-      />
-      {user !== null ? (
-        <Text style={styles.metaPad}>{formatTemplate(t.admin.loggedInAs, { name: user.name })}</Text>
-      ) : null}
-      {tab === 'orgs' ? <OrgApplicationsPanel /> : null}
-      {tab === 'dit' ? <DitMappingPanel /> : null}
-      {tab === 'support' ? <SupportInboxPanel /> : null}
-    </Screen>
-  );
-}
-
-function SupportInboxPanel(): React.ReactElement {
+export function SupportInboxPanel(): React.ReactElement {
   const { api } = useAuth();
   const { t, formatDateTime } = useI18n();
   const router = useRouter();
@@ -123,8 +92,8 @@ function SupportInboxPanel(): React.ReactElement {
   };
 
   return (
-    <View style={styles.metaPad}>
-      <View style={styles.supportFilters}>
+    <View style={adminPanelStyles.metaPad}>
+      <View style={adminPanelStyles.supportFilters}>
         {(
           [
             { key: 'open' as const, label: t.support.filterOpen },
@@ -137,10 +106,10 @@ function SupportInboxPanel(): React.ReactElement {
           return (
             <Pressable
               key={opt.key}
-              style={[styles.supportChip, active ? styles.supportChipOn : null]}
+              style={[adminPanelStyles.supportChip, active ? adminPanelStyles.supportChipOn : null]}
               onPress={() => setFilter(opt.key)}
             >
-              <Text style={[styles.supportChipText, active ? styles.supportChipTextOn : null]}>
+              <Text style={[adminPanelStyles.supportChipText, active ? adminPanelStyles.supportChipTextOn : null]}>
                 {opt.label}
                 {opt.key === 'open' && openCount > 0 ? ` ${openCount}` : ''}
               </Text>
@@ -160,26 +129,26 @@ function SupportInboxPanel(): React.ReactElement {
         emptyText={t.support.empty}
       >
         {(payload) => (
-          <View style={styles.supportList}>
+          <View style={adminPanelStyles.supportList}>
             {payload.tickets.map((ticket) => (
               <Pressable
                 key={ticket.id}
-                style={styles.supportRow}
+                style={adminPanelStyles.supportRow}
                 onPress={() =>
                   router.push({ pathname: '/support/[id]', params: { id: String(ticket.id) } })
                 }
               >
                 <View
                   style={[
-                    styles.supportDot,
+                    adminPanelStyles.supportDot,
                     { backgroundColor: ticket.status === 'closed' ? C.line : C.leaf },
                   ]}
                 />
-                <View style={styles.supportText}>
-                  <Text style={styles.supportTitle} numberOfLines={1}>
+                <View style={adminPanelStyles.supportText}>
+                  <Text style={adminPanelStyles.supportTitle} numberOfLines={1}>
                     {ticket.user_name ?? ticket.user_id} · {ticket.topic_label}
                   </Text>
-                  <Text style={styles.supportMeta} numberOfLines={1}>
+                  <Text style={adminPanelStyles.supportMeta} numberOfLines={1}>
                     {statusLabel(ticket.status)}
                     {ticket.order_id != null ? ` · #${ticket.order_id}` : ''}
                     {ticket.order_status != null
@@ -187,7 +156,7 @@ function SupportInboxPanel(): React.ReactElement {
                       : ''}
                   </Text>
                 </View>
-                <Text style={styles.supportTime}>{formatDateTime(ticket.updated_at)}</Text>
+                <Text style={adminPanelStyles.supportTime}>{formatDateTime(ticket.updated_at)}</Text>
               </Pressable>
             ))}
           </View>
@@ -197,7 +166,7 @@ function SupportInboxPanel(): React.ReactElement {
   );
 }
 
-function OrgApplicationsPanel(): React.ReactElement {
+export function OrgApplicationsPanel(): React.ReactElement {
   const { api } = useAuth();
   const { t, formatDateTime } = useI18n();
   const reasons = quickReasons(t);
@@ -307,8 +276,8 @@ function OrgApplicationsPanel(): React.ReactElement {
 
   return (
     <Body>
-      <Text style={styles.lead}>{t.admin.orgsLead}</Text>
-      {error !== null ? <Text style={styles.error}>{error}</Text> : null}
+      <Text style={adminPanelStyles.lead}>{t.admin.orgsLead}</Text>
+      {error !== null ? <Text style={adminPanelStyles.error}>{error}</Text> : null}
       <DataState
         loading={loading}
         error={loadError}
@@ -329,21 +298,21 @@ function OrgApplicationsPanel(): React.ReactElement {
               const byCat = entry.documents_by_category ?? {};
               return (
                 <Card key={entry.user_id}>
-                  <Text style={styles.name}>{entry.org_name ?? entry.contact_name ?? entry.name}</Text>
-                  <Text style={styles.meta}>
+                  <Text style={adminPanelStyles.name}>{entry.org_name ?? entry.contact_name ?? entry.name}</Text>
+                  <Text style={adminPanelStyles.meta}>
                     {formatTemplate(t.admin.statusMeta, {
                       status: labelOrgStatus(entry.org_status ?? 'pending', t),
                       kind: labelApplicationKind(entry.application_kind ?? null, t),
                       orgType: labelOrgType(entry.org_type, t),
                     })}
                   </Text>
-                  <Text style={styles.meta}>
+                  <Text style={adminPanelStyles.meta}>
                     {formatTemplate(t.admin.applicant, { name: entry.name, phone: entry.phone })}
                   </Text>
 
-                  <Text style={styles.section}>{t.admin.sectionOrgIndividual}</Text>
+                  <Text style={adminPanelStyles.section}>{t.admin.sectionOrgIndividual}</Text>
                   {entry.sections?.organization ? (
-                    <Text style={styles.meta}>
+                    <Text style={adminPanelStyles.meta}>
                       {formatTemplate(t.admin.orgNameRegistered, {
                         name: String(entry.sections.organization.org_name ?? t.common.dash),
                         registered:
@@ -356,7 +325,7 @@ function OrgApplicationsPanel(): React.ReactElement {
                     </Text>
                   ) : null}
                   {entry.sections?.individual ? (
-                    <Text style={styles.meta}>
+                    <Text style={adminPanelStyles.meta}>
                       {formatTemplate(t.admin.individualLine, {
                         name: String(entry.sections.individual.contact_name ?? t.common.dash),
                         purpose: String(entry.sections.individual.purpose_th ?? t.common.dash),
@@ -364,21 +333,21 @@ function OrgApplicationsPanel(): React.ReactElement {
                     </Text>
                   ) : null}
 
-                  <Text style={styles.section}>{t.admin.sectionContact}</Text>
-                  <Text style={styles.meta}>
+                  <Text style={adminPanelStyles.section}>{t.admin.sectionContact}</Text>
+                  <Text style={adminPanelStyles.meta}>
                     {entry.contact_name} ({entry.contact_title ?? '-'}) {entry.contact_phone}
                     {entry.contact_email ? ` · ${entry.contact_email}` : ''}
                   </Text>
 
-                  <Text style={styles.section}>{t.admin.sectionBeneficiaries}</Text>
-                  <Text style={styles.meta}>
+                  <Text style={adminPanelStyles.section}>{t.admin.sectionBeneficiaries}</Text>
+                  <Text style={adminPanelStyles.meta}>
                     {formatTemplate(t.admin.beneficiariesLine, {
                       count: entry.beneficiary_count ?? t.common.dash,
                       mode: labelDistributionMode(entry.distribution_mode, t),
                     })}
                   </Text>
 
-                  <Text style={styles.section}>{t.admin.sectionDocsByCategory}</Text>
+                  <Text style={adminPanelStyles.section}>{t.admin.sectionDocsByCategory}</Text>
                   {Object.keys(docsByCat).map((cat) => {
                     const docs = byCat[cat] ?? entry.documents.filter((d) => (d.doc_category ?? 'other') === cat);
                     if (docs.length === 0) {
@@ -386,10 +355,10 @@ function OrgApplicationsPanel(): React.ReactElement {
                     }
                     return (
                       <View key={cat}>
-                        <Text style={styles.meta}>{docsByCat[cat]}</Text>
+                        <Text style={adminPanelStyles.meta}>{docsByCat[cat]}</Text>
                         {docs.map((doc) => (
                           <Pressable key={doc.id} onPress={() => void openDoc(doc.id)}>
-                            <Text style={styles.docLink}>
+                            <Text style={adminPanelStyles.docLink}>
                               {formatTemplate(t.admin.docOpen, {
                                 name: doc.original_name,
                                 kb: Math.round(doc.size_bytes / 1024),
@@ -401,7 +370,7 @@ function OrgApplicationsPanel(): React.ReactElement {
                     );
                   })}
 
-                  <Text style={styles.section}>{t.admin.sectionChecklist}</Text>
+                  <Text style={adminPanelStyles.section}>{t.admin.sectionChecklist}</Text>
                   {(
                     [
                       ['name_matches_docs', t.admin.checklistName],
@@ -409,14 +378,20 @@ function OrgApplicationsPanel(): React.ReactElement {
                       ['docs_not_expired', t.admin.checklistDocs],
                     ] as const
                   ).map(([key, label]) => (
-                    <Chip
+                    <Pressable
                       key={key}
-                      label={label}
-                      selected={checklist[key]}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: checklist[key] }}
                       onPress={() => toggleCheck(entry.user_id, key)}
-                    />
+                      style={adminPanelStyles.checkRow}
+                    >
+                      <View style={[adminPanelStyles.checkbox, checklist[key] ? adminPanelStyles.checkboxOn : null]}>
+                        {checklist[key] ? <Text style={adminPanelStyles.checkboxMark}>✓</Text> : null}
+                      </View>
+                      <Text style={adminPanelStyles.checkLabel}>{label}</Text>
+                    </Pressable>
                   ))}
-                  <View style={styles.slotWide}>
+                  <View style={adminPanelStyles.slotWide}>
                     <SecondaryButton
                       label={t.admin.saveChecklist}
                       onPress={() => void saveChecklist(entry.user_id)}
@@ -426,9 +401,9 @@ function OrgApplicationsPanel(): React.ReactElement {
 
                   {(entry.review_logs ?? []).length > 0 ? (
                     <>
-                      <Text style={styles.historyTitle}>{t.admin.historyTitle}</Text>
+                      <Text style={adminPanelStyles.historyTitle}>{t.admin.historyTitle}</Text>
                       {(entry.review_logs ?? []).map((log) => (
-                        <Text key={log.id} style={styles.meta}>
+                        <Text key={log.id} style={adminPanelStyles.meta}>
                           · {labelReviewAction(log.action, t)}
                           {log.reason ? `: ${log.reason}` : ''} ({formatDateTime(log.created_at)})
                         </Text>
@@ -443,15 +418,15 @@ function OrgApplicationsPanel(): React.ReactElement {
                         value={reason}
                         onChangeText={setReason}
                       />
-                      <View style={styles.row}>
+                      <View style={adminPanelStyles.row}>
                         {reasons.map((item) => (
                           <Chip key={item} label={item} selected={reason === item} onPress={() => setReason(item)} />
                         ))}
                       </View>
                       {actionMode.kind === 'more' ? (
                         <>
-                          <Text style={styles.section}>{t.admin.fieldsToFix}</Text>
-                          <View style={styles.row}>
+                          <Text style={adminPanelStyles.section}>{t.admin.fieldsToFix}</Text>
+                          <View style={adminPanelStyles.row}>
                             {fields.map((f) => (
                               <Chip
                                 key={f.key}
@@ -467,8 +442,8 @@ function OrgApplicationsPanel(): React.ReactElement {
                           </View>
                         </>
                       ) : null}
-                      <View style={styles.actions}>
-                        <View style={styles.slot}>
+                      <View style={adminPanelStyles.actions}>
+                        <View style={adminPanelStyles.slot}>
                           <PrimaryButton
                             label={t.admin.confirm}
                             tone={actionMode.kind === 'reject' ? 'chili' : 'turmeric'}
@@ -476,7 +451,7 @@ function OrgApplicationsPanel(): React.ReactElement {
                             loading={actingId === entry.user_id}
                           />
                         </View>
-                        <View style={styles.slot}>
+                        <View style={adminPanelStyles.slot}>
                           <SecondaryButton
                             label={t.admin.cancel}
                             onPress={() => {
@@ -489,9 +464,9 @@ function OrgApplicationsPanel(): React.ReactElement {
                       </View>
                     </>
                   ) : (
-                    <View style={styles.actions}>
+                    <View style={adminPanelStyles.actions}>
                       {entry.org_status !== 'needs_more_info' ? (
-                        <View style={styles.slot}>
+                        <View style={adminPanelStyles.slot}>
                           <PrimaryButton
                             label={t.admin.approve}
                             onPress={() => void approve(entry.user_id)}
@@ -500,7 +475,7 @@ function OrgApplicationsPanel(): React.ReactElement {
                           />
                         </View>
                       ) : null}
-                      <View style={styles.slot}>
+                      <View style={adminPanelStyles.slot}>
                         <SecondaryButton
                           label={t.admin.requestMoreInfo}
                           onPress={() => {
@@ -511,7 +486,7 @@ function OrgApplicationsPanel(): React.ReactElement {
                           disabled={actingId !== null || entry.org_status === 'needs_more_info'}
                         />
                       </View>
-                      <View style={styles.slot}>
+                      <View style={adminPanelStyles.slot}>
                         <SecondaryButton
                           label={t.admin.reject}
                           onPress={() => {
@@ -533,7 +508,7 @@ function OrgApplicationsPanel(): React.ReactElement {
   );
 }
 
-function DitMappingPanel(): React.ReactElement {
+export function DitMappingPanel(): React.ReactElement {
   const { api } = useAuth();
   const { t, cropName, formatNumber } = useI18n();
   const [refreshKey, setRefreshKey] = useState(0);
@@ -763,14 +738,14 @@ function DitMappingPanel(): React.ReactElement {
 
   return (
     <Body>
-      <Text style={styles.lead}>{t.admin.ditLead}</Text>
-      <Text style={styles.banner}>{statusBar}</Text>
+      <Text style={adminPanelStyles.lead}>{t.admin.ditLead}</Text>
+      <Text style={adminPanelStyles.banner}>{statusBar}</Text>
       {auto?.message !== null && auto?.message !== undefined ? (
-        <Text style={styles.meta}>{auto.message}</Text>
+        <Text style={adminPanelStyles.meta}>{auto.message}</Text>
       ) : null}
-      {syncLabel !== null ? <Text style={styles.meta}>{syncLabel}</Text> : null}
-      {banner !== null ? <Text style={styles.banner}>{banner}</Text> : null}
-      {error !== null ? <Text style={styles.error}>{error}</Text> : null}
+      {syncLabel !== null ? <Text style={adminPanelStyles.meta}>{syncLabel}</Text> : null}
+      {banner !== null ? <Text style={adminPanelStyles.banner}>{banner}</Text> : null}
+      {error !== null ? <Text style={adminPanelStyles.error}>{error}</Text> : null}
       <DataState
         loading={loading}
         error={loadError}
@@ -793,8 +768,8 @@ function DitMappingPanel(): React.ReactElement {
               const advancedOpen = editingId === crop.id || advancedOpenId === crop.id;
               return (
                 <Card key={crop.id}>
-                  <Text style={styles.name}>{cropName(crop)}</Text>
-                  <Text style={styles.meta}>
+                  <Text style={adminPanelStyles.name}>{cropName(crop)}</Text>
+                  <Text style={adminPanelStyles.meta}>
                     {formatTemplate(t.admin.productCodeLine, {
                       code: crop.dit_product_code ?? t.common.dash,
                       match: matchLabel,
@@ -802,18 +777,18 @@ function DitMappingPanel(): React.ReactElement {
                     {crop.dit_unit !== null ? ` · ${crop.dit_unit}` : ''}
                   </Text>
                   {crop.dit_product_name !== null ? (
-                    <Text style={styles.meta}>
+                    <Text style={adminPanelStyles.meta}>
                       {formatTemplate(t.admin.productNameLine, { name: crop.dit_product_name })}
                     </Text>
                   ) : null}
-                  <Text style={styles.meta}>
+                  <Text style={adminPanelStyles.meta}>
                     {formatTemplate(t.admin.marketPriceLine, {
                       price: formatNumber(crop.market_price_per_kg),
                     })}
                   </Text>
                   {crop.latest_ref_price !== null && !crop.latest_ref_price.rejected_as_outlier ? (
                     <>
-                      <Text style={styles.meta}>
+                      <Text style={adminPanelStyles.meta}>
                         {formatTemplate(t.admin.refPriceLine, {
                           price: crop.latest_ref_price.wholesale_price,
                           unit: crop.latest_ref_price.unit !== null ? ` ${crop.latest_ref_price.unit}` : '',
@@ -821,26 +796,26 @@ function DitMappingPanel(): React.ReactElement {
                         })}
                       </Text>
                       {crop.latest_ref_price.fetched_at !== null ? (
-                        <Text style={styles.meta}>
+                        <Text style={adminPanelStyles.meta}>
                           {formatTemplate(t.admin.fetchedAt, { at: crop.latest_ref_price.fetched_at })}
                         </Text>
                       ) : null}
                     </>
                   ) : (
-                    <Text style={styles.meta}>
+                    <Text style={adminPanelStyles.meta}>
                       {formatTemplate(t.admin.noUsablePrice, {
                         status: crop.dit_price_status ?? t.admin.estimatePrice,
                       })}
                     </Text>
                   )}
                   {crop.dit_price_status !== null && crop.latest_ref_price !== null ? (
-                    <Text style={styles.error}>{crop.dit_price_status}</Text>
+                    <Text style={adminPanelStyles.error}>{crop.dit_price_status}</Text>
                   ) : null}
                   {crop.latest_ref_price?.rejected_as_outlier ? (
-                    <Text style={styles.error}>{t.admin.outlierFlag}</Text>
+                    <Text style={adminPanelStyles.error}>{t.admin.outlierFlag}</Text>
                   ) : null}
-                  <View style={styles.actions}>
-                    <View style={styles.slot}>
+                  <View style={adminPanelStyles.actions}>
+                    <View style={adminPanelStyles.slot}>
                       <SecondaryButton
                         label={advancedOpen ? t.admin.hideAdvanced : t.admin.advanced}
                         disabled={busyKey !== null && !advancedOpen}
@@ -856,10 +831,10 @@ function DitMappingPanel(): React.ReactElement {
                   </View>
                   {advancedOpen ? (
                     <>
-                      <Text style={styles.historyTitle}>{t.admin.advanced}</Text>
+                      <Text style={adminPanelStyles.historyTitle}>{t.admin.advanced}</Text>
                       {crop.dit_product_code !== null ? (
                         <>
-                          <Text style={styles.meta}>
+                          <Text style={adminPanelStyles.meta}>
                             {formatTemplate(t.admin.sourceUnit, {
                               unit: crop.dit_unit !== null ? crop.dit_unit : t.admin.unitUnknown,
                             })}
@@ -887,8 +862,8 @@ function DitMappingPanel(): React.ReactElement {
                             }
                             error={unitErrors[crop.id] ?? null}
                           />
-                          <View style={styles.actions}>
-                            <View style={styles.slot}>
+                          <View style={adminPanelStyles.actions}>
+                            <View style={adminPanelStyles.slot}>
                               <PrimaryButton
                                 label={t.admin.saveUnitFactor}
                                 loading={busyKey === `unit-${crop.id}`}
@@ -898,7 +873,7 @@ function DitMappingPanel(): React.ReactElement {
                             </View>
                           </View>
                           {crop.dit_unit_to_kg !== null ? (
-                            <Text style={styles.meta}>
+                            <Text style={adminPanelStyles.meta}>
                               {formatTemplate(t.admin.factorInUse, {
                                 base: unitBaseFromDit(crop.dit_unit, t.admin.unitFallback),
                                 kg: crop.dit_unit_to_kg,
@@ -907,8 +882,8 @@ function DitMappingPanel(): React.ReactElement {
                           ) : null}
                         </>
                       ) : null}
-                      <View style={styles.actions}>
-                        <View style={styles.slot}>
+                      <View style={adminPanelStyles.actions}>
+                        <View style={adminPanelStyles.slot}>
                           <PrimaryButton
                             label={t.admin.fetchNow}
                             loading={busyKey === 'sync-prices' || syncJob?.status === 'running'}
@@ -916,7 +891,7 @@ function DitMappingPanel(): React.ReactElement {
                             onPress={() => void fetchPricesNow()}
                           />
                         </View>
-                        <View style={styles.slot}>
+                        <View style={adminPanelStyles.slot}>
                           <SecondaryButton
                             label={editing ? t.admin.closeMapping : t.admin.editMapping}
                             disabled={busyKey !== null}
@@ -937,8 +912,8 @@ function DitMappingPanel(): React.ReactElement {
                             }
                             placeholder={cropName(crop)}
                           />
-                          <View style={styles.actions}>
-                            <View style={styles.slot}>
+                          <View style={adminPanelStyles.actions}>
+                            <View style={adminPanelStyles.slot}>
                               <SecondaryButton
                                 label={t.admin.search}
                                 disabled={busyKey !== null}
@@ -947,17 +922,17 @@ function DitMappingPanel(): React.ReactElement {
                             </View>
                           </View>
                           {hits.map((hit) => (
-                            <View key={hit.product_id} style={styles.suggestionBox}>
-                              <Text style={styles.name}>{hit.product_name}</Text>
-                              <Text style={styles.meta}>
+                            <View key={hit.product_id} style={adminPanelStyles.suggestionBox}>
+                              <Text style={adminPanelStyles.name}>{hit.product_name}</Text>
+                              <Text style={adminPanelStyles.meta}>
                                 {formatTemplate(t.admin.hitUnitLine, {
                                   code: hit.product_id,
                                   unit: hit.unit,
                                 })}
                                 {hit.sell_type !== null ? ` · ${hit.sell_type}` : ''}
                               </Text>
-                              <View style={styles.actions}>
-                                <View style={styles.slot}>
+                              <View style={adminPanelStyles.actions}>
+                                <View style={adminPanelStyles.slot}>
                                   <PrimaryButton
                                     label={t.admin.saveManualPair}
                                     loading={busyKey === `map-${crop.id}-${hit.product_id}`}
@@ -988,7 +963,7 @@ function DitMappingPanel(): React.ReactElement {
   );
 }
 
-const styles = StyleSheet.create({
+export const adminPanelStyles = StyleSheet.create({
   lead: { fontSize: 18, fontWeight: '800', color: C.ink, marginBottom: 4 },
   name: { fontSize: 16, fontWeight: '700', color: C.ink },
   meta: { color: C.mute, marginTop: 2, marginBottom: 2 },
@@ -1044,4 +1019,17 @@ const styles = StyleSheet.create({
   supportTitle: { fontSize: 14, fontWeight: '600', color: C.ink },
   supportMeta: { fontSize: 13, color: C.mute },
   supportTime: { fontSize: 12, color: C.mute },
+  checkRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 40 },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: C.lineStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxOn: { backgroundColor: C.leaf, borderColor: C.leaf },
+  checkboxMark: { color: C.white, fontSize: 13, fontWeight: '700' },
+  checkLabel: { fontSize: 14, color: C.ink, fontFamily: fonts.body },
 });
