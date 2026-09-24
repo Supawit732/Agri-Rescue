@@ -7,14 +7,12 @@ import {
   crops,
   DEMO_PASSWORD,
   farmers,
-  SEED_AT_ISO,
   staff,
   type CropKey,
 } from './seedData';
 
 export async function seed(): Promise<void> {
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
-  const seedAt = new Date(SEED_AT_ISO);
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
@@ -49,7 +47,9 @@ export async function seed(): Promise<void> {
       if (cropId === undefined) {
         throw new Error(`Unknown crop ${farmer.lot.cropKey}`);
       }
-      const expiresAt = new Date(seedAt.getTime() + farmer.lot.hoursLeft * 60 * 60 * 1000);
+      // Relative to "now" so open demo lots are never pre-expired (market empty).
+      const createdAt = new Date();
+      const expiresAt = new Date(createdAt.getTime() + farmer.lot.hoursLeft * 60 * 60 * 1000);
       await upsertLot(connection, {
         plotId,
         cropId,
@@ -58,7 +58,7 @@ export async function seed(): Promise<void> {
         ripeness: farmer.lot.ripeness,
         allowDonation: farmer.lot.allowDonation,
         shelfHours: farmer.lot.hoursLeft,
-        createdAt: seedAt,
+        createdAt,
         expiresAt,
       });
       await connection.query(
@@ -241,11 +241,19 @@ async function upsertLot(
   },
 ): Promise<void> {
   const [existing] = await connection.query<RowDataPacket[]>(
-    `SELECT id FROM harvest_lots
+    `SELECT id, status, expires_at FROM harvest_lots
      WHERE plot_id = ? AND crop_id = ? AND weight_kg = ? AND grade = ? AND ripeness = ?`,
     [lot.plotId, lot.cropId, lot.weightKg, lot.grade, lot.ripeness],
   );
-  if (existing.length > 0) {
+  const row = existing[0];
+  if (row !== undefined) {
+    // Keep demo market visible: refresh open lots whose expires_at is already past.
+    if (String(row.status) === 'open' && new Date(row.expires_at as Date).getTime() <= Date.now()) {
+      await connection.query(
+        `UPDATE harvest_lots SET status = 'open', expires_at = ?, created_at = UTC_TIMESTAMP() WHERE id = ?`,
+        [lot.expiresAt, Number(row.id)],
+      );
+    }
     return;
   }
   const [cropRows] = await connection.query<RowDataPacket[]>(

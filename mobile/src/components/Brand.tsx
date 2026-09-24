@@ -2,7 +2,6 @@ import { Feather } from '@expo/vector-icons';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
 import { formatTemplate, useI18n } from '../i18n';
 import { C, fonts, radius } from '../theme';
@@ -13,11 +12,10 @@ export function AppHeader({ radiusKm = 15 }: { radiusKm?: number }): React.React
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { t } = useI18n();
-  const router = useRouter();
   const [menuOpen, setMenuOpen] = React.useState(false);
 
   return (
-    <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+    <View style={[styles.header, { paddingTop: insets.top + 4 }]}>
       <View style={styles.brandRow}>
         <LogoMark />
         <View style={styles.brandText}>
@@ -30,15 +28,7 @@ export function AppHeader({ radiusKm = 15 }: { radiusKm?: number }): React.React
           </View>
         </View>
       </View>
-      {user === null ? (
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => router.push({ pathname: '/login', params: { returnTo: '/(tabs)' } })}
-          style={styles.loginBtn}
-        >
-          <Text style={styles.loginBtnText}>{t.common.login}</Text>
-        </Pressable>
-      ) : (
+      {user !== null ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t.shell.openAccountMenu}
@@ -47,6 +37,8 @@ export function AppHeader({ radiusKm = 15 }: { radiusKm?: number }): React.React
         >
           <Text style={styles.avatarText}>{initialsOf(user.name)}</Text>
         </Pressable>
+      ) : (
+        <View style={styles.avatarSpacer} accessibilityElementsHidden />
       )}
       <ProfileMenu visible={menuOpen} onClose={() => setMenuOpen(false)} />
     </View>
@@ -78,20 +70,6 @@ const styles = StyleSheet.create({
   },
   locRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   brandSub: { fontSize: 12, color: C.mute },
-  loginBtn: {
-    minHeight: 44,
-    paddingHorizontal: 16,
-    borderRadius: 22,
-    backgroundColor: C.leafSoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  loginBtnText: {
-    color: C.leafDeep,
-    fontWeight: '700',
-    fontSize: 14,
-    fontFamily: fonts.bodySemi,
-  },
   avatar: {
     width: 44,
     height: 44,
@@ -108,6 +86,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  avatarSpacer: { width: 44, height: 44 },
   avatarText: {
     fontFamily: fonts.titleBold,
     fontWeight: '700',
