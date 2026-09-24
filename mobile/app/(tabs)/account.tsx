@@ -31,7 +31,7 @@ export default function AccountTab(): React.ReactElement {
         <LoginPrompt
           title={t.account.title}
           message={t.account.loginMessage}
-          returnTo="/(tabs)/account"
+          returnTo="/profile"
         />
         <Body>
           <SectionTitle>{t.account.language}</SectionTitle>

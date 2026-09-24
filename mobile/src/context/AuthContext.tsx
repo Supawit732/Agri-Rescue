@@ -9,6 +9,7 @@ import type {
   BatchDetail,
   BuyerType,
   Crop,
+  CropCategory,
   DashboardPayload,
   DitCropsResponse,
   DitProductSearchHit,
@@ -51,6 +52,7 @@ interface Api {
     can_sell?: true;
     can_buy?: true;
     buyer_type?: BuyerType;
+    email?: string | null;
     line_id?: string | null;
   }) => Promise<AuthResponse>;
   getCrops: () => Promise<Crop[]>;
@@ -114,8 +116,13 @@ interface Api {
     lng?: number;
     radius_km?: number;
     crop_id?: number;
+    category_id?: number;
+    price_min?: number;
+    price_max?: number;
+    max_hours?: number;
     sort?: 'near' | 'urgent' | 'cheap';
   }) => Promise<MarketLot[]>;
+  getCropCategories: () => Promise<CropCategory[]>;
   getPublicMarketLot: (id: number, lat?: number, lng?: number) => Promise<MarketLot>;
   createOrder: (
     lotId: number,
@@ -304,6 +311,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
       can_sell?: true;
       can_buy?: true;
       buyer_type?: BuyerType;
+      email?: string | null;
       line_id?: string | null;
     }) => {
       const auth = await apiRequest<AuthResponse>({
@@ -354,6 +362,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
         if (query.crop_id !== undefined) {
           params.set('crop_id', String(query.crop_id));
         }
+        if (query.category_id !== undefined) {
+          params.set('category_id', String(query.category_id));
+        }
+        if (query.price_min !== undefined) {
+          params.set('price_min', String(query.price_min));
+        }
+        if (query.price_max !== undefined) {
+          params.set('price_max', String(query.price_max));
+        }
+        if (query.max_hours !== undefined) {
+          params.set('max_hours', String(query.max_hours));
+        }
         if (query.sort !== undefined) {
           params.set('sort', query.sort);
         }
@@ -364,6 +384,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
           token,
         }).then((r) => r.lots);
       },
+      getCropCategories: () =>
+        apiRequest<{ categories: CropCategory[] }>({
+          method: 'GET',
+          path: '/api/crops/categories',
+          token,
+        }).then((r) => r.categories),
       getPublicMarketLot: (id, lat, lng) => {
         const params = new URLSearchParams();
         if (lat !== undefined) {

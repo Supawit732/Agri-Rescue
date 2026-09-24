@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>ตัวกรองตลาด</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anuphan:wght@500;600;700&amp;family=IBM+Plex+Sans+Thai:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0;background:#F3F5EF;color:#1B241C;font-family:'IBM Plex Sans Thai',system-ui,sans-serif}
+a{color:#2E6040;text-decoration:none}a:hover{color:#1F4A30}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #F3F5EF; font-family: 'IBM Plex Sans Thai', system-ui, sans-serif; color: #1B241C">
+
+<div style="padding: 54px 16px 14px 16px; display: flex; flex-direction: column; gap: 14px">
+<div style="height: 44px; border-radius: 12px; background: #DCE2D6"></div>
+<div style="height: 48px; border-radius: 14px; background: #FFFFFF"></div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+<div style="height: 250px; border-radius: 16px; background: #FFFFFF"></div>
+<div style="height: 250px; border-radius: 16px; background: #FFFFFF"></div>
+</div>
+</div>
+
+<a href="Main.dc.html" aria-label="ปิดตัวกรอง" style="position: absolute; left: 0; top: 0; right: 0; bottom: 0; background: rgba(20, 28, 22, 0.5)"></a>
+
+<section aria-label="ตัวกรอง" style="position: absolute; left: 0; right: 0; bottom: 0; height: 690px; background: #FFFFFF; border-radius: 24px 24px 0 0; display: flex; flex-direction: column">
+<div style="display: flex; justify-content: center; padding-top: 10px">
+<div style="width: 40px; height: 5px; border-radius: 3px; background: #DCE2D6"></div>
+</div>
+<div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 20px 4px 20px">
+<h2 style="margin: 0; font-family: 'Anuphan', sans-serif; font-size: 20px; font-weight: 700">ตัวกรอง</h2>
+<button type="button" style="height: 36px; padding: 0 8px; border: 0; background: transparent; color: #2E6040; font-family: inherit; font-size: 14px; font-weight: 600">ล้างทั้งหมด</button>
+</div>
+
+<div style="flex-grow: 1; padding: 8px 20px 0 20px; display: flex; flex-direction: column; gap: 20px">
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<span style="font-size: 14px; font-weight: 600">หมวดพืช</span>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<button type="button" aria-pressed="true" style="height: 36px; padding: 0 14px; border-radius: 18px; border: 1.5px solid #2E6040; background: #E4EDE2; color: #1F4A30; font-family: inherit; font-size: 14px; font-weight: 600">ผลไม้</button>
+<button type="button" aria-pressed="false" style="height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid #DCE2D6; background: #FFFFFF; color: #1B241C; font-family: inherit; font-size: 14px">ผักใบ</button>
+<button type="button" aria-pressed="true" style="height: 36px; padding: 0 14px; border-radius: 18px; border: 1.5px solid #2E6040; background: #E4EDE2; color: #1F4A30; font-family: inherit; font-size: 14px; font-weight: 600">ผักผล</button>
+<button type="button" aria-pressed="false" style="height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid #DCE2D6; background: #FFFFFF; color: #1B241C; font-family: inherit; font-size: 14px">สมุนไพร</button>
+<button type="button" aria-pressed="false" style="height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid #DCE2D6; background: #FFFFFF; color: #1B241C; font-family: inherit; font-size: 14px">หัว/ราก</button>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<span style="font-size: 14px; font-weight: 600">ระยะทาง</span>
+<div role="group" aria-label="ระยะทาง" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; background: #F3F5EF; border-radius: 12px; padding: 4px">
+<button type="button" style="height: 40px; border: 0; border-radius: 9px; background: transparent; color: #56615A; font-family: inherit; font-size: 14px">5 กม.</button>
+<button type="button" style="height: 40px; border: 0; border-radius: 9px; background: transparent; color: #56615A; font-family: inherit; font-size: 14px">10 กม.</button>
+<button type="button" aria-pressed="true" style="height: 40px; border: 0; border-radius: 9px; background: #FFFFFF; color: #1F4A30; font-family: inherit; font-size: 14px; font-weight: 700; box-shadow: 0 1px 3px rgba(20, 28, 22, 0.12)">15 กม.</button>
+<button type="button" style="height: 40px; border: 0; border-radius: 9px; background: transparent; color: #56615A; font-family: inherit; font-size: 14px">25 กม.</button>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<span style="font-size: 14px; font-weight: 600">ราคาต่อ กก.</span>
+<div style="display: flex; align-items: center; gap: 10px">
+<label style="flex-grow: 1; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #56615A">ต่ำสุด
+<input type="number" value="0" style="height: 44px; border: 1px solid #DCE2D6; border-radius: 12px; padding: 0 12px; font-family: inherit; font-size: 15px; color: #1B241C">
+</label>
+<span style="margin-top: 18px; color: #56615A">–</span>
+<label style="flex-grow: 1; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #56615A">สูงสุด
+<input type="number" value="30" style="height: 44px; border: 1px solid #DCE2D6; border-radius: 12px; padding: 0 12px; font-family: inherit; font-size: 15px; color: #1B241C">
+</label>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<span style="font-size: 14px; font-weight: 600">เวลาที่เหลือ</span>
+<div style="display: flex; gap: 8px">
+<button type="button" style="height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid #DCE2D6; background: #FFFFFF; color: #1B241C; font-family: inherit; font-size: 14px">น้อยกว่า 24 ชม.</button>
+<button type="button" style="height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid #DCE2D6; background: #FFFFFF; color: #1B241C; font-family: inherit; font-size: 14px">น้อยกว่า 48 ชม.</button>
+<button type="button" aria-pressed="true" style="height: 36px; padding: 0 14px; border-radius: 18px; border: 1.5px solid #2E6040; background: #E4EDE2; color: #1F4A30; font-family: inherit; font-size: 14px; font-weight: 600">ทั้งหมด</button>
+</div>
+</div>
+
+<fieldset style="border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px">
+<legend style="font-size: 14px; font-weight: 600; margin-bottom: 6px">เรียงตาม</legend>
+<label style="display: flex; align-items: center; gap: 10px; min-height: 40px; font-size: 15px"><input type="radio" name="sort" checked style="width: 20px; height: 20px; accent-color: #2E6040">ด่วนสุด (ใกล้หมดเวลา)</label>
+<label style="display: flex; align-items: center; gap: 10px; min-height: 40px; font-size: 15px"><input type="radio" name="sort" style="width: 20px; height: 20px; accent-color: #2E6040">ใกล้สุด</label>
+<label style="display: flex; align-items: center; gap: 10px; min-height: 40px; font-size: 15px"><input type="radio" name="sort" style="width: 20px; height: 20px; accent-color: #2E6040">ราคาถูกสุด</label>
+</fieldset>
+</div>
+
+<div style="padding: 12px 20px 42px 20px; border-top: 1px solid #DCE2D6">
+<a href="Main.dc.html" style="height: 52px; border-radius: 14px; background: #2E6040; color: #FFFFFF; font-size: 16px; font-weight: 600; display: flex; align-items: center; justify-content: center">แสดง 8 รายการ</a>
+</div>
+</section>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

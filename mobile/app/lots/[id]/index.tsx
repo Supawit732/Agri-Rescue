@@ -144,7 +144,7 @@ export default function LotDetailScreen(): React.ReactElement {
       return;
     }
     if (!user.can_buy) {
-      router.push('/(tabs)/account');
+      router.push('/profile');
       return;
     }
     const remaining = remainingOf(lot);

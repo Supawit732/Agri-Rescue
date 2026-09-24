@@ -24,6 +24,10 @@ const querySchema = z.object({
   lng: z.coerce.number().gte(-180).lte(180).optional(),
   radius_km: z.coerce.number().positive().max(200).optional(),
   crop_id: z.coerce.number().int().positive().optional(),
+  category_id: z.coerce.number().int().positive().optional(),
+  price_min: z.coerce.number().nonnegative().optional(),
+  price_max: z.coerce.number().positive().optional(),
+  max_hours: z.coerce.number().positive().optional(),
   sort: z.enum(['near', 'urgent', 'cheap']).optional(),
 });
 
@@ -320,16 +324,23 @@ publicMarketRouter.get(
     }
     const sort = query.sort ?? 'urgent';
     const radiusKm = query.radius_km ?? 15;
+    if (query.price_min !== undefined && query.price_max !== undefined && query.price_min > query.price_max) {
+      throw new HttpError(400, 'VALIDATION', 'ราคาต่ำสุดต้องไม่มากกว่าราคาสูงสุด');
+    }
     const params: unknown[] = [];
-    let cropFilter = '';
+    let lotFilter = '';
     if (query.crop_id !== undefined) {
-      cropFilter = ' AND h.crop_id = ?';
+      lotFilter += ' AND h.crop_id = ?';
       params.push(query.crop_id);
+    }
+    if (query.category_id !== undefined) {
+      lotFilter += ' AND c.category_id = ?';
+      params.push(query.category_id);
     }
     const [rows] = await pool.query<PublicMarketRow[]>(
       `${PUBLIC_LOT_SELECT}
        WHERE h.status IN ('open', 'partially_reserved') AND h.expires_at > UTC_TIMESTAMP()
-         AND h.deleted_at IS NULL${cropFilter}
+         AND h.deleted_at IS NULL${lotFilter}
        ORDER BY h.expires_at ASC, h.id ASC`,
       params,
     );
@@ -343,6 +354,18 @@ publicMarketRouter.get(
       .filter((lot) => lot.hours_left > 0 && lot.remaining_kg > 0);
     if (hasCoords) {
       lots = lots.filter((lot) => lot.distance_km !== null && lot.distance_km <= radiusKm);
+    }
+    if (query.price_min !== undefined) {
+      const min = query.price_min;
+      lots = lots.filter((lot) => lot.price_per_kg !== null && lot.price_per_kg >= min);
+    }
+    if (query.price_max !== undefined) {
+      const max = query.price_max;
+      lots = lots.filter((lot) => lot.price_per_kg !== null && lot.price_per_kg <= max);
+    }
+    if (query.max_hours !== undefined) {
+      const maxHours = query.max_hours;
+      lots = lots.filter((lot) => lot.hours_left <= maxHours);
     }
     lots = sortLots(lots, sort, hasCoords);
     res.json({ lots });

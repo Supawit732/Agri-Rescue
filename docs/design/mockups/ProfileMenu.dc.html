@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>เมนูบัญชี</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anuphan:wght@500;600;700&amp;family=IBM+Plex+Sans+Thai:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0;background:#F3F5EF;color:#1B241C;font-family:'IBM Plex Sans Thai',system-ui,sans-serif}
+a{color:#1B241C;text-decoration:none}a:hover{color:#1F4A30}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #F3F5EF; font-family: 'IBM Plex Sans Thai', system-ui, sans-serif; color: #1B241C">
+
+<div style="padding: 54px 16px 14px 16px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; align-items: center; justify-content: space-between">
+<div style="display: flex; align-items: center; gap: 10px">
+<div style="width: 36px; height: 36px; border-radius: 12px; background: #2E6040"></div>
+<div style="width: 120px; height: 18px; border-radius: 6px; background: #DCE2D6"></div>
+</div>
+<div style="width: 44px; height: 44px; border-radius: 22px; background: #E4EDE2"></div>
+</div>
+<div style="height: 48px; border-radius: 14px; background: #FFFFFF"></div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+<div style="height: 250px; border-radius: 16px; background: #FFFFFF"></div>
+<div style="height: 250px; border-radius: 16px; background: #FFFFFF"></div>
+<div style="height: 250px; border-radius: 16px; background: #FFFFFF"></div>
+<div style="height: 250px; border-radius: 16px; background: #FFFFFF"></div>
+</div>
+</div>
+
+<a href="Main.dc.html" aria-label="ปิดเมนู" style="position: absolute; left: 0; top: 0; right: 0; bottom: 0; background: rgba(20, 28, 22, 0.5)"></a>
+
+<div role="menu" aria-label="เมนูบัญชี" style="position: absolute; top: 106px; right: 12px; width: 316px; background: #FFFFFF; border-radius: 20px; box-shadow: 0 16px 40px rgba(20, 28, 22, 0.25); overflow: hidden">
+
+<a href="Profile.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 16px; color: #1B241C">
+<div style="width: 52px; height: 52px; border-radius: 26px; background: #E4EDE2; color: #1F4A30; display: flex; align-items: center; justify-content: center; font-family: 'Anuphan', sans-serif; font-weight: 700; font-size: 18px">สช</div>
+<div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+<span style="font-family: 'Anuphan', sans-serif; font-size: 17px; font-weight: 700">[ชื่อผู้ใช้]</span>
+<div style="display: flex; gap: 6px">
+<span style="font-size: 11px; font-weight: 600; color: #1F4A30; background: #E4EDE2; padding: 2px 8px; border-radius: 10px">ผู้ขาย</span>
+<span style="font-size: 11px; font-weight: 600; color: #1F4A30; background: #E4EDE2; padding: 2px 8px; border-radius: 10px">ผู้ซื้อ</span>
+</div>
+<span style="font-size: 12px; color: #2E6040; font-weight: 600">ดูและแก้ไขโปรไฟล์</span>
+</div>
+</a>
+
+<div style="height: 1px; background: #DCE2D6"></div>
+
+<div style="display: flex; flex-direction: column; padding: 6px 0">
+<a href="Shop.dc.html" role="menuitem" style="display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 16px; font-size: 15px">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2E6040" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1.5-5h15L21 9"></path><path d="M4 9v11h16V9"></path><path d="M3 9h18"></path><path d="M9 20v-6h6v6"></path></svg>
+<span style="flex-grow: 1">ร้านของฉัน</span>
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8A948C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"></path></svg>
+</a>
+<button type="button" role="menuitem" style="display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 16px; font-size: 15px; border: 0; background: transparent; font-family: inherit; color: #1B241C; text-align: left">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2E6040" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"></path></svg>
+<span style="flex-grow: 1">แดชบอร์ด</span>
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8A948C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"></path></svg>
+</button>
+<button type="button" role="menuitem" style="display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 16px; font-size: 15px; border: 0; background: transparent; font-family: inherit; color: #1B241C; text-align: left">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2E6040" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"></circle><path d="M2.5 20a6.5 6.5 0 0 1 13 0"></path><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"></path></svg>
+<span style="flex-grow: 1">ร้านที่ติดตาม</span>
+<span style="font-size: 13px; color: #56615A">[12]</span>
+</button>
+<a href="DonorApply.dc.html" role="menuitem" style="display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 16px; font-size: 15px; color: #1B241C">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2E6040" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12v9H4v-9"></path><path d="M2 7h20v5H2z"></path><path d="M12 21V7"></path><path d="M12 7c-2-4-6-4-6-1s6 1 6 1 6 2 6-1-4-3-6 1"></path></svg>
+<span style="flex-grow: 1">รับบริจาค</span>
+<span style="font-size: 11px; font-weight: 600; color: #7A4F00; background: #FBEFD6; padding: 2px 8px; border-radius: 10px">จิตอาสา</span>
+</a>
+</div>
+
+<div style="height: 1px; background: #DCE2D6"></div>
+
+<div style="display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 0 16px">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2E6040" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"></path></svg>
+<span style="flex-grow: 1; font-size: 15px">ภาษา</span>
+<div role="group" aria-label="เลือกภาษา" style="display: flex; background: #E4EDE2; border-radius: 10px; padding: 3px">
+<button type="button" aria-pressed="true" style="height: 32px; min-width: 44px; border: 0; border-radius: 8px; background: #FFFFFF; color: #1F4A30; font-family: inherit; font-size: 13px; font-weight: 700">TH</button>
+<button type="button" aria-pressed="false" style="height: 32px; min-width: 44px; border: 0; border-radius: 8px; background: transparent; color: #56615A; font-family: inherit; font-size: 13px; font-weight: 600">EN</button>
+</div>
+</div>
+
+<a href="ContactUs.dc.html" role="menuitem" style="display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 16px; font-size: 15px; color: #1B241C">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2E6040" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"></path><path d="M9 10h6M9 14h4"></path></svg>
+<span style="flex-grow: 1">ติดต่อเรา</span>
+<span style="font-size: 11px; font-weight: 600; color: #1F4A30; background: #E4EDE2; padding: 2px 8px; border-radius: 10px">คำตอบใหม่ 1</span>
+</a>
+
+<button type="button" role="menuitem" style="display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 16px; font-size: 15px; border: 0; background: transparent; font-family: inherit; color: #1B241C; text-align: left; width: 100%">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2E6040" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"></path><path d="M14 3v5h5M9 13h7M9 17h7"></path></svg>
+ข้อกำหนดและนโยบาย
+</button>
+
+<div style="height: 1px; background: #DCE2D6"></div>
+
+<a href="Login.dc.html" role="menuitem" style="display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 0 16px; font-size: 15px; font-weight: 600; color: #A3231B">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4h4v16h-4"></path><path d="M10 8l-4 4 4 4M6 12h9"></path></svg>
+ออกจากระบบ
+</a>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

@@ -21,6 +21,7 @@ export interface User {
   id: number;
   name: string;
   phone: string;
+  email: string | null;
   role: UserRole;
   can_sell: boolean;
   can_buy: boolean;
@@ -141,6 +142,14 @@ export interface Crop {
   name_en?: string | null;
   base_shelf_days: number;
   market_price_per_kg: number;
+  category_id?: number | null;
+}
+
+export interface CropCategory {
+  id: number;
+  name_th: string;
+  name_en: string | null;
+  sort_order?: number;
 }
 
 export interface Plot {

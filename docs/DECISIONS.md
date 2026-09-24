@@ -24,7 +24,7 @@
 | farmer | ป้าบุญมี | 0800000002 |
 | farmer | พี่ต้อม | 0800000003 |
 | driver | คนขับตัวอย่าง | 0800000004 |
-| coordinator | ผู้ประสานตัวอย่าง | 0800000005 |
+| coordinator | admin | 0800000005 |
 | buyer vendor | รถพุ่มพวงป้าแดง | 0800000011 |
 | buyer charity | บ้านพักเด็กชุมชน | 0800000012 |
 | buyer shop | ร้านข้าวแกงลุงชม | 0800000013 |
@@ -214,3 +214,20 @@ JWT เก็บ `sub`, `role`, `can_sell`, `can_buy`, `is_admin` (อายุ 
 | ความสุกตอนลงล็อต | สร้างล็อตใหม่ไม่เลือกความสุกล่วงหน้า; ปุ่มลงประกาศ disabled จนกว่ามีค่า; กล่องประเมินชวนถ่ายรูป/เลือก; แสดงที่มาความสุก + พยากรณ์อากาศ; แก้ล็อตใช้ค่าเดิม |
 | `crops.name_en` | migration `014_crop_name_en.sql`; seed 5 พืชมี `nameEn`; API คืน `name_en` / `crop_name_en` จาก DB (crops, market, public market, my lots, orders, dashboard `by_crop`) |
 | AI assess-photo | `defects` + `note_th` (ไทย) คู่กับ `defects_en` + `note_en` (อังกฤษ) ในสคีมา/prompt/response |
+
+## D026 — UI PR A: shell, market, profile, login
+
+| รายการ | ค่า |
+|---|---|
+| Design tokens | ค่าใน `docs/UI_PLAN.md` ย้ายเข้า `mobile/src/theme.ts` (bg/surface/line/ink/leaf/urgent/soon/ok/danger) |
+| ฟอนต์ | `@expo-google-fonts/anuphan` + `@expo-google-fonts/ibm-plex-sans-thai` โหลดใน root layout; ถ้าโหลดไม่ได้ fallback system |
+| ไอคอนใหม่ | `@expo/vector-icons` **Feather** เส้น; หน้าเดิมที่ยังไม่ redesign คง Ionicons ไว้จนถึง 6.12 |
+| แท็บ | เหลือ 4 (ตลาด/ขาย/คำสั่งซื้อ/แจ้งเตือน); บัญชีเป็นเมนูโปรไฟล์มุมขวาบน → `/profile`; route `/(tabs)/account` ยังอยู่แต่ซ่อน (`href: null`) และลิงก์ทั้งระบบชี้ `/profile` |
+| `users.email` | migration `016_users_email.sql` unique NULL; login รับ `phone` ฟิลด์เดียวเป็นเบอร์ **หรือ** อีเมล (`WHERE phone = ? OR email = ?`); profile อัปเดต email/line_id |
+| `crop_categories` | migration `017_crop_categories.sql` แบบย่อ 5 หมวด (ผลไม้/ผักใบ/ผักผล/สมุนไพร/หัว-ราก) ผูก `crops.category_id` — **ไม่ใช่** catalog เต็มของ 6.3 (ยังไม่มี parcel/storage/pending) |
+| Public market filters | เพิ่ม `category_id`, `price_min`, `price_max`, `max_hours` ต่อจาก `crop_id`/`sort`/`radius_km` ของ 6.2 |
+| รูปล็อต | ของ 6.2 แล้ว (migration 015) — PR A ใช้เฉพาะ UI การ์ด/placeholder |
+| ชื่อร้านบนการ์ด | ยังไม่มี `shops` (PR B) จึงแสดง `plot_name` + ระยะทาง ตาม D022 |
+| ปุ่ม PR B/C ในเมนู | ร้านที่ติดตาม / ติดต่อเรา **ยังไม่แสดง** จนกว่า PR B/C (เลี่ยงเมนูผี) |
+| Login mockup | ยังไม่มีปุ่ม LINE (PR D) และ "ลืมรหัสผ่าน" แสดงเป็นข้อความ disabled |
+

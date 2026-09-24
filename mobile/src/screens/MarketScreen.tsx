@@ -1,5 +1,6 @@
 import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
+import { Feather } from '@expo/vector-icons';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Image,
@@ -12,7 +13,15 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { API_BASE_URL } from '../api/config';
-import type { Crop, MarketLot } from '../api/types';
+import type { Crop, CropCategory, MarketLot } from '../api/types';
+import { AppHeader } from '../components/Brand';
+import {
+  MarketFilterSheet,
+  countActiveFilters,
+  defaultMarketFilters,
+  type MarketFilters,
+  type SortKey,
+} from '../components/MarketFilterSheet';
 import { LocationPicker, type LatLng } from '../components/LocationPicker';
 import {
   Badge,
@@ -35,9 +44,7 @@ import {
   splitAllowedOf,
 } from '../lot/helpers';
 import { formatTemplate, useI18n } from '../i18n';
-import { C, urgency } from '../theme';
-
-type SortKey = 'near' | 'urgent' | 'cheap';
+import { C, cropTint, fonts, radius, urgency } from '../theme';
 
 function photoUri(lot: MarketLot): string | null {
   const raw = lot.photos?.[0] ?? lot.photo_url ?? null;
@@ -56,7 +63,8 @@ export default function MarketScreen(): React.ReactElement {
   const { t } = useI18n();
 
   return (
-    <Screen>
+    <Screen fullWidth>
+      <AppHeader />
       {user === null ? (
         <View style={styles.guestBanner}>
           <Text style={styles.guestText}>{t.market.guestBanner}</Text>
@@ -71,7 +79,7 @@ export default function MarketScreen(): React.ReactElement {
       {user !== null && !user.can_buy ? (
         <View style={styles.enableBuyBanner}>
           <Text style={styles.enableBuyText}>{t.market.enableBuyBrowse}</Text>
-          <Pressable onPress={() => router.push('/(tabs)/account')}>
+          <Pressable onPress={() => router.push('/profile')}>
             <Text style={styles.enableBuyLink}>{t.market.goAccount}</Text>
           </Pressable>
         </View>
@@ -94,22 +102,27 @@ function MarketCatalog(): React.ReactElement {
   );
   const [locationTried, setLocationTried] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
-  const [sort, setSort] = useState<SortKey>('urgent');
-  const [cropId, setCropId] = useState<number | null>(null);
+  const [filters, setFilters] = useState<MarketFilters>(defaultMarketFilters);
+  const [draftFilters, setDraftFilters] = useState<MarketFilters>(defaultMarketFilters);
+  const [filterOpen, setFilterOpen] = useState(false);
   const [cropQuery, setCropQuery] = useState('');
+  const [selectedCropId, setSelectedCropId] = useState<number | null>(null);
   const [crops, setCrops] = useState<Crop[]>([]);
+  const [categories, setCategories] = useState<CropCategory[]>([]);
 
   useEffect(() => {
     let active = true;
     void (async () => {
       try {
-        const list = await api.getCrops();
+        const [list, cats] = await Promise.all([api.getCrops(), api.getCropCategories()]);
         if (active) {
           setCrops(list);
+          setCategories(cats);
         }
       } catch {
         if (active) {
           setCrops([]);
+          setCategories([]);
         }
       }
     })();
@@ -144,7 +157,7 @@ function MarketCatalog(): React.ReactElement {
           lat: Number(position.coords.latitude.toFixed(6)),
           lng: Number(position.coords.longitude.toFixed(6)),
         });
-        setSort('near');
+        setFilters((f) => ({ ...f, sort: 'near' }));
       } catch {
         if (active) {
           setShowPicker(true);
@@ -161,14 +174,31 @@ function MarketCatalog(): React.ReactElement {
   }, [coords, locationTried]);
 
   const fetchMarket = useCallback(() => {
+    const sort: SortKey = coords === null && filters.sort === 'near' ? 'urgent' : filters.sort;
+    const priceMin = filters.priceMin === '' ? undefined : Number(filters.priceMin);
+    const priceMax = filters.priceMax === '' ? undefined : Number(filters.priceMax);
     return api.getPublicMarket({
-      ...(coords !== null ? { lat: coords.lat, lng: coords.lng, radius_km: 30 } : {}),
-      ...(cropId !== null ? { crop_id: cropId } : {}),
-      sort: coords === null && sort === 'near' ? 'urgent' : sort,
+      ...(coords !== null ? { lat: coords.lat, lng: coords.lng, radius_km: filters.radiusKm } : {}),
+      ...(filters.categoryId !== null ? { category_id: filters.categoryId } : {}),
+      ...(selectedCropId !== null ? { crop_id: selectedCropId } : {}),
+      ...(priceMin !== undefined && !Number.isNaN(priceMin) ? { price_min: priceMin } : {}),
+      ...(priceMax !== undefined && !Number.isNaN(priceMax) ? { price_max: priceMax } : {}),
+      ...(filters.maxHours !== null ? { max_hours: filters.maxHours } : {}),
+      sort,
     });
-  }, [api, coords, cropId, sort]);
+  }, [api, coords, filters, selectedCropId]);
 
-  const { data, loading, error, reload } = useApiData(fetchMarket, [coords?.lat, coords?.lng, cropId, sort]);
+  const { data, loading, error, reload } = useApiData(fetchMarket, [
+    coords?.lat,
+    coords?.lng,
+    filters.categoryId,
+    filters.radiusKm,
+    filters.priceMin,
+    filters.priceMax,
+    filters.maxHours,
+    filters.sort,
+    selectedCropId,
+  ]);
 
   const filteredCrops = useMemo(() => {
     const q = cropQuery.trim().toLowerCase();
@@ -184,61 +214,107 @@ function MarketCatalog(): React.ReactElement {
       .slice(0, 12);
   }, [crops, cropQuery]);
 
-  const goLot = (lot: MarketLot, intent: 'buy' | 'donate'): void => {
-    const path = `/lots/${lot.id}?intent=${intent}`;
-    if (user === null) {
-      router.push({ pathname: '/login', params: { returnTo: path } });
-      return;
-    }
-    if (!user.can_buy) {
-      router.push('/(tabs)/account');
-      return;
-    }
-    router.push({
-      pathname: '/lots/[id]',
-      params: { id: String(lot.id), intent },
-    });
-  };
-
+  const activeCount = countActiveFilters(filters);
   const sortLabel =
-    sort === 'near' ? t.market.sortNear : sort === 'cheap' ? t.market.sortCheap : t.market.sortUrgent;
-
+    filters.sort === 'near' ? t.market.sortNear : filters.sort === 'cheap' ? t.market.sortCheap : t.market.sortUrgent;
   const cardWidth = `${100 / columns - 1.5}%` as `${number}%`;
 
   return (
     <Body>
-      <Text style={styles.heading}>{t.market.title}</Text>
-      <Text style={styles.sub}>
-        {coords !== null
-          ? formatTemplate(t.market.subWithLocation, { sort: sortLabel })
-          : t.market.subNoLocation}
-      </Text>
+      <View style={styles.searchRow}>
+        <View style={styles.searchBox}>
+          <Feather name="search" size={20} color={C.mute} />
+          <TextInput
+            style={styles.search}
+            placeholder={t.market.searchCrop}
+            placeholderTextColor={C.mute}
+            value={cropQuery}
+            onChangeText={setCropQuery}
+            accessibilityLabel={t.market.searchCrop}
+          />
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t.market.filterOpen}
+          style={styles.filterBtn}
+          onPress={() => {
+            setDraftFilters(filters);
+            setFilterOpen(true);
+          }}
+        >
+          <Feather name="sliders" size={20} color={C.white} />
+          {activeCount > 0 ? (
+            <View style={styles.filterCount}>
+              <Text style={styles.filterCountText}>{activeCount}</Text>
+            </View>
+          ) : null}
+        </Pressable>
+      </View>
 
-      <View style={styles.sortRow}>
-        {(
-          [
-            { key: 'urgent' as const, label: t.market.sortUrgent },
-            { key: 'near' as const, label: t.market.sortNear },
-            { key: 'cheap' as const, label: t.market.sortCheap },
-          ] as const
-        ).map((opt) => (
-          <Pressable
-            key={opt.key}
-            style={[styles.chip, sort === opt.key && styles.chipActive]}
-            onPress={() => {
-              if (opt.key === 'near' && coords === null) {
-                setShowPicker(true);
-              }
-              setSort(opt.key);
-            }}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.cropScroll}>
+        <Pressable
+          style={[styles.chip, filters.categoryId === null && selectedCropId === null && styles.chipActive]}
+          onPress={() => {
+            setFilters((f) => ({ ...f, categoryId: null }));
+            setSelectedCropId(null);
+          }}
+        >
+          <Text
+            style={[
+              styles.chipText,
+              filters.categoryId === null && selectedCropId === null && styles.chipTextActive,
+            ]}
           >
-            <Text style={[styles.chipText, sort === opt.key && styles.chipTextActive]}>{opt.label}</Text>
-          </Pressable>
-        ))}
-        <Pressable style={styles.chip} onPress={() => setShowPicker((v) => !v)}>
-          <Text style={styles.chipText}>
-            {coords !== null ? t.market.changeLocation : t.market.selectLocation}
+            {t.market.allCrops}
           </Text>
+        </Pressable>
+        {categories.map((cat) => {
+          const selected = filters.categoryId === cat.id;
+          return (
+            <Pressable
+              key={cat.id}
+              style={[styles.chip, selected && styles.chipActive]}
+              onPress={() => {
+                setFilters((f) => ({ ...f, categoryId: selected ? null : cat.id }));
+                setSelectedCropId(null);
+              }}
+            >
+              <Text style={[styles.chipText, selected && styles.chipTextActive]}>{cropName(cat)}</Text>
+            </Pressable>
+          );
+        })}
+        {filteredCrops.map((crop) => {
+          const selected = selectedCropId === crop.id;
+          return (
+            <Pressable
+              key={crop.id}
+              style={[styles.chip, selected && styles.chipActive]}
+              onPress={() => setSelectedCropId(selected ? null : crop.id)}
+            >
+              <Text style={[styles.chipText, selected && styles.chipTextActive]}>{cropName(crop)}</Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+
+      <View style={styles.listHeader}>
+        <Text style={styles.listTitle}>
+          {formatTemplate(t.market.nearYouCount, {
+            count: data !== null ? formatNumber(data.length) : '—',
+          })}
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => {
+            setDraftFilters(filters);
+            setFilterOpen(true);
+          }}
+          style={styles.sortBtn}
+        >
+          <Text style={styles.sortBtnText}>
+            {t.market.filterSort}: {sortLabel}
+          </Text>
+          <Feather name="chevron-down" size={16} color={C.leaf} />
         </Pressable>
       </View>
 
@@ -249,7 +325,7 @@ function MarketCatalog(): React.ReactElement {
             onChange={(next) => {
               setCoords(next);
               if (next !== null) {
-                setSort('near');
+                setFilters((f) => ({ ...f, sort: 'near' }));
                 setShowPicker(false);
               }
             }}
@@ -257,35 +333,6 @@ function MarketCatalog(): React.ReactElement {
           />
         </Card>
       ) : null}
-
-      <TextInput
-        style={styles.search}
-        placeholder={t.market.searchCrop}
-        placeholderTextColor={C.mute}
-        value={cropQuery}
-        onChangeText={setCropQuery}
-      />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.cropScroll}>
-        <Pressable
-          style={[styles.chip, cropId === null && styles.chipActive]}
-          onPress={() => setCropId(null)}
-        >
-          <Text style={[styles.chipText, cropId === null && styles.chipTextActive]}>
-            {t.market.allCrops}
-          </Text>
-        </Pressable>
-        {filteredCrops.map((crop) => (
-          <Pressable
-            key={crop.id}
-            style={[styles.chip, cropId === crop.id && styles.chipActive]}
-            onPress={() => setCropId(crop.id)}
-          >
-            <Text style={[styles.chipText, cropId === crop.id && styles.chipTextActive]}>
-              {cropName(crop)}
-            </Text>
-          </Pressable>
-        ))}
-      </ScrollView>
 
       <DataState
         loading={loading}
@@ -303,8 +350,7 @@ function MarketCatalog(): React.ReactElement {
               const remaining = remainingOf(lot);
               const elig = donationEligibility(user, lot, remaining, donationEligibilityLabels(t));
               const available = availableAsOf(lot);
-              const canBuy =
-                available.includes('buy') && lot.price_per_kg !== null && remaining > 0;
+              const canBuy = available.includes('buy') && lot.price_per_kg !== null && remaining > 0;
               const saleBadge = marketSaleBadge(lot, {
                 sell: t.market.badgeSell,
                 donate: t.market.badgeDonate,
@@ -317,74 +363,94 @@ function MarketCatalog(): React.ReactElement {
               const uri = photoUri(lot);
               const bookingEnabled = user === null || user.can_buy;
               const title = cropName({ name_th: lot.crop_name_th, name_en: lot.crop_name_en });
+              const meta = [
+                lot.grade === 'substandard' ? t.market.gradeSub : t.market.gradeNormal,
+                `${t.market.ripeness} ${lot.ripeness}`,
+              ].join(' · ');
+              const pct =
+                lot.weight_kg > 0
+                  ? Math.max(0, Math.min(100, Math.round((remaining / lot.weight_kg) * 100)))
+                  : 0;
               return (
                 <Pressable
                   key={lot.id}
                   style={[styles.card, { width: cardWidth }]}
-                  onPress={() =>
-                    router.push({ pathname: '/lots/[id]', params: { id: String(lot.id) } })
-                  }
+                  onPress={() => router.push({ pathname: '/lots/[id]', params: { id: String(lot.id) } })}
                 >
-                  {uri !== null ? (
-                    <Image source={{ uri }} style={styles.photo} resizeMode="cover" />
-                  ) : (
-                    <View style={[styles.photo, styles.photoPlaceholder]}>
-                      <Text style={styles.photoPlaceholderText}>{title}</Text>
-                    </View>
-                  )}
-                  <View style={styles.cardBody}>
-                    <View style={styles.cardHeader}>
-                      <Text style={styles.cardTitle} numberOfLines={1}>
-                        {title}
+                  <View style={styles.photoWrap}>
+                    {uri !== null ? (
+                      <Image source={{ uri }} style={styles.photo} resizeMode="cover" />
+                    ) : (
+                      <View style={[styles.photo, { backgroundColor: cropTint(lot.crop_id ?? lot.id) }]}>
+                        <Feather name="image" size={28} color={C.mute} />
+                        <Text style={styles.photoPlaceholderText}>{title}</Text>
+                      </View>
+                    )}
+                    <View style={[styles.timeBadge, { backgroundColor: tone.bg }]}>
+                      <Feather name="clock" size={12} color={tone.fg} />
+                      <Text style={[styles.timeBadgeText, { color: tone.fg }]}>
+                        {formatCountdown(hours, t.countdown)}
                       </Text>
-                      <Badge text={formatCountdown(hours, t.countdown)} fg={tone.fg} bg={tone.bg} />
                     </View>
-                    <View style={styles.badgeRow}>
-                      {saleBadge !== null ? (
-                        <Badge
-                          text={saleBadge.text}
-                          fg={saleBadge.donate ? C.turmeric : C.leaf}
-                          bg={saleBadge.donate ? C.turmericSoft : C.leafSoft}
-                        />
-                      ) : null}
-                    </View>
-                    <Text style={styles.cardLine}>
-                      {t.market.remaining} {formatNumber(remaining)} / {formatNumber(lot.weight_kg)}{' '}
-                      {t.dashboard.unitKg}
-                      {splitAllowedOf(lot)
-                        ? ` · ${t.market.minOrder} ${formatNumber(minOrderOf(lot))} ${t.dashboard.unitKg}`
-                        : ` · ${t.market.wholeLot}`}
+                  </View>
+                  <View style={styles.cardBody}>
+                    <Text style={styles.cardTitle} numberOfLines={1}>
+                      {title}
                     </Text>
-                    <Text style={styles.cardLine}>
+                    <Text style={styles.cardMeta} numberOfLines={1}>
+                      {meta}
+                    </Text>
+                    <Text style={styles.cardMeta} numberOfLines={1}>
                       {lot.plot_name ?? t.market.plotFallback}
                       {dist !== null ? ` · ${dist}` : ''}
                     </Text>
-                    {lot.price_per_kg !== null ? (
-                      <Text style={styles.price}>
-                        {formatNumber(lot.price_per_kg)} {t.dashboard.unitBaht}/{t.dashboard.unitKg}
-                      </Text>
-                    ) : (
-                      <Text style={styles.price}>{t.market.badgeDonate}</Text>
-                    )}
-                    {bookingEnabled ? (
-                      <View style={styles.actions}>
-                        {canBuy ? (
-                          <PrimaryButton
-                            label={t.market.bookBuy}
-                            block
-                            onPress={() => goLot(lot, 'buy')}
-                          />
-                        ) : null}
-                        {(elig.canDonate || (user === null && available.includes('donate'))) &&
-                        remaining > 0 ? (
-                          <PrimaryButton
-                            label={t.market.requestDonation}
-                            tone="turmeric"
-                            block
-                            onPress={() => goLot(lot, 'donate')}
-                          />
-                        ) : null}
+                    {saleBadge !== null ? (
+                      <View style={styles.badgeRow}>
+                        <Badge
+                          text={saleBadge.text}
+                          fg={saleBadge.donate ? C.soonFg : C.leafDeep}
+                          bg={saleBadge.donate ? C.soonBg : C.leafSoft}
+                        />
                       </View>
+                    ) : null}
+                    {lot.price_per_kg !== null ? (
+                      <View style={styles.priceRow}>
+                        <Text style={styles.price}>{formatNumber(lot.price_per_kg)}</Text>
+                        <Text style={styles.priceUnit}>
+                          {t.dashboard.unitBaht}/{t.dashboard.unitKg}
+                        </Text>
+                      </View>
+                    ) : (
+                      <Text style={styles.priceDonate}>{t.market.badgeDonate}</Text>
+                    )}
+                    <Text style={styles.cardMeta}>
+                      {t.market.remaining} {formatNumber(remaining)}/{formatNumber(lot.weight_kg)}{' '}
+                      {t.dashboard.unitKg}
+                      {splitAllowedOf(lot)
+                        ? ` · ${t.market.minOrder} ${formatNumber(minOrderOf(lot))}`
+                        : ` · ${t.market.wholeLot}`}
+                    </Text>
+                    <View style={styles.barTrack}>
+                      <View style={[styles.barFill, { width: `${pct}%` }]} />
+                    </View>
+                    {bookingEnabled && canBuy ? (
+                      <Pressable
+                        style={styles.cardCta}
+                        onPress={() => router.push({ pathname: '/lots/[id]', params: { id: String(lot.id) } })}
+                      >
+                        <Text style={styles.cardCtaText}>{t.market.bookBuy}</Text>
+                      </Pressable>
+                    ) : bookingEnabled && available.includes('donate') && elig.canDonate ? (
+                      <Pressable
+                        style={[styles.cardCta, styles.cardCtaDonate]}
+                        onPress={() => router.push({ pathname: '/lots/[id]', params: { id: String(lot.id) } })}
+                      >
+                        <Text style={styles.cardCtaText}>{t.market.requestDonation}</Text>
+                      </Pressable>
+                    ) : elig.reason !== null ? (
+                      <Text style={styles.eligHint} numberOfLines={2}>
+                        {elig.reason}
+                      </Text>
                     ) : null}
                   </View>
                 </Pressable>
@@ -393,68 +459,199 @@ function MarketCatalog(): React.ReactElement {
           </View>
         )}
       </DataState>
+
+      <MarketFilterSheet
+        visible={filterOpen}
+        filters={draftFilters}
+        categories={categories}
+        resultCount={data?.length ?? null}
+        onChange={setDraftFilters}
+        onApply={() => {
+          setFilters(draftFilters);
+          setFilterOpen(false);
+        }}
+        onReset={() => setDraftFilters(defaultMarketFilters)}
+        onClose={() => setFilterOpen(false)}
+      />
     </Body>
   );
 }
 
 const styles = StyleSheet.create({
   guestBanner: {
-    backgroundColor: C.leafSoft,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
-    gap: 8,
-  },
-  guestText: { color: C.ink, fontWeight: '700', fontSize: 15 },
-  enableBuyBanner: {
-    backgroundColor: C.leafSoft,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 10,
-    gap: 6,
-  },
-  enableBuyText: { color: C.ink },
-  enableBuyLink: { color: C.leaf, fontWeight: '800' },
-  heading: { fontSize: 22, fontWeight: '800', color: C.ink, marginBottom: 4 },
-  sub: { color: C.mute, marginBottom: 12 },
-  sortRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12,
-    backgroundColor: C.leafSoft,
-  },
-  chipActive: { backgroundColor: C.leaf },
-  chipText: { color: C.leaf, fontWeight: '700' },
-  chipTextActive: { color: '#fff' },
-  search: {
-    borderWidth: 1,
-    borderColor: C.leafSoft,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    color: C.ink,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginHorizontal: 16,
     marginBottom: 8,
-    backgroundColor: '#fff',
+    padding: 12,
+    backgroundColor: C.leafSoft,
+    borderRadius: radius.card,
   },
-  cropScroll: { marginBottom: 12, maxHeight: 44 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'space-between' },
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    overflow: 'hidden',
-    marginBottom: 4,
+  guestText: { flex: 1, color: C.leafDeep, fontSize: 13, fontFamily: fonts.body },
+  enableBuyBanner: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    padding: 12,
+    backgroundColor: C.soonBg,
+    borderRadius: radius.card,
+  },
+  enableBuyText: { color: C.soonFg, fontSize: 13, fontFamily: fonts.body },
+  enableBuyLink: { color: C.leaf, fontWeight: '700', marginTop: 6, fontFamily: fonts.bodySemi },
+  searchRow: { flexDirection: 'row', gap: 10, marginBottom: 10 },
+  searchBox: {
+    flex: 1,
+    height: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    backgroundColor: C.surface,
     borderWidth: 1,
-    borderColor: C.leafSoft,
+    borderColor: C.line,
+    borderRadius: radius.button,
   },
-  photo: { width: '100%', height: 120, backgroundColor: C.leafSoft },
-  photoPlaceholder: { alignItems: 'center', justifyContent: 'center' },
-  photoPlaceholderText: { color: C.leaf, fontWeight: '700' },
-  cardBody: { padding: 10 },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 6 },
-  cardTitle: { fontSize: 15, fontWeight: '700', color: C.ink, flex: 1 },
-  badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6, marginBottom: 4 },
-  cardLine: { color: C.ink, fontSize: 13, marginBottom: 2 },
-  price: { fontWeight: '800', color: C.leaf, marginTop: 4, marginBottom: 6 },
-  actions: { gap: 8, marginTop: 4 },
+  search: { flex: 1, fontSize: 15, color: C.ink, fontFamily: fonts.body },
+  filterBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.button,
+    backgroundColor: C.leaf,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterCount: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: C.soonAccent,
+    borderWidth: 2,
+    borderColor: C.bg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  filterCountText: { color: C.white, fontSize: 11, fontWeight: '700' },
+  cropScroll: { marginBottom: 8, flexGrow: 0 },
+  chip: {
+    height: 36,
+    paddingHorizontal: 16,
+    borderRadius: radius.chip,
+    borderWidth: 1,
+    borderColor: C.line,
+    backgroundColor: C.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  chipActive: { backgroundColor: C.leafDeep, borderColor: C.leafDeep },
+  chipText: { fontSize: 14, color: C.ink, fontFamily: fonts.body },
+  chipTextActive: { color: C.white, fontWeight: '600', fontFamily: fonts.bodySemi },
+  listHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  listTitle: {
+    fontFamily: fonts.title,
+    fontSize: 17,
+    fontWeight: '600',
+    color: C.ink,
+  },
+  sortBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    height: 32,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+  },
+  sortBtnText: { color: C.leaf, fontWeight: '600', fontSize: 14, fontFamily: fonts.bodySemi },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    paddingBottom: 24,
+  },
+  card: {
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.line,
+    borderRadius: radius.cardLg,
+    overflow: 'hidden',
+  },
+  photoWrap: { height: 104, position: 'relative' },
+  photo: {
+    height: 104,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  photoPlaceholderText: {
+    fontSize: 11,
+    color: C.mute,
+    paddingHorizontal: 8,
+    textAlign: 'center',
+    fontFamily: fonts.body,
+  },
+  timeBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    height: 24,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+  },
+  timeBadgeText: { fontSize: 12, fontWeight: '600', fontFamily: fonts.bodySemi },
+  cardBody: { padding: 10, gap: 3 },
+  cardTitle: {
+    fontFamily: fonts.title,
+    fontSize: 16,
+    fontWeight: '600',
+    color: C.ink,
+  },
+  cardMeta: { fontSize: 12, color: C.mute, fontFamily: fonts.body },
+  badgeRow: { flexDirection: 'row', marginTop: 2 },
+  priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 2, marginTop: 6 },
+  price: { fontSize: 20, fontWeight: '700', color: C.ink, fontFamily: fonts.titleBold },
+  priceUnit: { fontSize: 12, color: C.mute, fontFamily: fonts.body },
+  priceDonate: {
+    marginTop: 6,
+    fontSize: 16,
+    fontWeight: '700',
+    color: C.soonFg,
+    fontFamily: fonts.titleBold,
+  },
+  barTrack: {
+    height: 4,
+    backgroundColor: C.leafSoft,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  barFill: { height: 4, backgroundColor: C.leaf, borderRadius: 2 },
+  cardCta: {
+    marginTop: 8,
+    minHeight: 40,
+    borderRadius: 12,
+    backgroundColor: C.leaf,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  cardCtaDonate: { backgroundColor: C.soonAccent },
+  cardCtaText: {
+    color: C.white,
+    fontWeight: '600',
+    fontSize: 14,
+    textAlign: 'center',
+    fontFamily: fonts.bodySemi,
+  },
+  eligHint: { marginTop: 6, fontSize: 11, color: C.mute, fontFamily: fonts.body },
 });

@@ -182,7 +182,7 @@ export default function DashboardScreen(): React.ReactElement {
 
   if (user === null) {
     return (
-      <SubScreen title={t.dashboard.title} onBack={() => router.replace('/(tabs)/account')}>
+      <SubScreen title={t.dashboard.title} onBack={() => router.replace('/profile')}>
         <LoginPrompt
           title={t.dashboard.loginTitle}
           message={t.dashboard.loginMessage}
@@ -194,7 +194,7 @@ export default function DashboardScreen(): React.ReactElement {
 
   if (!canSee) {
     return (
-      <SubScreen title={t.dashboard.title} onBack={() => router.replace('/(tabs)/account')}>
+      <SubScreen title={t.dashboard.title} onBack={() => router.replace('/profile')}>
         <Body>
           <Text style={styles.empty}>{t.dashboard.loginMessage}</Text>
         </Body>
@@ -203,7 +203,7 @@ export default function DashboardScreen(): React.ReactElement {
   }
 
   return (
-    <SubScreen title={t.dashboard.title} onBack={() => router.replace('/(tabs)/account')}>
+    <SubScreen title={t.dashboard.title} onBack={() => router.replace('/profile')}>
       <DataState loading={loading} error={error} data={data} onRetry={reload}>
         {(payload) => <DashboardBody data={payload} />}
       </DataState>

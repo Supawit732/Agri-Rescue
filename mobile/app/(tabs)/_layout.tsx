@@ -1,9 +1,9 @@
 import { Tabs, usePathname, useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useI18n } from '../../src/i18n';
-import { C } from '../../src/theme';
+import { C, fonts } from '../../src/theme';
 
 const SIDEBAR_BREAKPOINT = 900;
 
@@ -16,31 +16,16 @@ export default function TabsLayout(): React.ReactElement {
     name: string;
     href: string;
     label: string;
-    icon: keyof typeof Ionicons.glyphMap;
-    iconOutline: keyof typeof Ionicons.glyphMap;
+    icon: keyof typeof Feather.glyphMap;
   }[] = [
-    { name: 'index', href: '/(tabs)', label: t.tabs.market, icon: 'storefront', iconOutline: 'storefront-outline' },
-    { name: 'sell', href: '/(tabs)/sell', label: t.tabs.sell, icon: 'leaf', iconOutline: 'leaf-outline' },
-    {
-      name: 'orders',
-      href: '/(tabs)/orders',
-      label: t.tabs.orders,
-      icon: 'receipt',
-      iconOutline: 'receipt-outline',
-    },
+    { name: 'index', href: '/(tabs)', label: t.tabs.market, icon: 'home' },
+    { name: 'sell', href: '/(tabs)/sell', label: t.tabs.sell, icon: 'plus-circle' },
+    { name: 'orders', href: '/(tabs)/orders', label: t.tabs.orders, icon: 'file-text' },
     {
       name: 'notifications',
       href: '/(tabs)/notifications',
       label: t.tabs.notifications,
-      icon: 'notifications',
-      iconOutline: 'notifications-outline',
-    },
-    {
-      name: 'account',
-      href: '/(tabs)/account',
-      label: t.tabs.account,
-      icon: 'person',
-      iconOutline: 'person-outline',
+      icon: 'bell',
     },
   ];
 
@@ -55,7 +40,7 @@ export default function TabsLayout(): React.ReactElement {
             tabBarInactiveTintColor: C.mute,
             tabBarStyle: isWide
               ? { display: 'none' }
-              : { backgroundColor: C.white, borderTopColor: C.line },
+              : { backgroundColor: C.surface, borderTopColor: C.line },
             sceneStyle: { backgroundColor: C.bg },
           }}
         >
@@ -64,7 +49,7 @@ export default function TabsLayout(): React.ReactElement {
             options={{
               title: t.tabs.market,
               tabBarIcon: ({ color, size, focused }) => (
-                <Ionicons name={focused ? 'storefront' : 'storefront-outline'} size={size} color={color} />
+                <Feather name="home" size={size} color={color} style={focused ? styles.iconOn : null} />
               ),
             }}
           />
@@ -72,42 +57,25 @@ export default function TabsLayout(): React.ReactElement {
             name="sell"
             options={{
               title: t.tabs.sell,
-              tabBarIcon: ({ color, size, focused }) => (
-                <Ionicons name={focused ? 'leaf' : 'leaf-outline'} size={size} color={color} />
-              ),
+              tabBarIcon: ({ color, size }) => <Feather name="plus-circle" size={size} color={color} />,
             }}
           />
           <Tabs.Screen
             name="orders"
             options={{
               title: t.tabs.orders,
-              tabBarIcon: ({ color, size, focused }) => (
-                <Ionicons name={focused ? 'receipt' : 'receipt-outline'} size={size} color={color} />
-              ),
+              tabBarIcon: ({ color, size }) => <Feather name="file-text" size={size} color={color} />,
             }}
           />
           <Tabs.Screen
             name="notifications"
             options={{
               title: t.tabs.notifications,
-              tabBarIcon: ({ color, size, focused }) => (
-                <Ionicons
-                  name={focused ? 'notifications' : 'notifications-outline'}
-                  size={size}
-                  color={color}
-                />
-              ),
+              tabBarIcon: ({ color, size }) => <Feather name="bell" size={size} color={color} />,
             }}
           />
-          <Tabs.Screen
-            name="account"
-            options={{
-              title: t.tabs.account,
-              tabBarIcon: ({ color, size, focused }) => (
-                <Ionicons name={focused ? 'person' : 'person-outline'} size={size} color={color} />
-              ),
-            }}
-          />
+          {/* Account lives in the header profile menu; keep the route out of the tab bar. */}
+          <Tabs.Screen name="account" options={{ href: null, title: t.tabs.account }} />
         </Tabs>
       </View>
     </View>
@@ -121,8 +89,7 @@ function SideNav({
     name: string;
     href: string;
     label: string;
-    icon: keyof typeof Ionicons.glyphMap;
-    iconOutline: keyof typeof Ionicons.glyphMap;
+    icon: keyof typeof Feather.glyphMap;
   }[];
 }): React.ReactElement {
   const router = useRouter();
@@ -148,11 +115,7 @@ function SideNav({
             onPress={() => router.navigate(item.href as never)}
             style={[styles.sideItem, active ? styles.sideItemActive : null]}
           >
-            <Ionicons
-              name={active ? item.icon : item.iconOutline}
-              size={22}
-              color={active ? C.leaf : C.mute}
-            />
+            <Feather name={item.icon} size={22} color={active ? C.leaf : C.mute} />
             <Text style={[styles.sideLabel, active ? styles.sideLabelActive : null]}>{item.label}</Text>
           </Pressable>
         );
@@ -167,13 +130,20 @@ const styles = StyleSheet.create({
   tabsWrap: { flex: 1, minWidth: 0 },
   sideNav: {
     width: 220,
-    backgroundColor: C.white,
+    backgroundColor: C.surface,
     borderRightWidth: 1,
     borderRightColor: C.line,
     paddingHorizontal: 12,
     gap: 4,
   },
-  brand: { fontSize: 18, fontWeight: '800', color: C.leaf, marginBottom: 16, paddingHorizontal: 8 },
+  brand: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: C.leaf,
+    marginBottom: 16,
+    paddingHorizontal: 8,
+    fontFamily: fonts.titleBold,
+  },
   sideItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -183,6 +153,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   sideItemActive: { backgroundColor: C.leafSoft },
-  sideLabel: { fontSize: 15, fontWeight: '600', color: C.mute },
+  sideLabel: { fontSize: 15, fontWeight: '600', color: C.mute, fontFamily: fonts.bodySemi },
   sideLabelActive: { color: C.leaf },
+  iconOn: { fontWeight: '700' },
 });

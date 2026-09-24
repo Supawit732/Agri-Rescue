@@ -14,7 +14,7 @@ export default function ImpactScreen(): React.ReactElement {
 
   return (
     <Screen>
-      <StackHeader title={t.impact.title} onBack={() => router.replace('/(tabs)/account')} />
+      <StackHeader title={t.impact.title} onBack={() => router.replace('/profile')} />
       <DataState loading={loading} error={error} data={data} onRetry={reload}>
         {(summary) => (
           <Body>

@@ -19,10 +19,19 @@ export const authRouter = Router();
 
 const buyerTypeSchema = z.enum(['vendor', 'shop', 'charity']);
 
+const emailSchema = z
+  .string()
+  .trim()
+  .email('อีเมลไม่ถูกต้อง')
+  .max(255)
+  .nullable()
+  .optional();
+
 const registerSchema = z
   .object({
     name: z.string().trim().min(1, 'กรุณากรอกชื่อ'),
     phone: z.string().trim().regex(/^\d{9,15}$/, 'เบอร์โทรไม่ถูกต้อง'),
+    email: emailSchema,
     password: z.string().min(8, 'รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร'),
     can_sell: z.boolean(),
     can_buy: z.boolean(),
@@ -44,7 +53,8 @@ const registerSchema = z
   });
 
 const loginSchema = z.object({
-  phone: z.string().trim().min(1, 'กรุณากรอกเบอร์โทร'),
+  /** Phone number or email (PR A single login field). */
+  phone: z.string().trim().min(1, 'กรุณากรอกเบอร์โทรหรืออีเมล'),
   password: z.string().min(1, 'กรุณากรอกรหัสผ่าน'),
 });
 
@@ -53,16 +63,25 @@ const profileSchema = z
     can_sell: z.literal(true).optional(),
     can_buy: z.literal(true).optional(),
     buyer_type: buyerTypeSchema.optional(),
+    email: z.union([emailSchema, z.literal('')]).optional(),
     line_id: z.string().trim().min(1).max(64).nullable().optional(),
   })
-  .refine((body) => body.can_sell === true || body.can_buy === true || body.line_id !== undefined, {
-    message: 'ไม่มีข้อมูลที่จะอัปเดต',
-  });
+  .refine(
+    (body) =>
+      body.can_sell === true ||
+      body.can_buy === true ||
+      body.line_id !== undefined ||
+      body.email !== undefined,
+    {
+      message: 'ไม่มีข้อมูลที่จะอัปเดต',
+    },
+  );
 
 interface UserRow extends RowDataPacket {
   id: number;
   name: string;
   phone: string;
+  email: string | null;
   role: UserRole;
   can_sell: number | boolean;
   can_buy: number | boolean;
@@ -96,6 +115,7 @@ export interface PublicUser {
   id: number;
   name: string;
   phone: string;
+  email: string | null;
   role: UserRole;
   can_sell: boolean;
   can_buy: boolean;
@@ -156,6 +176,7 @@ export function toPublicUser(row: UserRow): PublicUser {
     id: Number(row.id),
     name: row.name,
     phone: row.phone,
+    email: row.email === null || row.email === undefined ? null : String(row.email),
     role: row.role,
     can_sell: asBool(row.can_sell),
     can_buy: asBool(row.can_buy),
@@ -188,7 +209,7 @@ export function toPublicUser(row: UserRow): PublicUser {
   };
 }
 
-const USER_SELECT = `SELECT u.id, u.name, u.phone, u.role, u.can_sell, u.can_buy, u.is_admin,
+const USER_SELECT = `SELECT u.id, u.name, u.phone, u.email, u.role, u.can_sell, u.can_buy, u.is_admin,
                             u.line_id, u.lat, u.lng,
                             bp.buyer_type, bp.charity_approved, bp.donor_tier, bp.beneficiary_count,
                             bp.distribution_mode, bp.donation_suspended, bp.trusted_proof_count,
@@ -255,11 +276,12 @@ authRouter.post(
     try {
       await connection.beginTransaction();
       const [result] = await connection.query<ResultSetHeader>(
-        `INSERT INTO users (name, phone, password_hash, role, can_sell, can_buy, is_admin, line_id, lat, lng)
-         VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+        `INSERT INTO users (name, phone, email, password_hash, role, can_sell, can_buy, is_admin, line_id, lat, lng)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
         [
           body.name,
           body.phone,
+          body.email ?? null,
           passwordHash,
           role,
           body.can_sell ? 1 : 0,
@@ -290,7 +312,7 @@ authRouter.post(
     } catch (error) {
       await connection.rollback();
       if (isDuplicate(error)) {
-        throw new HttpError(409, 'CONFLICT', 'เบอร์โทรนี้ถูกใช้แล้ว');
+        throw new HttpError(409, 'CONFLICT', 'เบอร์โทรหรืออีเมลนี้ถูกใช้แล้ว');
       }
       throw error;
     } finally {
@@ -304,7 +326,7 @@ authRouter.post(
   asyncHandler(async (req, res) => {
     const body = loginSchema.parse(req.body);
     const [authRows] = await pool.query<UserRow[]>(
-      `SELECT u.id, u.name, u.phone, u.role, u.can_sell, u.can_buy, u.is_admin,
+      `SELECT u.id, u.name, u.phone, u.email, u.role, u.can_sell, u.can_buy, u.is_admin,
               u.line_id, u.lat, u.lng, u.password_hash,
               bp.buyer_type, bp.charity_approved, bp.donor_tier, bp.beneficiary_count,
               bp.distribution_mode, bp.donation_suspended, bp.trusted_proof_count,
@@ -314,13 +336,13 @@ authRouter.post(
               bp.donor_terms_version, bp.donor_terms_accepted_at, bp.org_type
        FROM users u
        LEFT JOIN buyer_profiles bp ON bp.user_id = u.id
-       WHERE u.phone = ?`,
-      [body.phone],
+       WHERE u.phone = ? OR u.email = ?`,
+      [body.phone, body.phone],
     );
     const user = authRows[0];
     const passwordHash = user?.password_hash;
     if (user === undefined || passwordHash === undefined || !(await bcrypt.compare(body.password, passwordHash))) {
-      throw new HttpError(401, 'UNAUTHORIZED', 'เบอร์โทรหรือรหัสผ่านไม่ถูกต้อง');
+      throw new HttpError(401, 'UNAUTHORIZED', 'เบอร์โทร/อีเมล หรือรหัสผ่านไม่ถูกต้อง');
     }
     const publicUser = toPublicUser(user);
     res.json({ token: tokenFor(publicUser), user: publicUser });
@@ -346,7 +368,7 @@ authRouter.patch(
     try {
       await connection.beginTransaction();
       const [rows] = await connection.query<UserRow[]>(
-        `SELECT u.id, u.name, u.phone, u.role, u.can_sell, u.can_buy, u.is_admin,
+        `SELECT u.id, u.name, u.phone, u.email, u.role, u.can_sell, u.can_buy, u.is_admin,
                 u.line_id, u.lat, u.lng, bp.buyer_type, bp.charity_approved
          FROM users u
          LEFT JOIN buyer_profiles bp ON bp.user_id = u.id
@@ -382,17 +404,26 @@ authRouter.patch(
         }
       }
       const lineId = body.line_id !== undefined ? body.line_id : current.line_id;
+      const email =
+        body.email === undefined
+          ? (current.email ?? null)
+          : body.email === '' || body.email === null
+            ? null
+            : body.email;
       const role =
         current.role === 'driver' || current.role === 'coordinator'
           ? current.role
           : primaryRole(canSell, canBuy);
       await connection.query(
-        `UPDATE users SET can_sell = ?, can_buy = ?, line_id = ?, role = ? WHERE id = ?`,
-        [canSell ? 1 : 0, canBuy ? 1 : 0, lineId, role, userId],
+        `UPDATE users SET can_sell = ?, can_buy = ?, email = ?, line_id = ?, role = ? WHERE id = ?`,
+        [canSell ? 1 : 0, canBuy ? 1 : 0, email, lineId, role, userId],
       );
       await connection.commit();
     } catch (error) {
       await connection.rollback();
+      if (isDuplicate(error)) {
+        throw new HttpError(409, 'CONFLICT', 'อีเมลนี้ถูกใช้แล้ว');
+      }
       throw error;
     } finally {
       connection.release();
