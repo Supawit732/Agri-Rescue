@@ -231,6 +231,17 @@ export type Messages = {
     welcomeBack: string;
     or: string;
   };
+  identity: {
+    label: string;
+    modePhone: string;
+    modeEmail: string;
+    phonePlaceholder: string;
+    emailPlaceholder: string;
+    phoneInvalid: string;
+    emailInvalid: string;
+    didYouMean: string;
+    optional: string;
+  };
   sell: {
     title: string;
     loginTitle: string;

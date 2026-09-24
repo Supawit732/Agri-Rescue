@@ -4,6 +4,7 @@ import * as SecureStore from 'expo-secure-store';
 const TOKEN_KEY = 'agri_rescue_token';
 const MODE_KEY = 'agri_rescue_app_mode';
 const LOCALE_KEY = 'agri_rescue_locale';
+const IDENTITY_MODE_KEY = 'agri_rescue_identity_mode';
 
 async function setItem(key: string, value: string): Promise<void> {
   if (Platform.OS === 'web') {
@@ -68,4 +69,19 @@ export async function saveLocale(locale: 'th' | 'en'): Promise<void> {
 export async function loadLocale(): Promise<'th' | 'en' | null> {
   const value = await getItem(LOCALE_KEY);
   return value === 'th' || value === 'en' ? value : null;
+}
+
+export type IdentityMode = 'phone' | 'email';
+
+export async function saveIdentityMode(mode: IdentityMode): Promise<void> {
+  await setItem(IDENTITY_MODE_KEY, mode);
+}
+
+export async function loadIdentityMode(): Promise<IdentityMode | null> {
+  const value = await getItem(IDENTITY_MODE_KEY);
+  return value === 'phone' || value === 'email' ? value : null;
+}
+
+export async function clearIdentityMode(): Promise<void> {
+  await removeItem(IDENTITY_MODE_KEY);
 }

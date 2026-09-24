@@ -4,9 +4,11 @@ import { KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-na
 import { DonorIntroModal, type DonorIntroChoice } from '../components/DonorIntroModal';
 import { ApiError } from '../src/api/client';
 import { LocationPicker, type LatLng } from '../src/components/LocationPicker';
+import { PhoneEmailField } from '../src/components/PhoneEmailField';
 import { Body, Chip, Field, PrimaryButton, Screen, SectionTitle } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
 import { useI18n } from '../src/i18n';
+import { isValidEmail, isValidThaiPhone, normalizeEmail, normalizePhone } from '../src/lib/phoneEmail';
 import { C } from '../src/theme';
 import type { BuyerType } from '../src/api/types';
 
@@ -18,6 +20,7 @@ export default function RegisterScreen(): React.ReactElement {
   const [canBuy, setCanBuy] = useState(false);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [lineId, setLineId] = useState('');
   const [buyerType, setBuyerType] = useState<BuyerType>('vendor');
@@ -26,6 +29,13 @@ export default function RegisterScreen(): React.ReactElement {
   const [submitting, setSubmitting] = useState(false);
   const [introVisible, setIntroVisible] = useState(false);
   const [donorIntent, setDonorIntent] = useState<'now' | 'later' | null>(null);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
+
+  const normalizedPhone = normalizePhone(phone);
+  const phoneValid = isValidThaiPhone(normalizedPhone);
+  const emailTrim = normalizeEmail(email);
+  const emailValid = emailTrim === '' || isValidEmail(emailTrim);
 
   const buyerTypes = useMemo(
     () =>
@@ -38,7 +48,8 @@ export default function RegisterScreen(): React.ReactElement {
 
   const canSubmit =
     name.trim().length > 0 &&
-    phone.trim().length > 0 &&
+    phoneValid &&
+    emailValid &&
     password.length >= 8 &&
     coords !== null &&
     (canSell || canBuy);
@@ -74,12 +85,25 @@ export default function RegisterScreen(): React.ReactElement {
       setError(t.register.needRole);
       return;
     }
+    if (!phoneValid) {
+      setPhoneError(t.identity.phoneInvalid);
+      scrollToSafe();
+      return;
+    }
+    if (!emailValid) {
+      setEmailError(t.identity.emailInvalid);
+      scrollToSafe();
+      return;
+    }
+    setPhoneError(null);
+    setEmailError(null);
     setError(null);
     setSubmitting(true);
     try {
       await register({
         name: name.trim(),
-        phone: phone.trim(),
+        phone: normalizedPhone,
+        ...(emailTrim !== '' ? { email: emailTrim } : {}),
         password,
         can_sell: canSell,
         can_buy: canBuy,
@@ -96,6 +120,10 @@ export default function RegisterScreen(): React.ReactElement {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const scrollToSafe = (): void => {
+    /* phone/email errors show inline under fields */
   };
 
   return (
@@ -136,12 +164,37 @@ export default function RegisterScreen(): React.ReactElement {
             onChangeText={setName}
             placeholder={t.register.namePlaceholder}
           />
-          <Field
-            label={t.register.phone}
+          {/* Phone always required — format 0XX-XXX-XXXX, no mode toggle */}
+          <PhoneEmailField
+            mode="phone"
+            label={t.identity.modePhone}
+            name="phone"
             value={phone}
-            onChangeText={setPhone}
-            keyboardType="phone-pad"
-            placeholder={t.register.phonePlaceholder}
+            onValueChange={(next) => {
+              setPhone(next);
+              if (phoneError) setPhoneError(null);
+            }}
+            onBlurField={() => {
+              if (!phoneValid && phone.trim() !== '') setPhoneError(t.identity.phoneInvalid);
+              else setPhoneError(null);
+            }}
+            error={phoneError}
+          />
+          {/* Email optional — domain chips, no mode toggle */}
+          <PhoneEmailField
+            mode="email"
+            label={`${t.identity.modeEmail} (${t.identity.optional})`}
+            name="email"
+            value={email}
+            onValueChange={(next) => {
+              setEmail(next);
+              if (emailError) setEmailError(null);
+            }}
+            onBlurField={() => {
+              if (emailTrim !== '' && !isValidEmail(emailTrim)) setEmailError(t.identity.emailInvalid);
+              else setEmailError(null);
+            }}
+            error={emailError}
           />
           <Field label={t.register.password} value={password} onChangeText={setPassword} secureTextEntry />
           <Field

@@ -225,6 +225,17 @@ const th: Messages = {
     welcomeBack: 'ยินดีต้อนรับกลับ',
     or: 'หรือ',
   },
+  identity: {
+    label: 'เบอร์โทร หรืออีเมล',
+    modePhone: 'เบอร์โทร',
+    modeEmail: 'อีเมล',
+    phonePlaceholder: '0XX-XXX-XXXX',
+    emailPlaceholder: 'name@email.com',
+    phoneInvalid: 'กรุณากรอกเบอร์โทร 10 หลักขึ้นต้นด้วย 0',
+    emailInvalid: 'อีเมลไม่ถูกต้อง',
+    didYouMean: 'หมายถึง {domain} ใช่ไหม?',
+    optional: 'ไม่บังคับ',
+  },
   sell: {
     title: 'ขาย',
     loginTitle: 'ลงขายผลผลิต',
