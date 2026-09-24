@@ -13,6 +13,7 @@ import {
 import { useAuth } from '../../../src/context/AuthContext';
 import { useApiData } from '../../../src/hooks/useApiData';
 import { formatCountdown, hoursLeftFrom, useNow } from '../../../src/hooks/useNow';
+import { formatTemplate, useI18n } from '../../../src/i18n';
 import { remainingOf } from '../../../src/lot/helpers';
 import { C } from '../../../src/theme';
 
@@ -22,6 +23,7 @@ export default function LotConfirmScreen(): React.ReactElement {
   const quantityKg = Number(qty ?? '0');
   const donation = intent === 'donate';
   const { api, user, refreshUser } = useAuth();
+  const { t, formatNumber, cropName, translateError } = useI18n();
   const router = useRouter();
   const now = useNow();
   const lat = user?.lat ?? 13.65;
@@ -45,7 +47,7 @@ export default function LotConfirmScreen(): React.ReactElement {
       const extras =
         donation && needsPlace
           ? {
-              distribution_place: 'จุดรับ/แจกที่ระบุโดยผู้รับ',
+              distribution_place: t.confirmBooking.distributionPlaceDefault,
               distribution_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
             }
           : undefined;
@@ -56,7 +58,11 @@ export default function LotConfirmScreen(): React.ReactElement {
         params: { id: String(lotId), orderId: String(result.order.id) },
       });
     } catch (err) {
-      setBanner(err instanceof ApiError ? err.message : 'จองไม่สำเร็จ');
+      setBanner(
+        err instanceof ApiError
+          ? translateError(err.code, err.message)
+          : t.confirmBooking.failed,
+      );
     } finally {
       setBusy(false);
     }
@@ -64,7 +70,7 @@ export default function LotConfirmScreen(): React.ReactElement {
 
   return (
     <SubScreen
-      title="ยืนยันการจอง"
+      title={t.confirmBooking.title}
       onBack={() =>
         router.replace({
           pathname: '/lots/[id]',
@@ -79,38 +85,57 @@ export default function LotConfirmScreen(): React.ReactElement {
             !donation && lot.price_per_kg !== null
               ? Math.round(lot.price_per_kg * quantityKg)
               : null;
+          const place = lot.plot_name ?? t.confirmBooking.sellerPlotFallback;
+          const placeLine = formatTemplate(t.confirmBooking.pickupArea, { place });
           return (
             <Body>
               {banner !== null ? <Text style={styles.banner}>{banner}</Text> : null}
               <Card>
-                <Text style={styles.title}>{lot.crop_name_th}</Text>
-                <Text style={styles.line}>จำนวน {quantityKg} กก. · เหลือ {remainingOf(lot)} กก.</Text>
+                <Text style={styles.title}>
+                  {cropName({ name_th: lot.crop_name_th, name_en: lot.crop_name_en })}
+                </Text>
+                <Text style={styles.line}>
+                  {formatTemplate(t.confirmBooking.qtyRemaining, {
+                    qty: formatNumber(quantityKg),
+                    remaining: formatNumber(remainingOf(lot)),
+                  })}
+                </Text>
                 <Text style={styles.line}>
                   {donation
-                    ? 'ประเภท: ขอรับบริจาค (ไม่คิดเงิน)'
-                    : `ประเภท: ซื้อ · ${lot.price_per_kg ?? '—'} บาท/กก.`}
+                    ? t.confirmBooking.donationType
+                    : formatTemplate(t.confirmBooking.purchaseType, {
+                        price:
+                          lot.price_per_kg !== null
+                            ? formatNumber(lot.price_per_kg)
+                            : t.common.dash,
+                      })}
                 </Text>
-                {total !== null ? <Text style={styles.total}>ราคารวมประมาณ {total} บาท</Text> : null}
+                {total !== null ? (
+                  <Text style={styles.total}>
+                    {formatTemplate(t.confirmBooking.approxTotal, { total: formatNumber(total) })}
+                  </Text>
+                ) : null}
                 <Text style={styles.line}>
-                  พื้นที่รับของ: {lot.plot_name ?? 'แปลงผู้ขาย'}
+                  {placeLine}
                   {lot.distance_km !== null && lot.distance_km !== undefined
-                    ? ` · ~${lot.distance_km.toFixed(1)} กม.`
+                    ? ` · ~${lot.distance_km.toFixed(1)} ${t.market.km}`
                     : ''}
                 </Text>
-                <Text style={styles.line}>เวลาที่ล็อตเหลือ: {formatCountdown(hours)}</Text>
-                <Text style={styles.terms}>
-                  ข้อกำหนดสั้น ๆ: มารับเองตามนัด ตรวจของก่อนให้รหัส OTP กับผู้ขาย
-                  หากไม่พอใจอย่าให้รหัส
+                <Text style={styles.line}>
+                  {formatTemplate(t.confirmBooking.timeLeft, {
+                    countdown: formatCountdown(hours, t.countdown),
+                  })}
                 </Text>
+                <Text style={styles.terms}>{t.confirmBooking.terms}</Text>
               </Card>
               <PrimaryButton
-                label={donation ? 'ยืนยันขอรับบริจาค' : 'ยืนยันซื้อ'}
+                label={donation ? t.confirmBooking.confirmDonate : t.confirmBooking.confirmBuy}
                 tone={donation ? 'turmeric' : undefined}
                 loading={busy}
                 onPress={() => void confirm()}
               />
               <SecondaryButton
-                label="ย้อนกลับ"
+                label={t.confirmBooking.goBack}
                 onPress={() =>
                   router.replace({
                     pathname: '/lots/[id]',

@@ -4,6 +4,7 @@ import * as Location from 'expo-location';
 import { ApiError } from '../api/client';
 import { resolveMapsLink, reverseGeocode } from '../api/geo';
 import { isInThailandApprox, isShortGoogleMapsUrl, parseCoordsFromMapsUrl, type LatLng } from '../geo/mapsLink';
+import { useI18n } from '../i18n';
 import { C } from '../theme';
 import { Field, PrimaryButton, SecondaryButton } from './ui';
 
@@ -16,7 +17,7 @@ function formatCoords(coords: LatLng): string {
 export function LocationPicker({
   value,
   onChange,
-  label = 'ตำแหน่ง',
+  label,
   error: externalError = null,
 }: {
   value: LatLng | null;
@@ -25,6 +26,8 @@ export function LocationPicker({
   /** Parent form validation error (shown with icon; not color-only). */
   error?: string | null;
 }): React.ReactElement {
+  const { t, translateError } = useI18n();
+  const resolvedLabel = label ?? t.locationPicker.label;
   const [mapsLink, setMapsLink] = useState('');
   const [placeName, setPlaceName] = useState<string | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
@@ -77,7 +80,7 @@ export function LocationPicker({
     try {
       const permission = await Location.requestForegroundPermissionsAsync();
       if (permission.status !== 'granted') {
-        setError('ไม่ได้รับอนุญาตให้ใช้ตำแหน่ง กรุณาเปิดสิทธิ์ตำแหน่งในการตั้งค่าแล้วลองใหม่');
+        setError(t.locationPicker.permissionDenied);
         return;
       }
       const position = await Location.getCurrentPositionAsync({
@@ -85,11 +88,7 @@ export function LocationPicker({
       });
       applyCoords({ lat: position.coords.latitude, lng: position.coords.longitude });
     } catch {
-      setError(
-        Platform.OS === 'web'
-          ? 'หาตำแหน่งปัจจุบันไม่ได้ กรุณาอนุญาตตำแหน่งในเบราว์เซอร์ หรือวางลิงก์ Google Maps แทน'
-          : 'หาตำแหน่งปัจจุบันไม่ได้ กรุณาลองใหม่ หรือวางลิงก์ Google Maps แทน',
-      );
+      setError(Platform.OS === 'web' ? t.locationPicker.gpsFailedWeb : t.locationPicker.gpsFailed);
     } finally {
       setBusy(null);
     }
@@ -99,7 +98,7 @@ export function LocationPicker({
     setError(null);
     const trimmed = mapsLink.trim();
     if (trimmed.length === 0) {
-      setError('กรุณาวางลิงก์ Google Maps');
+      setError(t.locationPicker.needMapsLink);
       return;
     }
 
@@ -110,7 +109,7 @@ export function LocationPicker({
     }
 
     if (!isShortGoogleMapsUrl(trimmed) && !trimmed.includes('google.') && !trimmed.includes('goo.gl')) {
-      setError('ไม่พบพิกัดในลิงก์นี้ กรุณาใช้ลิงก์ Google Maps ที่แชร์ตำแหน่ง');
+      setError(t.locationPicker.coordsNotInLink);
       return;
     }
 
@@ -119,7 +118,11 @@ export function LocationPicker({
       const resolved = await resolveMapsLink(trimmed);
       applyCoords(resolved);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'ตามลิงก์ไม่สำเร็จ กรุณาลองใหม่');
+      setError(
+        err instanceof ApiError
+          ? translateError(err.code, err.message)
+          : t.locationPicker.resolveFailed,
+      );
     } finally {
       setBusy(null);
     }
@@ -129,7 +132,7 @@ export function LocationPicker({
     const lat = Number(latText);
     const lng = Number(lngText);
     if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-      setError('พิกัดไม่ถูกต้อง');
+      setError(t.locationPicker.invalidCoords);
       return;
     }
     applyCoords({ lat, lng });
@@ -139,9 +142,9 @@ export function LocationPicker({
 
   return (
     <View style={styles.wrap}>
-      <Text style={styles.label}>{label} *</Text>
+      <Text style={styles.label}>{resolvedLabel} *</Text>
       <SecondaryButton
-        label={busy === 'gps' ? 'กำลังหาตำแหน่ง…' : 'ใช้ตำแหน่งปัจจุบัน'}
+        label={busy === 'gps' ? t.locationPicker.locating : t.locationPicker.useGps}
         onPress={() => {
           void onUseCurrent();
         }}
@@ -151,17 +154,17 @@ export function LocationPicker({
       <View style={styles.linkRow}>
         <View style={styles.linkField}>
           <Field
-            label="หรือวางลิงก์ Google Maps"
+            label={t.locationPicker.orPasteLink}
             value={mapsLink}
             onChangeText={setMapsLink}
             autoCapitalize="none"
             autoCorrect={false}
-            placeholder="https://maps.app.goo.gl/… หรือลิงก์เต็ม"
+            placeholder={t.locationPicker.linkPlaceholder}
           />
         </View>
         <View style={styles.linkButton}>
           <PrimaryButton
-            label={busy === 'link' ? '…' : 'ใช้ลิงก์'}
+            label={busy === 'link' ? '…' : t.locationPicker.useLink}
             onPress={() => {
               void onApplyLink();
             }}
@@ -175,7 +178,7 @@ export function LocationPicker({
         <View style={styles.placeBox}>
           <Text style={styles.placeText}>
             {lookupBusy
-              ? 'กำลังค้นหาชื่อสถานที่…'
+              ? t.locationPicker.resolvingPlace
               : placeName !== null && placeName.length > 0
                 ? placeName
                 : formatCoords(value)}
@@ -185,11 +188,11 @@ export function LocationPicker({
           ) : null}
         </View>
       ) : (
-        <Text style={styles.requiredHint}>ยังไม่ได้เลือกตำแหน่ง — ต้องมีพิกัดก่อนดำเนินการต่อ</Text>
+        <Text style={styles.requiredHint}>{t.locationPicker.notSelected}</Text>
       )}
 
       {outsideThailand ? (
-        <Text style={styles.warn}>พิกัดนี้อยู่นอกประเทศไทยคร่าว ๆ กรุณาตรวจสอบอีกครั้ง</Text>
+        <Text style={styles.warn}>{t.locationPicker.outsideThailand}</Text>
       ) : null}
 
       <Pressable
@@ -197,18 +200,30 @@ export function LocationPicker({
         onPress={() => setManualOpen((open) => !open)}
         style={styles.manualToggle}
       >
-        <Text style={styles.manualToggleText}>{manualOpen ? 'ซ่อนการแก้พิกัดเอง' : 'แก้พิกัดเอง'}</Text>
+        <Text style={styles.manualToggleText}>
+          {manualOpen ? t.locationPicker.hideManual : t.locationPicker.editManual}
+        </Text>
       </Pressable>
 
       {manualOpen ? (
         <View style={styles.manualRow}>
           <View style={styles.half}>
-            <Field label="ละติจูด" value={latText} onChangeText={setLatText} keyboardType="numeric" />
+            <Field
+              label={t.locationPicker.latitude}
+              value={latText}
+              onChangeText={setLatText}
+              keyboardType="numeric"
+            />
           </View>
           <View style={styles.half}>
-            <Field label="ลองจิจูด" value={lngText} onChangeText={setLngText} keyboardType="numeric" />
+            <Field
+              label={t.locationPicker.longitude}
+              value={lngText}
+              onChangeText={setLngText}
+              keyboardType="numeric"
+            />
           </View>
-          <PrimaryButton label="ใช้พิกัดนี้" onPress={onManualApply} />
+          <PrimaryButton label={t.locationPicker.useManual} onPress={onManualApply} />
         </View>
       ) : null}
 

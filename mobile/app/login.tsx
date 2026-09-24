@@ -5,10 +5,12 @@ import { ApiError } from '../src/api/client';
 import { FormField, useFieldErrors, useFieldScroll } from '../src/components/form';
 import { PrimaryButton, Screen, StackHeader } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
+import { useI18n } from '../src/i18n';
 import { C } from '../src/theme';
 
 export default function LoginScreen(): React.ReactElement {
   const { login } = useAuth();
+  const { t } = useI18n();
   const router = useRouter();
   const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
   const [phone, setPhone] = useState('');
@@ -22,13 +24,13 @@ export default function LoginScreen(): React.ReactElement {
   const validateField = (name: string): string | null => {
     if (name === 'phone') {
       if (!/^\d{9,15}$/.test(phone.trim())) {
-        return 'เบอร์โทรไม่ถูกต้อง';
+        return t.login.phoneInvalid;
       }
       return null;
     }
     if (name === 'password') {
       if (password.length < 1) {
-        return 'กรุณากรอกรหัสผ่าน';
+        return t.login.passwordRequired;
       }
       return null;
     }
@@ -71,7 +73,7 @@ export default function LoginScreen(): React.ReactElement {
           setFormError(err.message);
         }
       } else {
-        setFormError('เข้าสู่ระบบไม่สำเร็จ');
+        setFormError(t.login.failed);
       }
     } finally {
       setSubmitting(false);
@@ -80,19 +82,19 @@ export default function LoginScreen(): React.ReactElement {
 
   return (
     <Screen>
-      <StackHeader title="เข้าสู่ระบบ" onBack={() => router.replace('/(tabs)')} />
+      <StackHeader title={t.login.title} onBack={() => router.replace('/(tabs)')} />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView ref={scrollRef} contentContainerStyle={styles.body}>
           <Text style={styles.brand}>Agri-Rescue</Text>
-          <Text style={styles.tagline}>ระบายผลผลิตใกล้เน่าเสียสู่ผู้รับซื้อในพื้นที่</Text>
+          <Text style={styles.tagline}>{t.login.tagline}</Text>
           <FormField
-            label="เบอร์โทร"
+            label={t.login.phone}
             name="phone"
             value={phone}
             onChangeText={(text) => {
               setPhone(text);
               if (touched.current.phone) {
-                setFieldError('phone', /^\d{9,15}$/.test(text.trim()) ? null : 'เบอร์โทรไม่ถูกต้อง');
+                setFieldError('phone', /^\d{9,15}$/.test(text.trim()) ? null : t.login.phoneInvalid);
               }
             }}
             onBlurField={onBlurField}
@@ -100,30 +102,30 @@ export default function LoginScreen(): React.ReactElement {
             error={errors.phone}
             keyboardType="phone-pad"
             autoCapitalize="none"
-            placeholder="เช่น 0800000011"
+            placeholder={t.login.phonePlaceholder}
           />
           <FormField
-            label="รหัสผ่าน"
+            label={t.login.password}
             name="password"
             value={password}
             onChangeText={(text) => {
               setPassword(text);
               if (touched.current.password) {
-                setFieldError('password', text.length < 1 ? 'กรุณากรอกรหัสผ่าน' : null);
+                setFieldError('password', text.length < 1 ? t.login.passwordRequired : null);
               }
             }}
             onBlurField={onBlurField}
             fieldRef={registerY}
             error={errors.password}
             secureTextEntry
-            placeholder="รหัสผ่าน"
+            placeholder={t.login.password}
           />
           {formError !== null ? <Text style={styles.error}>{formError}</Text> : null}
-          <PrimaryButton label="เข้าสู่ระบบ" onPress={() => void onSubmit()} loading={submitting} />
+          <PrimaryButton label={t.login.submit} onPress={() => void onSubmit()} loading={submitting} />
           <View style={styles.footer}>
-            <Text style={styles.footerText}>ยังไม่มีบัญชี? </Text>
+            <Text style={styles.footerText}>{t.login.noAccount} </Text>
             <Link href="/register" style={styles.link}>
-              สมัครสมาชิก
+              {t.login.register}
             </Link>
           </View>
         </ScrollView>

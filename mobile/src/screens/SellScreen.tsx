@@ -20,10 +20,10 @@ import {
   Segmented,
 } from '../components/ui';
 import { LocationPicker, type LatLng } from '../components/LocationPicker';
-import { GRADE_OPTIONS, RIPENESS_LABELS, STATUS_LABELS } from '../constants';
 import { useAuth } from '../context/AuthContext';
 import { useApiData } from '../hooks/useApiData';
-import { formatCountdown, hoursLeftFrom, useNow } from '../hooks/useNow';
+import { hoursLeftFrom, useNow } from '../hooks/useNow';
+import { formatTemplate, useI18n, type Messages } from '../i18n';
 import { C, urgency } from '../theme';
 import type {
   AssessPhotoResponse,
@@ -36,18 +36,6 @@ import type {
   SaleMode,
 } from '../api/types';
 
-const SALE_MODE_OPTIONS: { key: SaleMode; label: string }[] = [
-  { key: 'sell', label: 'ขาย' },
-  { key: 'donate', label: 'บริจาค' },
-  { key: 'sell_then_donate', label: 'ขายแล้วค่อยบริจาค' },
-];
-
-const SALE_MODE_BADGE: Record<SaleMode, string> = {
-  sell: 'ขาย',
-  donate: 'บริจาค',
-  sell_then_donate: 'ขายแล้วค่อยบริจาค',
-};
-
 function modeHasDonation(mode: SaleMode): boolean {
   return mode === 'donate' || mode === 'sell_then_donate';
 }
@@ -56,8 +44,54 @@ function modeHasPrice(mode: SaleMode): boolean {
   return mode === 'sell' || mode === 'sell_then_donate';
 }
 
+function urgencyLabel(hoursLeft: number, t: Messages): string {
+  if (hoursLeft < 24) {
+    return t.urgency.critical;
+  }
+  if (hoursLeft < 48) {
+    return t.urgency.soon;
+  }
+  return t.urgency.ok;
+}
+
+function formatCountdownLocalized(hoursLeft: number, t: Messages): string {
+  if (hoursLeft <= 0) {
+    return t.countdown.expired;
+  }
+  const totalMinutes = Math.floor(hoursLeft * 60);
+  const days = Math.floor(totalMinutes / (60 * 24));
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+  const minutes = totalMinutes % 60;
+  if (days > 0) {
+    return formatTemplate(t.countdown.remainingDaysHours, { days, hours });
+  }
+  if (hours > 0) {
+    return formatTemplate(t.countdown.remainingHoursMinutes, { hours, minutes });
+  }
+  return formatTemplate(t.countdown.remainingMinutes, { minutes });
+}
+
+/** Time fragment for sellTimeLeft (no “left” / “เหลือ” wrapper). */
+function shelfTimeFragment(hoursLeft: number, t: Messages): string {
+  if (hoursLeft <= 0) {
+    return t.countdown.expired;
+  }
+  const totalMinutes = Math.floor(hoursLeft * 60);
+  const days = Math.floor(totalMinutes / (60 * 24));
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+  const minutes = totalMinutes % 60;
+  if (days > 0) {
+    return formatTemplate(t.countdown.fragmentDaysHours, { days, hours });
+  }
+  if (hours > 0) {
+    return formatTemplate(t.countdown.fragmentHoursMinutes, { hours, minutes });
+  }
+  return formatTemplate(t.countdown.fragmentMinutes, { minutes });
+}
+
 export default function SellScreen(): React.ReactElement {
   const { api } = useAuth();
+  const { t } = useI18n();
   const router = useRouter();
   const navigation = useNavigation();
   const [tab, setTab] = useState<'new' | 'mine'>('new');
@@ -88,10 +122,10 @@ export default function SellScreen(): React.ReactElement {
         return;
       }
       event.preventDefault();
-      Alert.alert('ยังไม่ได้บันทึก', 'ออกจากหน้านี้โดยไม่บันทึกหรือไม่?', [
-        { text: 'อยู่ต่อ', style: 'cancel' },
+      Alert.alert(t.sell.unsavedTitle, t.sell.unsavedLeave, [
+        { text: t.sell.stay, style: 'cancel' },
         {
-          text: 'ออก',
+          text: t.sell.leave,
           style: 'destructive',
           onPress: () => {
             setFormDirty(false);
@@ -101,24 +135,24 @@ export default function SellScreen(): React.ReactElement {
       ]);
     });
     return unsubscribe;
-  }, [navigation, formDirty, tab]);
+  }, [navigation, formDirty, tab, t]);
 
   return (
     <Screen>
       <Segmented
         options={[
-          { key: 'new', label: editingLot !== null ? 'แก้ไขล็อต' : 'ลงล็อต' },
-          { key: 'mine', label: 'ล็อตของฉัน' },
+          { key: 'new', label: editingLot !== null ? t.sell.editTab : t.sell.newTab },
+          { key: 'mine', label: t.sell.mineTab },
         ]}
         value={tab}
         onChange={(key) => {
           const next = key as 'new' | 'mine';
           if (next === 'mine') {
             if (formDirty) {
-              Alert.alert('ยังไม่ได้บันทึก', 'สลับแท็บโดยไม่บันทึกหรือไม่?', [
-                { text: 'อยู่ต่อ', style: 'cancel' },
+              Alert.alert(t.sell.unsavedTitle, t.sell.unsavedSwitch, [
+                { text: t.sell.stay, style: 'cancel' },
                 {
-                  text: 'สลับ',
+                  text: t.sell.switchTab,
                   style: 'destructive',
                   onPress: () => {
                     setEditingLot(null);
@@ -171,6 +205,7 @@ function NewLot({
   onCancelEdit: () => void;
   onDirtyChange: (dirty: boolean) => void;
 }): React.ReactElement {
+  const { t } = useI18n();
   const meta = useApiData(async () => {
     const [crops, plots] = await Promise.all([api.getCrops(), api.getPlots()]);
     return { crops, plots };
@@ -183,7 +218,7 @@ function NewLot({
       data={meta.data}
       onRetry={meta.reload}
       isEmpty={(d) => d.crops.length === 0}
-      emptyText="ยังไม่มีพืชในระบบ"
+      emptyText={t.sell.noCrops}
     >
       {(data) =>
         data.plots.length === 0 ? (
@@ -211,6 +246,7 @@ function AddPlotForm({
   api: ReturnType<typeof useAuth>['api'];
   onCreated: () => void;
 }): React.ReactElement {
+  const { t, translateError } = useI18n();
   const [name, setName] = useState('');
   const [area, setArea] = useState('1');
   const [coords, setCoords] = useState<LatLng | null>(null);
@@ -222,7 +258,7 @@ function AddPlotForm({
 
   const onSubmit = async (): Promise<void> => {
     if (coords === null) {
-      setError('กรุณาเลือกตำแหน่งแปลง');
+      setError(t.sell.pickPlotLocation);
       return;
     }
     setError(null);
@@ -236,7 +272,11 @@ function AddPlotForm({
       });
       onCreated();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'เพิ่มแปลงไม่สำเร็จ');
+      setError(
+        err instanceof ApiError
+          ? translateError(err.code, err.message)
+          : t.sell.addPlotFailed,
+      );
     } finally {
       setSubmitting(false);
     }
@@ -244,13 +284,23 @@ function AddPlotForm({
 
   return (
     <Body>
-      <SectionTitle>เพิ่มแปลงแรก</SectionTitle>
-      <Text style={styles.addPlotHint}>ต้องมีแปลงก่อนจึงจะลงล็อตได้</Text>
-      <Field label="ชื่อแปลง" value={name} onChangeText={setName} placeholder="เช่น แปลงหน้าบ้าน" />
-      <Field label="พื้นที่ (ไร่)" value={area} onChangeText={setArea} keyboardType="numeric" />
-      <LocationPicker value={coords} onChange={setCoords} label="ตำแหน่งแปลง" />
+      <SectionTitle>{t.sell.addPlotTitle}</SectionTitle>
+      <Text style={styles.addPlotHint}>{t.sell.addPlotHint}</Text>
+      <Field
+        label={t.sell.plotName}
+        value={name}
+        onChangeText={setName}
+        placeholder={t.sell.plotNamePlaceholder}
+      />
+      <Field label={t.sell.plotArea} value={area} onChangeText={setArea} keyboardType="numeric" />
+      <LocationPicker value={coords} onChange={setCoords} label={t.sell.plotLocation} />
       {error !== null ? <Text style={styles.previewError}>{error}</Text> : null}
-      <PrimaryButton label="บันทึกแปลง" onPress={onSubmit} loading={submitting} disabled={!canSubmit} />
+      <PrimaryButton
+        label={t.sell.savePlot}
+        onPress={onSubmit}
+        loading={submitting}
+        disabled={!canSubmit}
+      />
     </Body>
   );
 }
@@ -272,11 +322,15 @@ function NewLotForm({
   onCancelEdit: () => void;
   onDirtyChange: (dirty: boolean) => void;
 }): React.ReactElement {
+  const { t, locale, formatNumber, cropName, translateError, translateFieldError } = useI18n();
   const isEditing = editingLot !== null;
   const [cropId, setCropId] = useState<number>(editingLot?.crop_id ?? crops[0]?.id ?? 0);
   const [plotId, setPlotId] = useState<number>(editingLot?.plot_id ?? plots[0]?.id ?? 0);
   const [weight, setWeight] = useState(editingLot !== null ? String(editingLot.weight_kg) : '');
-  const [ripeness, setRipeness] = useState(editingLot?.ripeness ?? 2);
+  const [ripeness, setRipeness] = useState<number | null>(editingLot?.ripeness ?? null);
+  const [ripenessSource, setRipenessSource] = useState<'user' | 'ai' | null>(
+    editingLot !== null ? 'user' : null,
+  );
   const [grade, setGrade] = useState<Grade>(editingLot?.grade ?? 'substandard');
   const [saleMode, setSaleMode] = useState<SaleMode>(editingLot?.sale_mode ?? 'sell');
   const [donationAudience, setDonationAudience] = useState<DonationAudience>(
@@ -312,6 +366,24 @@ function NewLotForm({
   const [aiEdited, setAiEdited] = useState(false);
   const [aiMessage, setAiMessage] = useState<string | null>(null);
   const primedDirty = useRef(false);
+
+  const saleModeOptions = useMemo(
+    () =>
+      (['sell', 'donate', 'sell_then_donate'] as const).map((key) => ({
+        key,
+        label: t.saleMode[key],
+      })),
+    [t],
+  );
+
+  const gradeOptions = useMemo(
+    () =>
+      (['normal', 'substandard'] as const).map((key) => ({
+        key,
+        label: t.grade[key],
+      })),
+    [t],
+  );
 
   const plot = useMemo(() => plots.find((entry) => entry.id === plotId), [plots, plotId]);
 
@@ -349,6 +421,7 @@ function NewLotForm({
     setPlotId(editingLot.plot_id);
     setWeight(String(editingLot.weight_kg));
     setRipeness(editingLot.ripeness);
+    setRipenessSource('user');
     setGrade(editingLot.grade);
     setSaleMode(editingLot.sale_mode);
     setDonationAudience(editingLot.donation_audience ?? 'verified_org_only');
@@ -381,6 +454,9 @@ function NewLotForm({
     setPhotoPreview(null);
     if (!isEditing) {
       setPricesSeeded(false);
+      setRipeness(null);
+      setRipenessSource(null);
+      setEstimate(null);
     }
   }, [cropId, isEditing]);
 
@@ -390,7 +466,8 @@ function NewLotForm({
 
   // Debounced 400ms shelf-life + price preview from the API (no local pricing).
   useEffect(() => {
-    if (plot === undefined || cropId === 0) {
+    if (plot === undefined || cropId === 0 || ripeness === null) {
+      setEstimate(null);
       return;
     }
     let active = true;
@@ -419,7 +496,11 @@ function NewLotForm({
         } catch (err) {
           if (active) {
             setEstimate(null);
-            setEstimateError(err instanceof ApiError ? err.message : 'ประเมินราคาไม่สำเร็จ');
+            setEstimateError(
+              err instanceof ApiError
+                ? translateError(err.code, err.message)
+                : t.sell.assessPriceFailed,
+            );
           }
         }
       })();
@@ -428,7 +509,21 @@ function NewLotForm({
       active = false;
       clearTimeout(timer);
     };
-  }, [api, cropId, plotId, ripeness, grade, plot, saleMode, hasCustomPrices, startNum, floorNum, pricesSeeded]);
+  }, [
+    api,
+    cropId,
+    plotId,
+    ripeness,
+    grade,
+    plot,
+    saleMode,
+    hasCustomPrices,
+    startNum,
+    floorNum,
+    pricesSeeded,
+    t,
+    translateError,
+  ]);
 
   const weightNum = Number(weight);
   const minOrderNum = Number(minOrderKg);
@@ -436,13 +531,17 @@ function NewLotForm({
     estimate !== null && modeHasPrice(saleMode) ? estimate.price_per_kg : null;
   const totalPrice = displayPrice !== null && weightNum > 0 ? Math.round(displayPrice * weightNum) : null;
   const tone = estimate !== null ? urgency(estimate.shelf_hours) : null;
+  const previewUrgency =
+    estimate !== null ? urgencyLabel(estimate.shelf_hours, t) : null;
 
   const applyRipeness = (value: number, fromAi: boolean): void => {
     setRipeness(value);
     if (fromAi) {
+      setRipenessSource('ai');
       setAiEdited(false);
       return;
     }
+    setRipenessSource('user');
     if (aiResult !== null) {
       setAiEdited(value !== aiResult.ripeness);
     }
@@ -471,7 +570,7 @@ function NewLotForm({
       base64: true,
     });
     if (result.base64 === undefined || result.base64 === '') {
-      throw new Error('เตรียมรูปไม่สำเร็จ');
+      throw new Error(t.sell.preparePhotoFailed);
     }
     return { base64: result.base64, mime: 'image/jpeg' };
   };
@@ -480,7 +579,8 @@ function NewLotForm({
     setAssessing(true);
     setAiMessage(null);
     setPhotoPreview(uri);
-    const cropName = crops.find((entry) => entry.id === cropId)?.name_th ?? 'พืชที่เลือก';
+    const selected = crops.find((entry) => entry.id === cropId);
+    const selectedLabel = selected !== undefined ? cropName(selected) : t.sell.selectedCropFallback;
     try {
       const prepared = await resizeForUpload(uri, width, height);
       const result = await api.assessPhoto({
@@ -491,26 +591,30 @@ function NewLotForm({
       if (!result.available) {
         setAiResult(null);
         setAiEdited(false);
-        setAiMessage('ประเมินจากภาพไม่ได้ เลือกระดับความสุกเอง');
+        setAiMessage(t.sell.aiFailedPickManual);
         return;
       }
       if (!result.subject_match) {
         setAiResult(null);
         setAiEdited(false);
-        setAiMessage(`ในรูปไม่พบ${cropName} กรุณาถ่ายใหม่`);
+        setAiMessage(formatTemplate(t.sell.aiCropNotFound, { crop: selectedLabel }));
         return;
       }
       setAiResult(result);
       applyRipeness(result.ripeness, true);
       if (result.low_confidence) {
-        setAiMessage('AI ไม่แน่ใจ กรุณาตรวจสอบระดับความสุก');
+        setAiMessage(t.sell.aiUnsure);
       } else {
         setAiMessage(null);
       }
     } catch (err) {
       setAiResult(null);
       setAiEdited(false);
-      setAiMessage(err instanceof ApiError ? err.message : 'ประเมินจากภาพไม่ได้ เลือกระดับความสุกเอง');
+      setAiMessage(
+        err instanceof ApiError
+          ? translateError(err.code, err.message)
+          : t.sell.aiFailedPickManual,
+      );
     } finally {
       setAssessing(false);
     }
@@ -524,14 +628,14 @@ function NewLotForm({
   };
 
   const pickPhoto = (): void => {
-    Alert.alert('ประเมินความสุกจากภาพ', 'เลือกแหล่งรูป', [
+    Alert.alert(t.sell.aiPhotoTitle, t.sell.aiPhotoPickSource, [
       {
-        text: 'ถ่ายรูป',
+        text: t.sell.takePhoto,
         onPress: () => {
           void (async () => {
             const permission = await ImagePicker.requestCameraPermissionsAsync();
             if (!permission.granted) {
-              setAiMessage('ไม่ได้รับสิทธิ์กล้อง');
+              setAiMessage(t.sell.cameraDenied);
               return;
             }
             const picked = await ImagePicker.launchCameraAsync({
@@ -547,12 +651,12 @@ function NewLotForm({
         },
       },
       {
-        text: 'คลังรูป',
+        text: t.sell.photoLibrary,
         onPress: () => {
           void (async () => {
             const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
             if (!permission.granted) {
-              setAiMessage('ไม่ได้รับสิทธิ์คลังรูป');
+              setAiMessage(t.sell.libraryDenied);
               return;
             }
             const picked = await ImagePicker.launchImageLibraryAsync({
@@ -567,7 +671,7 @@ function NewLotForm({
           })();
         },
       },
-      { text: 'ยกเลิก', style: 'cancel' },
+      { text: t.common.cancel, style: 'cancel' },
     ]);
   };
 
@@ -590,25 +694,28 @@ function NewLotForm({
     setFieldErrors({});
     const nextErrors: Record<string, string> = {};
     if (plot === undefined || cropId === 0) {
-      nextErrors.crop_id = 'กรุณาเลือกแปลงและพืช';
+      nextErrors.crop_id = t.sell.needCropAndPlot;
     }
     if (!(weightNum > 0)) {
-      nextErrors.weight_kg = 'กรุณากรอกน้ำหนักให้ถูกต้อง (มากกว่า 0)';
+      nextErrors.weight_kg = t.sell.weightInvalid;
+    }
+    if (ripeness === null) {
+      nextErrors.ripeness = t.sell.ripenessRequired;
     }
     if (!(minOrderNum > 0)) {
-      nextErrors.min_order_kg = 'ขั้นต่ำต่อคำสั่งซื้อต้องมากกว่า 0';
+      nextErrors.min_order_kg = t.sell.minOrderInvalid;
     }
     if (modeHasPrice(saleMode)) {
       if (!(startNum > 0)) {
-        nextErrors.start_price_per_kg = 'กรุณากรอกราคาเริ่ม';
+        nextErrors.start_price_per_kg = t.sell.needStartPrice;
       }
       if (!(floorNum > 0)) {
-        nextErrors.floor_price_per_kg = 'กรุณากรอกราคาต่ำสุด';
+        nextErrors.floor_price_per_kg = t.sell.needFloorPrice;
       }
     }
     if (Object.keys(nextErrors).length > 0) {
       setFieldErrors(nextErrors);
-      setSubmitError('กรุณาแก้ช่องที่ผิด');
+      setSubmitError(t.sell.fixFields);
       return;
     }
     setSubmitting(true);
@@ -622,11 +729,11 @@ function NewLotForm({
         min_order_kg: minOrderNum,
       };
       if (isEditing && editingLot !== null) {
-        const loweringRipeness = ripeness < editingLot.ripeness;
+        const loweringRipeness = ripeness !== null && ripeness < editingLot.ripeness;
         await api.patchLot(editingLot.id, {
           weight_kg: weightNum,
           grade,
-          ripeness,
+          ripeness: ripeness as number,
           sale_mode: saleMode,
           donation_audience: audience,
           ...priceFields,
@@ -640,7 +747,7 @@ function NewLotForm({
           crop_id: cropId,
           weight_kg: weightNum,
           grade,
-          ripeness,
+          ripeness: ripeness as number,
           sale_mode: saleMode,
           donation_audience: audience,
           ...priceFields,
@@ -654,29 +761,48 @@ function NewLotForm({
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.fields !== undefined) {
-          setFieldErrors(err.fields);
+          setFieldErrors(
+            Object.fromEntries(
+              Object.entries(err.fields).map(([key, value]) => [key, translateFieldError(value)]),
+            ),
+          );
         }
-        setSubmitError(err.message);
+        setSubmitError(translateError(err.code, err.message));
       } else {
-        setSubmitError(isEditing ? 'แก้ไขล็อตไม่สำเร็จ' : 'ลงประกาศไม่สำเร็จ');
+        setSubmitError(isEditing ? t.sell.editFailed : t.sell.publishFailed);
       }
     } finally {
       setSubmitting(false);
     }
   };
 
+  const aiDefects =
+    aiResult === null
+      ? []
+      : locale === 'en' && aiResult.defects_en.length > 0
+        ? aiResult.defects_en
+        : aiResult.defects;
+  const aiNote =
+    aiResult === null
+      ? ''
+      : locale === 'en' && aiResult.note_en.trim() !== ''
+        ? aiResult.note_en
+        : aiResult.note_th;
+
   return (
     <Body>
       {isEditing ? (
-        <Text style={styles.editHint}>กำลังแก้ไขล็อต #{editingLot.id}</Text>
+        <Text style={styles.editHint}>
+          {formatTemplate(t.sell.editingLot, { id: editingLot.id })}
+        </Text>
       ) : null}
 
-      <SectionTitle>เลือกพืช</SectionTitle>
+      <SectionTitle>{t.sell.selectCrop}</SectionTitle>
       <View style={styles.row}>
         {crops.map((crop) => (
           <Chip
             key={crop.id}
-            label={crop.name_th}
+            label={cropName(crop)}
             selected={crop.id === cropId}
             onPress={() => {
               if (!isEditing) {
@@ -687,7 +813,7 @@ function NewLotForm({
         ))}
       </View>
 
-      <SectionTitle>แปลง</SectionTitle>
+      <SectionTitle>{t.sell.plot}</SectionTitle>
       {plots.length === 1 ? (
         <Text style={styles.plotName}>{plots[0]?.name}</Text>
       ) : (
@@ -708,7 +834,7 @@ function NewLotForm({
       )}
 
       <Field
-        label="น้ำหนัก (กก.)"
+        label={t.sell.weight}
         value={weight}
         onChangeText={(text) => {
           setWeight(text);
@@ -716,7 +842,7 @@ function NewLotForm({
           setFieldErrors((prev) => {
             const next = { ...prev };
             if (!(n > 0)) {
-              next.weight_kg = 'กรุณากรอกน้ำหนักให้ถูกต้อง (มากกว่า 0)';
+              next.weight_kg = t.sell.weightInvalid;
             } else {
               delete next.weight_kg;
             }
@@ -728,7 +854,7 @@ function NewLotForm({
           setFieldErrors((prev) => {
             const next = { ...prev };
             if (!(n > 0)) {
-              next.weight_kg = 'กรุณากรอกน้ำหนักให้ถูกต้อง (มากกว่า 0)';
+              next.weight_kg = t.sell.weightInvalid;
             } else {
               delete next.weight_kg;
             }
@@ -737,16 +863,24 @@ function NewLotForm({
         }}
         error={fieldErrors.weight_kg}
         keyboardType="numeric"
-        placeholder="เช่น 50"
+        placeholder={t.sell.weightPlaceholder}
       />
-      <SectionTitle>การแบ่งขาย</SectionTitle>
+      <SectionTitle>{t.sell.splitSection}</SectionTitle>
       <View style={styles.row}>
-        <Chip label="แบ่งขายได้" selected={splitAllowed} onPress={() => setSplitAllowed(true)} />
-        <Chip label="ขายยกล็อตเท่านั้น" selected={!splitAllowed} onPress={() => setSplitAllowed(false)} />
+        <Chip
+          label={t.sell.splitAllowed}
+          selected={splitAllowed}
+          onPress={() => setSplitAllowed(true)}
+        />
+        <Chip
+          label={t.sell.wholeLotOnly}
+          selected={!splitAllowed}
+          onPress={() => setSplitAllowed(false)}
+        />
       </View>
       {splitAllowed ? (
         <Field
-          label="ขั้นต่ำต่อคำสั่งซื้อ (กก.)"
+          label={t.sell.minOrder}
           value={minOrderKg}
           onChangeText={(text) => {
             setMinOrderKg(text);
@@ -754,7 +888,7 @@ function NewLotForm({
             setFieldErrors((prev) => {
               const next = { ...prev };
               if (!(n > 0)) {
-                next.min_order_kg = 'ขั้นต่ำต่อคำสั่งซื้อต้องมากกว่า 0';
+                next.min_order_kg = t.sell.minOrderInvalid;
               } else {
                 delete next.min_order_kg;
               }
@@ -763,7 +897,7 @@ function NewLotForm({
           }}
           error={fieldErrors.min_order_kg}
           keyboardType="numeric"
-          placeholder="1"
+          placeholder={t.sell.minOrderPlaceholder}
         />
       ) : null}
       {fieldErrors.crop_id !== undefined ? (
@@ -771,10 +905,10 @@ function NewLotForm({
       ) : null}
 
       <ChipGroup
-        label="ความสุก"
+        label={t.sell.ripeness}
         name="ripeness"
-        options={RIPENESS_LABELS.map((label, index) => ({ key: String(index), label }))}
-        value={String(ripeness)}
+        options={t.ripenessLabels.map((label, index) => ({ key: String(index), label }))}
+        value={ripeness === null ? null : String(ripeness)}
         onChange={(next) => {
           const value = Number(Array.isArray(next) ? next[0] : next);
           applyRipeness(value, false);
@@ -804,31 +938,42 @@ function NewLotForm({
       {aiResult !== null ? (
         <Card>
           <Badge
-            text={aiEdited ? 'แก้โดยเกษตรกร' : 'ประเมินโดย AI'}
+            text={aiEdited ? t.sell.aiEditedByFarmer : t.sell.aiAssessed}
             fg={aiEdited ? C.turmeric : C.leaf}
             bg={aiEdited ? C.turmericSoft : C.leafSoft}
           />
-          <Text style={styles.aiLine}>ความมั่นใจ {Math.round(aiResult.confidence * 100)}%</Text>
-          {aiResult.defects.length > 0 ? (
-            <Text style={styles.aiLine}>ตำหนิ: {aiResult.defects.join(', ')}</Text>
+          <Text style={styles.aiLine}>
+            {formatTemplate(t.sell.aiConfidence, {
+              pct: Math.round(aiResult.confidence * 100),
+            })}
+          </Text>
+          {aiDefects.length > 0 ? (
+            <Text style={styles.aiLine}>
+              {formatTemplate(t.sell.defects, { list: aiDefects.join(', ') })}
+            </Text>
           ) : (
-            <Text style={styles.aiLine}>ไม่พบตำหนิชัดเจน</Text>
+            <Text style={styles.aiLine}>{t.sell.noDefects}</Text>
           )}
-          <Text style={styles.aiLine}>{aiResult.note_th}</Text>
+          <Text style={styles.aiLine}>{aiNote}</Text>
         </Card>
       ) : null}
 
-      <SectionTitle>เกรด</SectionTitle>
+      <SectionTitle>{t.sell.gradeSection}</SectionTitle>
       <View style={styles.row}>
-        {GRADE_OPTIONS.map((option) => (
-          <Chip key={option.key} label={option.label} selected={grade === option.key} onPress={() => setGrade(option.key)} />
+        {gradeOptions.map((option) => (
+          <Chip
+            key={option.key}
+            label={option.label}
+            selected={grade === option.key}
+            onPress={() => setGrade(option.key)}
+          />
         ))}
       </View>
 
       <ChipGroup
-        label="โหมดขาย"
+        label={t.sell.saleMode}
         name="sale_mode"
-        options={SALE_MODE_OPTIONS}
+        options={saleModeOptions}
         value={saleMode}
         onChange={(next) => {
           const value = (Array.isArray(next) ? next[0] : next) as SaleMode;
@@ -839,15 +984,15 @@ function NewLotForm({
 
       {modeHasDonation(saleMode) ? (
         <>
-          <SectionTitle>เปิดรับผู้รับบริจาค</SectionTitle>
+          <SectionTitle>{t.sell.donationAudience}</SectionTitle>
           <View style={styles.row}>
             <Chip
-              label="เฉพาะองค์กรที่ยืนยันแล้ว"
+              label={t.donationAudience.verified_org_only}
               selected={donationAudience === 'verified_org_only'}
               onPress={() => setDonationAudience('verified_org_only')}
             />
             <Chip
-              label="รวมจิตอาสาด้วย"
+              label={t.donationAudience.any_registered}
               selected={donationAudience === 'all_donors'}
               onPress={() => setDonationAudience('all_donors')}
             />
@@ -861,18 +1006,22 @@ function NewLotForm({
             <Card>
               <Text style={styles.marketLabel}>{estimate.market_quote.label_th}</Text>
               <Text style={styles.previewPrice}>
-                ราคาตลาด {estimate.market_quote.price_per_kg} บาท/กก.
-                {estimate.market_quote.is_estimate ? ' (ประมาณ)' : ''}
+                {formatTemplate(t.sell.marketPrice, {
+                  price: formatNumber(estimate.market_quote.price_per_kg),
+                })}
+                {estimate.market_quote.is_estimate ? t.sell.marketEstimate : ''}
               </Text>
               {estimate.nearby_median_price_per_kg !== null ? (
                 <Text style={styles.previewMuted}>
-                  มัธยฐานใกล้เคียง {estimate.nearby_median_price_per_kg} บาท/กก.
+                  {formatTemplate(t.sell.nearbyMedian, {
+                    price: formatNumber(estimate.nearby_median_price_per_kg),
+                  })}
                 </Text>
               ) : null}
             </Card>
           ) : null}
           <Field
-            label="ราคาเริ่ม (บาท/กก.)"
+            label={t.sell.startPrice}
             value={startPrice}
             onChangeText={(text) => {
               setStartPrice(text);
@@ -888,7 +1037,7 @@ function NewLotForm({
               setFieldErrors((prev) => {
                 const next = { ...prev };
                 if (!(n > 0)) {
-                  next.start_price_per_kg = 'กรุณากรอกราคาเริ่ม';
+                  next.start_price_per_kg = t.sell.needStartPrice;
                 } else {
                   delete next.start_price_per_kg;
                 }
@@ -897,10 +1046,10 @@ function NewLotForm({
             }}
             error={fieldErrors.start_price_per_kg}
             keyboardType="numeric"
-            placeholder="แนะนำจากตลาด"
+            placeholder={t.sell.startPricePlaceholder}
           />
           <Field
-            label="ราคาต่ำสุด (บาท/กก.)"
+            label={t.sell.floorPrice}
             value={floorPrice}
             onChangeText={(text) => {
               setFloorPrice(text);
@@ -916,7 +1065,7 @@ function NewLotForm({
               setFieldErrors((prev) => {
                 const next = { ...prev };
                 if (!(n > 0)) {
-                  next.floor_price_per_kg = 'กรุณากรอกราคาต่ำสุด';
+                  next.floor_price_per_kg = t.sell.needFloorPrice;
                 } else {
                   delete next.floor_price_per_kg;
                 }
@@ -925,14 +1074,17 @@ function NewLotForm({
             }}
             error={fieldErrors.floor_price_per_kg}
             keyboardType="numeric"
-            placeholder="แนะนำจากราคาเริ่ม"
+            placeholder={t.sell.floorPricePlaceholder}
           />
           {estimate !== null && estimate.forecast.length > 0 ? (
             <Card>
-              <Text style={styles.forecastTitle}>พยากรณ์ราคา</Text>
+              <Text style={styles.forecastTitle}>{t.sell.priceForecast}</Text>
               {estimate.forecast.map((row) => (
                 <Text key={row.hours} style={styles.forecastLine}>
-                  อีก {row.hours} ชม. → {row.price_per_kg} บาท/กก.
+                  {formatTemplate(t.sell.forecastRow, {
+                    hours: formatNumber(row.hours),
+                    price: formatNumber(row.price_per_kg),
+                  })}
                 </Text>
               ))}
             </Card>
@@ -943,29 +1095,45 @@ function NewLotForm({
       <Card style={tone !== null ? { borderColor: tone.fg, backgroundColor: tone.bg } : undefined}>
         {estimateError !== null ? (
           <Text style={styles.previewError}>{estimateError}</Text>
+        ) : ripeness === null ? (
+          <Text style={styles.previewMuted}>{t.sell.ripenessInvite}</Text>
         ) : estimate === null ? (
-          <Text style={styles.previewMuted}>กำลังประเมิน…</Text>
+          <Text style={styles.previewMuted}>{t.sell.assessing}</Text>
         ) : (
           <>
             <Text style={[styles.previewUrgency, { color: tone?.fg }]}>
-              ขายได้อีก {formatCountdown(estimate.shelf_hours).replace('เหลือ ', '')} · {tone?.label}
+              {formatTemplate(t.sell.sellTimeLeft, {
+                time: shelfTimeFragment(estimate.shelf_hours, t),
+                urgency: previewUrgency ?? '',
+              })}
             </Text>
             {modeHasPrice(saleMode) && displayPrice !== null ? (
               <>
-                <Text style={styles.previewPrice}>ราคาด่วน {displayPrice} บาท/กก.</Text>
+                <Text style={styles.previewPrice}>
+                  {formatTemplate(t.sell.flashPrice, { price: formatNumber(displayPrice) })}
+                </Text>
                 <Text style={styles.previewTotal}>
-                  {totalPrice !== null ? `ราคารวม ${totalPrice} บาท` : 'กรอกน้ำหนักเพื่อดูราคารวม'}
+                  {totalPrice !== null
+                    ? formatTemplate(t.sell.totalPrice, { total: formatNumber(totalPrice) })
+                    : t.sell.enterWeightForTotal}
                 </Text>
               </>
             ) : (
-              <Text style={styles.previewPrice}>โหมดบริจาค — ไม่คิดเงิน</Text>
+              <Text style={styles.previewPrice}>{t.sell.donateNoCharge}</Text>
             )}
             <Text style={styles.previewMuted}>
-              คำนวณจากพยากรณ์อากาศ 3 วันข้างหน้า (เฉลี่ยกลางวัน {estimate.temp_c}°C ความชื้น{' '}
-              {estimate.humidity}%)
+              {ripenessSource === 'ai' && !aiEdited
+                ? t.sell.ripenessSourceAi
+                : t.sell.ripenessSourceUser}
+            </Text>
+            <Text style={styles.previewMuted}>
+              {formatTemplate(t.sell.weatherForecast, {
+                temp: formatNumber(estimate.temp_c),
+                humidity: formatNumber(estimate.humidity),
+              })}
             </Text>
             {estimate.weather_source === 'fallback' ? (
-              <Text style={styles.previewMuted}>ใช้ค่าอากาศสำรอง</Text>
+              <Text style={styles.previewMuted}>{t.sell.weatherFallback}</Text>
             ) : null}
           </>
         )}
@@ -973,12 +1141,21 @@ function NewLotForm({
 
       {submitError !== null ? <Text style={styles.previewError}>{submitError}</Text> : null}
       <PrimaryButton
-        label={isEditing ? 'บันทึกการแก้ไข' : 'ลงประกาศ'}
-        onPress={onSubmit}
+        label={isEditing ? t.sell.saveEdit : t.sell.publish}
+        onPress={() => {
+          if (ripeness === null) {
+            setFieldErrors((prev) => ({ ...prev, ripeness: t.sell.ripenessRequired }));
+            setSubmitError(t.sell.ripenessRequired);
+            return;
+          }
+          void onSubmit();
+        }}
         loading={submitting}
-        disabled={!(weightNum > 0)}
+        disabled={!(weightNum > 0) || ripeness === null}
       />
-      {isEditing ? <SecondaryButton label="ยกเลิกการแก้ไข" onPress={onCancelEdit} /> : null}
+      {isEditing ? (
+        <SecondaryButton label={t.sell.cancelEdit} onPress={onCancelEdit} />
+      ) : null}
     </Body>
   );
 }
@@ -992,6 +1169,7 @@ function MyLots({
   refreshKey: number;
   onEdit: (lot: MyLot) => void;
 }): React.ReactElement {
+  const { t, formatNumber, cropName, translateError } = useI18n();
   const { data, loading, error, reload } = useApiData(() => api.getMyLots(), [refreshKey]);
   const now = useNow();
   const router = useRouter();
@@ -1003,7 +1181,7 @@ function MyLots({
       data={data}
       onRetry={reload}
       isEmpty={(lots) => lots.length === 0}
-      emptyText="ยังไม่มีล็อตที่ลงประกาศ"
+      emptyText={t.sell.myLotsEmpty}
     >
       {(lots) => (
         <Body>
@@ -1012,42 +1190,62 @@ function MyLots({
             const tone = urgency(hours);
             const canEdit = lot.status === 'open' || lot.status === 'partially_reserved';
             const remaining = lot.remaining_kg ?? lot.weight_kg;
+            const statusLabel = t.status[lot.status] ?? lot.status;
             return (
               <Card key={lot.id}>
                 <View style={styles.lotHeader}>
                   <Text style={styles.lotTitle}>
-                    {lot.crop_name_th} เหลือ {remaining} / {lot.weight_kg} กก.
+                    {formatTemplate(t.sell.remainingOf, {
+                      crop: cropName({
+                        name_th: lot.crop_name_th,
+                        name_en: lot.crop_name_en,
+                      }),
+                      remaining: formatNumber(remaining),
+                      total: formatNumber(lot.weight_kg),
+                    })}
                   </Text>
-                  <Badge text={STATUS_LABELS[lot.status] ?? lot.status} fg={C.leaf} bg={C.leafSoft} />
+                  <Badge text={statusLabel} fg={C.leaf} bg={C.leafSoft} />
                 </View>
                 <View style={styles.badgeRow}>
                   <Badge
-                    text={SALE_MODE_BADGE[lot.sale_mode] ?? lot.sale_mode}
+                    text={t.saleMode[lot.sale_mode] ?? lot.sale_mode}
                     fg={lot.sale_mode === 'donate' ? C.turmeric : C.leaf}
                     bg={lot.sale_mode === 'donate' ? C.turmericSoft : C.leafSoft}
                   />
                   <Badge
-                    text={lot.split_allowed === false ? 'ยกล็อต' : 'แบ่งขายได้'}
+                    text={lot.split_allowed === false ? t.sell.wholeLotBadge : t.sell.splitBadge}
                     fg={C.mute}
                     bg={C.leafSoft}
                   />
                   {lot.sale_mode === 'sell_then_donate' && lot.donation_opened ? (
-                    <Badge text="เปิดบริจาคแล้ว" fg={C.turmeric} bg={C.turmericSoft} />
+                    <Badge text={t.sell.donationOpened} fg={C.turmeric} bg={C.turmericSoft} />
                   ) : null}
                 </View>
-                <Text style={styles.lotMeta}>ล็อต #{lot.id}</Text>
-                <Text style={styles.lotLine}>แปลง {lot.plot_name}</Text>
+                <Text style={styles.lotMeta}>{formatTemplate(t.sell.lotMeta, { id: lot.id })}</Text>
+                <Text style={styles.lotLine}>
+                  {formatTemplate(t.sell.plotLine, { name: lot.plot_name })}
+                </Text>
                 {lot.sale_mode === 'donate' || lot.price_per_kg === null ? (
-                  <Text style={styles.lotLine}>บริจาค — ไม่คิดเงิน</Text>
+                  <Text style={styles.lotLine}>{t.sell.donateNoCharge}</Text>
                 ) : (
-                  <Text style={styles.lotLine}>ราคาด่วน {lot.price_per_kg} บาท/กก.</Text>
+                  <Text style={styles.lotLine}>
+                    {formatTemplate(t.sell.flashPrice, {
+                      price: formatNumber(lot.price_per_kg),
+                    })}
+                  </Text>
                 )}
                 <Text style={styles.lotLine}>
-                  {lot.grade === 'substandard' ? 'ตกเกรด' : 'ปกติ'} · ความสุก {RIPENESS_LABELS[lot.ripeness] ?? lot.ripeness}
+                  {lot.grade === 'substandard' ? t.grade.substandard : t.grade.normal}
+                  {' · '}
+                  {formatTemplate(t.sell.ripenessLine, {
+                    label: t.ripenessLabels[lot.ripeness] ?? String(lot.ripeness),
+                  })}
                 </Text>
                 {lot.bookings !== undefined && lot.bookings.length > 0 ? (
                   <View style={styles.bookingsBox}>
-                    <Text style={styles.bookingsTitle}>ผู้จอง ({lot.bookings.length})</Text>
+                    <Text style={styles.bookingsTitle}>
+                      {formatTemplate(t.sell.bookings, { count: lot.bookings.length })}
+                    </Text>
                     {lot.bookings.map((booking) => (
                       <Pressable
                         key={booking.order_id}
@@ -1056,29 +1254,41 @@ function MyLots({
                         <Text style={styles.lotLine}>
                           #{booking.order_id}
                           {booking.buyer_name !== undefined ? ` ${booking.buyer_name}` : ''} ·{' '}
-                          {booking.quantity_kg} กก. ·{' '}
-                          {booking.is_donation ? 'บริจาค' : `${booking.agreed_price_per_kg} บาท/กก.`} ·{' '}
-                          {STATUS_LABELS[booking.status] ?? booking.status}
+                          {formatNumber(booking.quantity_kg)} {t.common.kg} ·{' '}
+                          {booking.is_donation
+                            ? t.saleMode.donate
+                            : formatTemplate(t.sell.flashPrice, {
+                                price: formatNumber(booking.agreed_price_per_kg),
+                              })}{' '}
+                          · {t.status[booking.status] ?? booking.status}
                         </Text>
                       </Pressable>
                     ))}
                   </View>
                 ) : null}
-                <Badge text={lot.status === 'open' ? formatCountdown(hours) : tone.label} fg={tone.fg} bg={tone.bg} />
+                <Badge
+                  text={
+                    lot.status === 'open'
+                      ? formatCountdownLocalized(hours, t)
+                      : urgencyLabel(hours, t)
+                  }
+                  fg={tone.fg}
+                  bg={tone.bg}
+                />
                 {canEdit ? (
                   <View style={styles.editBtn}>
-                    <SecondaryButton label="แก้ไข" onPress={() => onEdit(lot)} />
+                    <SecondaryButton label={t.common.edit} onPress={() => onEdit(lot)} />
                   </View>
                 ) : null}
                 {canEdit && (lot.bookings === undefined || lot.bookings.length === 0) ? (
                   <View style={styles.editBtn}>
                     <SecondaryButton
-                      label="ลบ/ปิดล็อต"
+                      label={t.sell.deleteLot}
                       onPress={() => {
-                        Alert.alert('ลบหรือปิดล็อตนี้?', 'ล็อตจะถูกซ่อนจากตลาด (เก็บประวัติไว้) — ยืนยันหรือไม่?', [
-                          { text: 'ยกเลิก', style: 'cancel' },
+                        Alert.alert(t.sell.confirmDeleteTitle, t.sell.confirmDeleteBody, [
+                          { text: t.common.cancel, style: 'cancel' },
                           {
-                            text: 'ลบล็อต',
+                            text: t.sell.confirmDeleteAction,
                             style: 'destructive',
                             onPress: () => {
                               void (async () => {
@@ -1087,8 +1297,10 @@ function MyLots({
                                   reload();
                                 } catch (err) {
                                   Alert.alert(
-                                    'ลบไม่สำเร็จ',
-                                    err instanceof ApiError ? err.message : 'เกิดข้อผิดพลาด',
+                                    t.sell.deleteFailed,
+                                    err instanceof ApiError
+                                      ? translateError(err.code, err.message)
+                                      : t.common.genericError,
                                   );
                                 }
                               })();

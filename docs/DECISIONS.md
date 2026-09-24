@@ -198,6 +198,17 @@ JWT เก็บ `sub`, `role`, `can_sell`, `can_buy`, `is_admin` (อายุ 
 | ฟิลด์ที่คืน | `crop_name_th`/`crop_name_en`, grade, ripeness, weight/remaining, min_order_kg, price_per_kg, hours_left, distance_km (ปัด 0.5), `subdistrict_th`/`district_th` (null จนกว่า plots มีที่อยู่), `area_th` (= plot_name), `available_as` |
 | ฟิลด์ห้าม | lat/lng, ชื่อ/เบอร์/LINE ผู้ขาย, `sale_mode`, `plot_id`, `user_id` / `farmer_id` |
 | ระยะทาง | มี lat/lng → คำนวณ+กรองรัศมี (ดีฟอลต์ 15 กม.) เรียงใกล้ก่อน; ไม่มี → `distance_km = null` เรียงตาม `hours_left` |
-| ชื่ออังกฤษ | แมปชั่วคราวจากชื่อไทยของพืช seed จนกว่า 6.3 จะมี `crops.name_en` |
+| ชื่ออังกฤษ | จาก `crops.name_en` (migration 014; ดู D025) |
 | นอกขอบ lite | `lot_photos`, ตัวกรองพืช, เรียงหลายโหมด (ใกล้/ด่วน/ถูก) — PR ถัดไป |
 | แอป | guest ใช้ `/api/public/*`; login แล้วใช้ `/api/market/*` ตามเดิม |
+
+## D025 — สองภาษา TH/EN (แอป)
+
+| รายการ | ค่า |
+|---|---|
+| กลไก | `I18nProvider` + `mobile/src/i18n/{th,en}.ts`; เก็บ locale ใน SecureStore/localStorage (`agri_rescue_locale`) |
+| สลับภาษา | แท็บบัญชี (รวมตอนยังไม่ login) — ชิป ไทย / English |
+| ครอบคลุม | แคตตาล็อก `Messages` + ผูกทุกหน้าจอหลัก; helper `formatNumber/Date/cropName/translateError/translateFieldError`; server message → code map; `scripts/check-no-thai-ui.mjs` + key-parity test |
+| ความสุกตอนลงล็อต | สร้างล็อตใหม่ไม่เลือกความสุกล่วงหน้า; ปุ่มลงประกาศ disabled จนกว่ามีค่า; กล่องประเมินชวนถ่ายรูป/เลือก; แสดงที่มาความสุก + พยากรณ์อากาศ; แก้ล็อตใช้ค่าเดิม |
+| `crops.name_en` | migration `014_crop_name_en.sql`; seed 5 พืชมี `nameEn`; API คืน `name_en` / `crop_name_en` จาก DB (crops, market, public market, my lots, orders, dashboard `by_crop`) |
+| AI assess-photo | `defects` + `note_th` (ไทย) คู่กับ `defects_en` + `note_en` (อังกฤษ) ในสคีมา/prompt/response |

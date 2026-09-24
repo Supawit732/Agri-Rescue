@@ -12,10 +12,10 @@ import {
   SectionTitle,
   SubScreen,
 } from '../../src/components/ui';
-import { RIPENESS_LABELS, STATUS_LABELS } from '../../src/constants';
 import { useAuth } from '../../src/context/AuthContext';
 import { useApiData } from '../../src/hooks/useApiData';
 import { formatCountdown, hoursLeftFrom, useNow } from '../../src/hooks/useNow';
+import { formatTemplate, useI18n } from '../../src/i18n';
 import { googleMapsUrl } from '../../src/lot/helpers';
 import { C, urgency } from '../../src/theme';
 
@@ -23,6 +23,7 @@ export default function OrderDetailScreen(): React.ReactElement {
   const { id } = useLocalSearchParams<{ id: string }>();
   const orderId = Number(id);
   const { api } = useAuth();
+  const { t, formatNumber, formatDateTime, cropName, translateError } = useI18n();
   const router = useRouter();
   const now = useNow();
   const { data, loading, error, reload } = useApiData(() => api.getOrder(orderId), [orderId]);
@@ -32,10 +33,10 @@ export default function OrderDetailScreen(): React.ReactElement {
   const [weightInput, setWeightInput] = useState('');
 
   const cancel = (orderIdToCancel: number): void => {
-    Alert.alert('ยกเลิกการจอง', 'ต้องการยกเลิกคำสั่งซื้อนี้หรือไม่?', [
-      { text: 'ไม่', style: 'cancel' },
+    Alert.alert(t.orderDetail.cancelTitle, t.orderDetail.cancelBody, [
+      { text: t.orderDetail.cancelNo, style: 'cancel' },
       {
-        text: 'ยกเลิกการจอง',
+        text: t.orderDetail.cancelYes,
         style: 'destructive',
         onPress: () => {
           void (async () => {
@@ -45,7 +46,11 @@ export default function OrderDetailScreen(): React.ReactElement {
               await api.cancelOrder(orderIdToCancel);
               router.replace('/(tabs)/orders');
             } catch (err) {
-              setBanner(err instanceof ApiError ? err.message : 'ยกเลิกไม่สำเร็จ');
+              setBanner(
+                err instanceof ApiError
+                  ? translateError(err.code, err.message)
+                  : t.orderDetail.cancelFailed,
+              );
             } finally {
               setBusy(false);
             }
@@ -56,7 +61,7 @@ export default function OrderDetailScreen(): React.ReactElement {
   };
 
   return (
-    <SubScreen title="รายละเอียดคำสั่งซื้อ" onBack={() => router.replace('/(tabs)/orders')}>
+    <SubScreen title={t.orderDetail.title} onBack={() => router.replace('/(tabs)/orders')}>
       <DataState loading={loading} error={error} data={data} onRetry={reload}>
         {(order) => {
           const hours =
@@ -72,15 +77,23 @@ export default function OrderDetailScreen(): React.ReactElement {
           const isSellerView = order.viewer === 'seller';
           const canBuyerCancel =
             !isSellerView && order.status === 'reserved' && order.batch_id === null;
+          const cropTitle =
+            order.crop_name_th !== undefined
+              ? cropName({ name_th: order.crop_name_th, name_en: order.crop_name_en })
+              : formatTemplate(t.orderDetail.lotFallback, { id: order.lot_id });
+          const ripenessLabel =
+            order.ripeness !== undefined
+              ? t.ripenessLabels[order.ripeness] ?? String(order.ripeness)
+              : null;
 
           const confirmSeller = (): void => {
             const weight = Number(weightInput);
             if (!/^\d{4}$/.test(otpInput.trim())) {
-              setBanner('กรอกรหัส OTP 4 หลัก');
+              setBanner(t.orderDetail.otpRequired);
               return;
             }
             if (!(weight > 0)) {
-              setBanner('กรอกน้ำหนักที่ชั่งได้');
+              setBanner(t.orderDetail.weightRequired);
               return;
             }
             setBusy(true);
@@ -91,10 +104,14 @@ export default function OrderDetailScreen(): React.ReactElement {
                   otp: otpInput.trim(),
                   weight_kg: weight,
                 });
-                Alert.alert('ส่งมอบสำเร็จ', 'บันทึกน้ำหนักและผลลัพธ์แล้ว');
+                Alert.alert(t.orderDetail.deliverySuccessTitle, t.orderDetail.deliverySuccessBody);
                 reload();
               } catch (err) {
-                setBanner(err instanceof ApiError ? err.message : 'ยืนยันไม่สำเร็จ');
+                setBanner(
+                  err instanceof ApiError
+                    ? translateError(err.code, err.message)
+                    : t.orderDetail.confirmFailed,
+                );
               } finally {
                 setBusy(false);
               }
@@ -104,105 +121,127 @@ export default function OrderDetailScreen(): React.ReactElement {
           return (
             <Body>
               {banner !== null ? <Text style={styles.banner}>{banner}</Text> : null}
-              <Text style={styles.meta}>คำสั่งซื้อ #{order.id}</Text>
+              <Text style={styles.meta}>
+                {formatTemplate(t.orderDetail.orderMeta, { id: order.id })}
+                {' · '}
+                {formatDateTime(order.created_at)}
+              </Text>
 
-              <SectionTitle>สิ่งที่ซื้อ</SectionTitle>
+              <SectionTitle>{t.orderDetail.sectionItem}</SectionTitle>
               <Card>
-                <Text style={styles.title}>{order.crop_name_th ?? `ล็อต #${order.lot_id}`}</Text>
+                <Text style={styles.title}>{cropTitle}</Text>
                 <Text style={styles.line}>
-                  {order.grade === 'substandard' ? 'ตกเกรด' : 'ปกติ'}
-                  {order.ripeness !== undefined
-                    ? ` · ความสุก ${RIPENESS_LABELS[order.ripeness] ?? order.ripeness}`
+                  {order.grade === 'substandard' ? t.grade.substandard : t.grade.normal}
+                  {ripenessLabel !== null
+                    ? ` · ${formatTemplate(t.orderDetail.ripenessLine, { label: ripenessLabel })}`
                     : ''}
                 </Text>
-                <Text style={styles.line}>จำนวน {qty} กก.</Text>
+                <Text style={styles.line}>
+                  {formatTemplate(t.orderDetail.quantity, { qty: formatNumber(qty) })}
+                </Text>
                 <Text style={styles.line}>
                   {order.is_donation
-                    ? 'รับบริจาค — ไม่คิดเงิน'
-                    : `${order.agreed_price_per_kg} บาท/กก. · รวม ${total} บาท`}
+                    ? t.orderDetail.donationNoCharge
+                    : formatTemplate(t.orderDetail.priceTotal, {
+                        price: formatNumber(order.agreed_price_per_kg),
+                        total: formatNumber(total),
+                      })}
                 </Text>
                 <Badge
-                  text={STATUS_LABELS[order.status] ?? order.status}
+                  text={t.status[order.status] ?? order.status}
                   fg={C.leaf}
                   bg={C.leafSoft}
                 />
               </Card>
 
-              <SectionTitle>รับของที่ไหน</SectionTitle>
+              <SectionTitle>{t.orderDetail.sectionPickup}</SectionTitle>
               <Card>
-                <Text style={styles.line}>{order.plot_name ?? 'แปลงผู้ขาย'}</Text>
+                <Text style={styles.line}>
+                  {order.plot_name ?? t.orderDetail.sellerPlotFallback}
+                </Text>
                 {order.distance_km !== null && order.distance_km !== undefined ? (
-                  <Text style={styles.line}>ระยะประมาณ {order.distance_km.toFixed(1)} กม.</Text>
+                  <Text style={styles.line}>
+                    {formatTemplate(t.orderDetail.approxDistance, {
+                      km: order.distance_km.toFixed(1),
+                    })}
+                  </Text>
                 ) : null}
                 {lat !== null && lng !== null ? (
                   <PrimaryButton
-                    label="เปิดใน Google Maps"
+                    label={t.orderDetail.openMaps}
                     onPress={() => void Linking.openURL(googleMapsUrl(lat, lng))}
                   />
                 ) : (
-                  <Text style={styles.muted}>พิกัดแสดงเมื่อคุณเป็นเจ้าของออเดอร์</Text>
+                  <Text style={styles.muted}>{t.orderDetail.coordsHidden}</Text>
                 )}
               </Card>
 
               {hours !== null && tone !== null ? (
                 <>
-                  <SectionTitle>ต้องรับภายใน</SectionTitle>
+                  <SectionTitle>{t.orderDetail.sectionDeadline}</SectionTitle>
                   <Card>
-                    <Badge text={formatCountdown(hours)} fg={tone.fg} bg={tone.bg} />
-                    <Text style={styles.muted}>นับถึงเวลาหมดอายุของล็อต</Text>
+                    <Badge text={formatCountdown(hours, t.countdown)} fg={tone.fg} bg={tone.bg} />
+                    <Text style={styles.muted}>{t.orderDetail.deadlineHint}</Text>
                   </Card>
                 </>
               ) : null}
 
-              <SectionTitle>ขั้นตอนต่อไป</SectionTitle>
+              <SectionTitle>{t.orderDetail.sectionNextSteps}</SectionTitle>
               <Card>
-                <Text style={styles.step}>1) ไปที่แปลงตามแผนที่</Text>
-                <Text style={styles.step}>2) ตรวจของด้วยตนเอง</Text>
-                <Text style={styles.step}>3) พอใจแล้วให้รหัส OTP กับผู้ขาย</Text>
-                <Text style={styles.step}>4) ถ้าไม่พอใจ อย่าให้รหัส</Text>
+                <Text style={styles.step}>{t.orderDetail.step1}</Text>
+                <Text style={styles.step}>{t.orderDetail.step2}</Text>
+                <Text style={styles.step}>{t.orderDetail.step3}</Text>
+                <Text style={styles.step}>{t.orderDetail.step4}</Text>
               </Card>
 
               {active && !isSellerView ? (
                 <>
-                  <SectionTitle>รหัส OTP</SectionTitle>
+                  <SectionTitle>{t.orderDetail.sectionOtp}</SectionTitle>
                   <Card>
                     <View style={styles.otpBox}>
-                      <Text style={styles.otpLabel}>ให้รหัสนี้กับผู้ขายเมื่อตรวจของแล้ว</Text>
+                      <Text style={styles.otpLabel}>{t.orderDetail.otpLabel}</Text>
                       <Text style={styles.otpValue}>{order.drop_otp}</Text>
                     </View>
                   </Card>
                 </>
               ) : null}
 
-              <SectionTitle>ไทม์ไลน์สถานะ</SectionTitle>
+              <SectionTitle>{t.orderDetail.sectionTimeline}</SectionTitle>
               <Card>
                 <Text style={styles.step}>
-                  ● จองแล้ว{order.status === 'reserved' || order.status === 'picked' || order.status === 'delivered' ? ' ✓' : ''}
+                  ● {t.orderDetail.timelineReserved}
+                  {order.status === 'reserved' || order.status === 'picked' || order.status === 'delivered'
+                    ? ' ✓'
+                    : ''}
                 </Text>
-                <Text style={styles.muted}>○ ชำระเงิน (เตรียมไว้ในขั้น 6.5)</Text>
+                <Text style={styles.muted}>○ {t.orderDetail.timelinePayment}</Text>
                 <Text style={styles.step}>
-                  {order.status === 'picked' || order.status === 'delivered' ? '●' : '○'} รับของแล้ว
+                  {order.status === 'picked' || order.status === 'delivered' ? '●' : '○'}{' '}
+                  {t.orderDetail.timelinePicked}
                   {order.status === 'delivered' ? ' ✓' : ''}
                 </Text>
               </Card>
 
               {isSellerView && order.status === 'reserved' ? (
                 <>
-                  <SectionTitle>ยืนยันรับของ (ผู้ขาย)</SectionTitle>
+                  <SectionTitle>{t.orderDetail.sectionSellerConfirm}</SectionTitle>
                   <Card>
-                    <Text style={styles.muted}>
-                      ผู้ซื้อจะให้รหัส OTP 4 หลัก — กรอกรหัสและน้ำหนักที่ชั่งได้เพื่อยืนยันส่งมอบ
-                    </Text>
-                    <Field label="OTP" value={otpInput} onChangeText={setOtpInput} keyboardType="number-pad" />
+                    <Text style={styles.muted}>{t.orderDetail.sellerConfirmHint}</Text>
                     <Field
-                      label="น้ำหนักจริง (กก.)"
+                      label={t.orderDetail.otpField}
+                      value={otpInput}
+                      onChangeText={setOtpInput}
+                      keyboardType="number-pad"
+                    />
+                    <Field
+                      label={t.orderDetail.actualWeight}
                       value={weightInput}
                       onChangeText={setWeightInput}
                       keyboardType="numeric"
                       placeholder={String(qty)}
                     />
                     <PrimaryButton
-                      label="ยืนยันส่งมอบ"
+                      label={t.orderDetail.confirmDelivery}
                       loading={busy}
                       onPress={confirmSeller}
                     />
@@ -212,7 +251,7 @@ export default function OrderDetailScreen(): React.ReactElement {
 
               {canBuyerCancel ? (
                 <PrimaryButton
-                  label="ยกเลิกการจอง"
+                  label={t.orderDetail.cancelBooking}
                   tone="chili"
                   loading={busy}
                   onPress={() => cancel(order.id)}

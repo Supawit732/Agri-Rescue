@@ -806,6 +806,7 @@ interface MineLotRow extends RowDataPacket {
   status: string;
   created_at: Date;
   crop_name_th: string;
+  crop_name_en: string | null;
   plot_name: string;
   base_shelf_days: number;
 }
@@ -816,7 +817,7 @@ async function listMine(farmerId: number): Promise<object[]> {
             h.grade, h.ripeness, h.photo_url,
             h.allow_donation, h.donation_audience, h.start_price_per_kg, h.floor_price_per_kg,
             h.sale_mode, h.donation_opened, h.predicted_shelf_hours, h.expires_at, h.status, h.created_at,
-            c.name_th AS crop_name_th, c.base_shelf_days, p.name AS plot_name
+            c.name_th AS crop_name_th, c.name_en AS crop_name_en, c.base_shelf_days, p.name AS plot_name
      FROM harvest_lots h
      JOIN plots p ON p.id = h.plot_id
      JOIN crops c ON c.id = h.crop_id
@@ -833,7 +834,7 @@ async function presentLot(lotId: number): Promise<object> {
             h.grade, h.ripeness, h.photo_url,
             h.allow_donation, h.donation_audience, h.start_price_per_kg, h.floor_price_per_kg,
             h.sale_mode, h.donation_opened, h.predicted_shelf_hours, h.expires_at, h.status, h.created_at,
-            c.name_th AS crop_name_th, c.base_shelf_days, p.name AS plot_name
+            c.name_th AS crop_name_th, c.name_en AS crop_name_en, c.base_shelf_days, p.name AS plot_name
      FROM harvest_lots h
      JOIN plots p ON p.id = h.plot_id
      JOIN crops c ON c.id = h.crop_id
@@ -902,6 +903,8 @@ async function mapMineLots(rows: MineLotRow[]): Promise<object[]> {
       status: row.status,
       created_at: new Date(row.created_at).toISOString(),
       crop_name_th: row.crop_name_th,
+      crop_name_en:
+        row.crop_name_en === null || row.crop_name_en === '' ? null : String(row.crop_name_en),
       plot_name: row.plot_name,
       price_per_kg: pricePerKg,
       bookings: bookings.map((b) => ({

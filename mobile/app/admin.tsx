@@ -16,13 +16,16 @@ import {
 } from '../src/components/ui';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../src/context/AuthContext';
+import { isDitKgUnit } from '../src/dit/units';
 import { useApiData } from '../src/hooks/useApiData';
 import {
   labelApplicationKind,
   labelDistributionMode,
   labelOrgStatus,
   labelOrgType,
+  labelReviewAction,
 } from '../src/donorLabels';
+import { formatTemplate, useI18n, type Messages } from '../src/i18n';
 import { C } from '../src/theme';
 import type {
   DitCrop,
@@ -33,31 +36,37 @@ import type {
 } from '../src/api/types';
 import { loadToken } from '../src/api/storage';
 
-const QUICK_REASONS = ['ขอหนังสือรับรองฉบับล่าสุด', 'เอกสารไม่ชัด', 'ชื่อองค์กรไม่ตรงกับเอกสาร'] as const;
+function quickReasons(t: Messages): string[] {
+  return [t.admin.quickReasonLatestCert, t.admin.quickReasonUnclear, t.admin.quickReasonNameMismatch];
+}
 
-const REQUESTABLE_FIELDS: { key: string; label: string }[] = [
-  { key: 'org_name', label: 'ชื่อองค์กร' },
-  { key: 'org_type', label: 'ประเภทองค์กร' },
-  { key: 'registered_address', label: 'ที่อยู่ตามทะเบียน' },
-  { key: 'contact_name', label: 'ชื่อผู้ติดต่อ' },
-  { key: 'contact_phone', label: 'เบอร์โทร' },
-  { key: 'contact_email', label: 'อีเมล' },
-  { key: 'beneficiary_count', label: 'จำนวนผู้รับ' },
-  { key: 'documents', label: 'เอกสาร' },
-  { key: 'purpose_th', label: 'วัตถุประสงค์' },
-];
+function requestableFields(t: Messages): { key: string; label: string }[] {
+  return [
+    { key: 'org_name', label: t.admin.fieldOrgName },
+    { key: 'org_type', label: t.admin.fieldOrgType },
+    { key: 'registered_address', label: t.admin.fieldRegisteredAddress },
+    { key: 'contact_name', label: t.admin.fieldContactName },
+    { key: 'contact_phone', label: t.admin.fieldContactPhone },
+    { key: 'contact_email', label: t.admin.fieldContactEmail },
+    { key: 'beneficiary_count', label: t.admin.fieldBeneficiaryCount },
+    { key: 'documents', label: t.admin.fieldDocuments },
+    { key: 'purpose_th', label: t.admin.fieldPurpose },
+  ];
+}
 
-const DOC_LABELS: Record<string, string> = {
-  registration_cert: 'หนังสือรับรองจดทะเบียน',
-  community_cert: 'หนังสือรับรองชุมชน',
-  site_photo: 'รูปสถานที่',
-  other: 'อื่น ๆ',
-};
+function docLabels(t: Messages): Record<string, string> {
+  return {
+    registration_cert: t.admin.docRegistrationCert,
+    community_cert: t.admin.docCommunityCert,
+    site_photo: t.admin.docSitePhoto,
+    other: t.admin.docOther,
+  };
+}
 
 /** "บาท/หวี" → "หวี" for conversion labels. */
-function unitBaseFromDit(unit: string | null): string {
+function unitBaseFromDit(unit: string | null, fallback: string): string {
   if (unit === null || unit.trim() === '') {
-    return 'หน่วย';
+    return fallback;
   }
   const slash = unit.indexOf('/');
   return slash >= 0 ? unit.slice(slash + 1).trim() || unit : unit.trim();
@@ -65,21 +74,24 @@ function unitBaseFromDit(unit: string | null): string {
 
 export default function AdminScreen(): React.ReactElement {
   const { user } = useAuth();
+  const { t } = useI18n();
   const router = useRouter();
   const [tab, setTab] = useState<'orgs' | 'dit'>('orgs');
 
   return (
     <Screen>
-      <StackHeader title="ผู้ดูแล" onBack={() => router.replace('/(tabs)/account')} />
+      <StackHeader title={t.admin.title} onBack={() => router.replace('/(tabs)/account')} />
       <Segmented
         options={[
-          { key: 'orgs', label: 'คำขอองค์กร' },
-          { key: 'dit', label: 'จับคู่ราคา DIT' },
+          { key: 'orgs', label: t.admin.tabOrgs },
+          { key: 'dit', label: t.admin.tabDit },
         ]}
         value={tab}
         onChange={(key) => setTab(key as 'orgs' | 'dit')}
       />
-      {user !== null ? <Text style={styles.metaPad}>เข้าสู่ระบบเป็น {user.name}</Text> : null}
+      {user !== null ? (
+        <Text style={styles.metaPad}>{formatTemplate(t.admin.loggedInAs, { name: user.name })}</Text>
+      ) : null}
       {tab === 'orgs' ? <OrgApplicationsPanel /> : <DitMappingPanel />}
     </Screen>
   );
@@ -87,6 +99,10 @@ export default function AdminScreen(): React.ReactElement {
 
 function OrgApplicationsPanel(): React.ReactElement {
   const { api } = useAuth();
+  const { t, formatDateTime } = useI18n();
+  const reasons = quickReasons(t);
+  const fields = requestableFields(t);
+  const docsByCat = docLabels(t);
   const [refreshKey, setRefreshKey] = useState(0);
   const [actingId, setActingId] = useState<number | null>(null);
   const [reason, setReason] = useState('');
@@ -105,7 +121,7 @@ function OrgApplicationsPanel(): React.ReactElement {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!res.ok) {
-        setError('เปิดเอกสารไม่สำเร็จ');
+        setError(t.admin.openDocFailed);
         return;
       }
       if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
@@ -114,9 +130,9 @@ function OrgApplicationsPanel(): React.ReactElement {
         await Linking.openURL(objectUrl);
         return;
       }
-      setError('เปิดเอกสารได้บนเว็บ — ดาวน์โหลดผ่าน API /api/donors/admin/org-docs/' + docId);
+      setError(`${t.admin.openDocWebOnly} /api/donors/admin/org-docs/${docId}`);
     } catch {
-      setError('เปิดเอกสารไม่สำเร็จ');
+      setError(t.admin.openDocFailed);
     }
   };
 
@@ -127,7 +143,7 @@ function OrgApplicationsPanel(): React.ReactElement {
       await api.approveOrg(userId);
       bump();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'อนุมัติไม่สำเร็จ');
+      setError(err instanceof ApiError ? err.message : t.admin.approveFailed);
     } finally {
       setActingId(null);
     }
@@ -145,7 +161,7 @@ function OrgApplicationsPanel(): React.ReactElement {
       await api.saveOrgChecklist(userId, checklist);
       bump();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'บันทึก checklist ไม่สำเร็จ');
+      setError(err instanceof ApiError ? err.message : t.admin.checklistFailed);
     } finally {
       setActingId(null);
     }
@@ -156,7 +172,7 @@ function OrgApplicationsPanel(): React.ReactElement {
       return;
     }
     if (reason.trim() === '') {
-      setError('กรุณาระบุเหตุผลเมื่อปฏิเสธหรือขอเอกสารเพิ่ม');
+      setError(t.admin.needReason);
       return;
     }
     setActingId(actionMode.userId);
@@ -172,7 +188,7 @@ function OrgApplicationsPanel(): React.ReactElement {
       setRequestedFields([]);
       bump();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'บันทึกไม่สำเร็จ');
+      setError(err instanceof ApiError ? err.message : t.admin.saveFailed);
     } finally {
       setActingId(null);
     }
@@ -191,14 +207,14 @@ function OrgApplicationsPanel(): React.ReactElement {
 
   return (
     <Body>
-      <Text style={styles.lead}>คำขอเป็นองค์กรผู้รับบริจาค</Text>
+      <Text style={styles.lead}>{t.admin.orgsLead}</Text>
       {error !== null ? <Text style={styles.error}>{error}</Text> : null}
       <DataState
         loading={loading}
         error={loadError}
         data={data}
         onRetry={reload}
-        emptyText="ยังไม่มีคำขอรออนุมัติ"
+        emptyText={t.admin.emptyOrgs}
         isEmpty={(rows) => rows.length === 0}
       >
         {(apps: OrgApplication[]) => (
@@ -215,56 +231,69 @@ function OrgApplicationsPanel(): React.ReactElement {
                 <Card key={entry.user_id}>
                   <Text style={styles.name}>{entry.org_name ?? entry.contact_name ?? entry.name}</Text>
                   <Text style={styles.meta}>
-                    สถานะ {labelOrgStatus(entry.org_status ?? 'pending')} ·{' '}
-                    {labelApplicationKind(entry.application_kind ?? null)} · {labelOrgType(entry.org_type)}
+                    {formatTemplate(t.admin.statusMeta, {
+                      status: labelOrgStatus(entry.org_status ?? 'pending', t),
+                      kind: labelApplicationKind(entry.application_kind ?? null, t),
+                      orgType: labelOrgType(entry.org_type, t),
+                    })}
                   </Text>
                   <Text style={styles.meta}>
-                    ผู้สมัคร {entry.name} · {entry.phone}
+                    {formatTemplate(t.admin.applicant, { name: entry.name, phone: entry.phone })}
                   </Text>
 
-                  <Text style={styles.section}>หมวดองค์กร / บุคคล</Text>
+                  <Text style={styles.section}>{t.admin.sectionOrgIndividual}</Text>
                   {entry.sections?.organization ? (
                     <Text style={styles.meta}>
-                      ชื่อ {String(entry.sections.organization.org_name ?? '-')} · จดทะเบียน{' '}
-                      {entry.sections.organization.registered === true
-                        ? 'ใช่'
-                        : entry.sections.organization.registered === false
-                          ? 'ไม่'
-                          : '-'}
+                      {formatTemplate(t.admin.orgNameRegistered, {
+                        name: String(entry.sections.organization.org_name ?? t.common.dash),
+                        registered:
+                          entry.sections.organization.registered === true
+                            ? t.admin.registeredYes
+                            : entry.sections.organization.registered === false
+                              ? t.admin.registeredNo
+                              : t.common.dash,
+                      })}
                     </Text>
                   ) : null}
                   {entry.sections?.individual ? (
                     <Text style={styles.meta}>
-                      บุคคล {String(entry.sections.individual.contact_name ?? '-')} · วัตถุประสงค์{' '}
-                      {String(entry.sections.individual.purpose_th ?? '-')}
+                      {formatTemplate(t.admin.individualLine, {
+                        name: String(entry.sections.individual.contact_name ?? t.common.dash),
+                        purpose: String(entry.sections.individual.purpose_th ?? t.common.dash),
+                      })}
                     </Text>
                   ) : null}
 
-                  <Text style={styles.section}>ผู้ติดต่อ</Text>
+                  <Text style={styles.section}>{t.admin.sectionContact}</Text>
                   <Text style={styles.meta}>
                     {entry.contact_name} ({entry.contact_title ?? '-'}) {entry.contact_phone}
                     {entry.contact_email ? ` · ${entry.contact_email}` : ''}
                   </Text>
 
-                  <Text style={styles.section}>ผู้รับประโยชน์</Text>
+                  <Text style={styles.section}>{t.admin.sectionBeneficiaries}</Text>
                   <Text style={styles.meta}>
-                    จำนวน {entry.beneficiary_count ?? '-'} · รูปแบบ{' '}
-                    {labelDistributionMode(entry.distribution_mode)}
+                    {formatTemplate(t.admin.beneficiariesLine, {
+                      count: entry.beneficiary_count ?? t.common.dash,
+                      mode: labelDistributionMode(entry.distribution_mode, t),
+                    })}
                   </Text>
 
-                  <Text style={styles.section}>เอกสารตามประเภท</Text>
-                  {Object.keys(DOC_LABELS).map((cat) => {
+                  <Text style={styles.section}>{t.admin.sectionDocsByCategory}</Text>
+                  {Object.keys(docsByCat).map((cat) => {
                     const docs = byCat[cat] ?? entry.documents.filter((d) => (d.doc_category ?? 'other') === cat);
                     if (docs.length === 0) {
                       return null;
                     }
                     return (
                       <View key={cat}>
-                        <Text style={styles.meta}>{DOC_LABELS[cat]}</Text>
+                        <Text style={styles.meta}>{docsByCat[cat]}</Text>
                         {docs.map((doc) => (
                           <Pressable key={doc.id} onPress={() => void openDoc(doc.id)}>
                             <Text style={styles.docLink}>
-                              · {doc.original_name} ({Math.round(doc.size_bytes / 1024)} KB) — เปิด
+                              {formatTemplate(t.admin.docOpen, {
+                                name: doc.original_name,
+                                kb: Math.round(doc.size_bytes / 1024),
+                              })}
                             </Text>
                           </Pressable>
                         ))}
@@ -272,12 +301,12 @@ function OrgApplicationsPanel(): React.ReactElement {
                     );
                   })}
 
-                  <Text style={styles.section}>Checklist การตรวจ</Text>
+                  <Text style={styles.section}>{t.admin.sectionChecklist}</Text>
                   {(
                     [
-                      ['name_matches_docs', 'ชื่อตรงเอกสาร'],
-                      ['location_matches_photos', 'ที่ตั้งตรงรูปสถานที่'],
-                      ['docs_not_expired', 'เอกสารยังไม่หมดอายุ'],
+                      ['name_matches_docs', t.admin.checklistName],
+                      ['location_matches_photos', t.admin.checklistLocation],
+                      ['docs_not_expired', t.admin.checklistDocs],
                     ] as const
                   ).map(([key, label]) => (
                     <Chip
@@ -289,7 +318,7 @@ function OrgApplicationsPanel(): React.ReactElement {
                   ))}
                   <View style={styles.slotWide}>
                     <SecondaryButton
-                      label="บันทึก checklist"
+                      label={t.admin.saveChecklist}
                       onPress={() => void saveChecklist(entry.user_id)}
                       disabled={actingId !== null}
                     />
@@ -297,11 +326,11 @@ function OrgApplicationsPanel(): React.ReactElement {
 
                   {(entry.review_logs ?? []).length > 0 ? (
                     <>
-                      <Text style={styles.historyTitle}>ประวัติการตัดสิน</Text>
+                      <Text style={styles.historyTitle}>{t.admin.historyTitle}</Text>
                       {(entry.review_logs ?? []).map((log) => (
                         <Text key={log.id} style={styles.meta}>
-                          · {log.action}
-                          {log.reason ? `: ${log.reason}` : ''} ({new Date(log.created_at).toLocaleString('th-TH')})
+                          · {labelReviewAction(log.action, t)}
+                          {log.reason ? `: ${log.reason}` : ''} ({formatDateTime(log.created_at)})
                         </Text>
                       ))}
                     </>
@@ -310,20 +339,20 @@ function OrgApplicationsPanel(): React.ReactElement {
                   {actionMode?.userId === entry.user_id ? (
                     <>
                       <Field
-                        label={actionMode.kind === 'reject' ? 'เหตุผลที่ปฏิเสธ' : 'เหตุผลที่ขอเอกสารเพิ่ม'}
+                        label={actionMode.kind === 'reject' ? t.admin.reasonReject : t.admin.reasonMoreInfo}
                         value={reason}
                         onChangeText={setReason}
                       />
                       <View style={styles.row}>
-                        {QUICK_REASONS.map((item) => (
+                        {reasons.map((item) => (
                           <Chip key={item} label={item} selected={reason === item} onPress={() => setReason(item)} />
                         ))}
                       </View>
                       {actionMode.kind === 'more' ? (
                         <>
-                          <Text style={styles.section}>ช่องที่ต้องแก้</Text>
+                          <Text style={styles.section}>{t.admin.fieldsToFix}</Text>
                           <View style={styles.row}>
-                            {REQUESTABLE_FIELDS.map((f) => (
+                            {fields.map((f) => (
                               <Chip
                                 key={f.key}
                                 label={f.label}
@@ -341,7 +370,7 @@ function OrgApplicationsPanel(): React.ReactElement {
                       <View style={styles.actions}>
                         <View style={styles.slot}>
                           <PrimaryButton
-                            label="ยืนยัน"
+                            label={t.admin.confirm}
                             tone={actionMode.kind === 'reject' ? 'chili' : 'turmeric'}
                             onPress={() => void submitReasoned()}
                             loading={actingId === entry.user_id}
@@ -349,7 +378,7 @@ function OrgApplicationsPanel(): React.ReactElement {
                         </View>
                         <View style={styles.slot}>
                           <SecondaryButton
-                            label="ยกเลิก"
+                            label={t.admin.cancel}
                             onPress={() => {
                               setActionMode(null);
                               setReason('');
@@ -364,7 +393,7 @@ function OrgApplicationsPanel(): React.ReactElement {
                       {entry.org_status !== 'needs_more_info' ? (
                         <View style={styles.slot}>
                           <PrimaryButton
-                            label="อนุมัติ"
+                            label={t.admin.approve}
                             onPress={() => void approve(entry.user_id)}
                             loading={actingId === entry.user_id}
                             disabled={actingId !== null}
@@ -373,7 +402,7 @@ function OrgApplicationsPanel(): React.ReactElement {
                       ) : null}
                       <View style={styles.slot}>
                         <SecondaryButton
-                          label="ขอข้อมูลเพิ่ม"
+                          label={t.admin.requestMoreInfo}
                           onPress={() => {
                             setActionMode({ userId: entry.user_id, kind: 'more' });
                             setReason('');
@@ -384,7 +413,7 @@ function OrgApplicationsPanel(): React.ReactElement {
                       </View>
                       <View style={styles.slot}>
                         <SecondaryButton
-                          label="ปฏิเสธ"
+                          label={t.admin.reject}
                           onPress={() => {
                             setActionMode({ userId: entry.user_id, kind: 'reject' });
                             setReason('');
@@ -406,6 +435,7 @@ function OrgApplicationsPanel(): React.ReactElement {
 
 function DitMappingPanel(): React.ReactElement {
   const { api } = useAuth();
+  const { t, cropName, formatNumber } = useI18n();
   const [refreshKey, setRefreshKey] = useState(0);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [advancedOpenId, setAdvancedOpenId] = useState<number | null>(null);
@@ -455,11 +485,17 @@ function DitMappingPanel(): React.ReactElement {
             setBusyKey(null);
             if (job.status === 'done') {
               setBanner(
-                `ดึงราคาเสร็จ: จับคู่ ${job.matched} · บันทึก ${job.saved}/${job.total}` +
-                  (job.outliers > 0 ? ` · ราคาเพี้ยน ${job.outliers}` : ''),
+                formatTemplate(t.admin.fetchDone, {
+                  matched: job.matched,
+                  saved: job.saved,
+                  total: job.total,
+                }) +
+                  (job.outliers > 0
+                    ? formatTemplate(t.admin.fetchDoneOutliers, { outliers: job.outliers })
+                    : ''),
               );
             } else {
-              setError(job.message ?? 'ดึงราคาไม่สำเร็จ');
+              setError(job.message ?? t.admin.fetchPriceFailed);
             }
             bump();
             reload();
@@ -486,15 +522,15 @@ function DitMappingPanel(): React.ReactElement {
     crop: DitCrop,
     product: { product_code: string; product_name: string; unit: string },
   ): Promise<void> => {
-    const needsFactor = product.unit !== 'กก.' && product.unit !== 'unknown';
+    const needsFactor = !isDitKgUnit(product.unit) && product.unit !== 'unknown';
     const unitRaw = unitDraftFor(crop).trim();
     const unit_to_kg = unitRaw === '' ? undefined : Number(unitRaw);
     if (needsFactor && (unit_to_kg === undefined || !(unit_to_kg > 0))) {
-      setUnitError(crop.id, `หน่วยของ ${product.product_name} เป็น ${product.unit} — กรุณาระบุตัวแปลงเป็น กก.`);
+      setUnitError(crop.id, formatTemplate(t.admin.unitNeedsFactor, { product: product.product_name, unit: product.unit }));
       return;
     }
     if (unit_to_kg !== undefined && !(unit_to_kg > 0)) {
-      setUnitError(crop.id, 'ตัวแปลงหน่วยต้องเป็นจำนวนบวก');
+      setUnitError(crop.id, t.admin.unitFactorPositive);
       return;
     }
     setBusyKey(`map-${crop.id}-${product.product_code}`);
@@ -506,13 +542,13 @@ function DitMappingPanel(): React.ReactElement {
         product_code: product.product_code,
         ...(unit_to_kg !== undefined ? { unit_to_kg } : {}),
       });
-      setBanner(`แก้คู่ ${crop.name_th} → ${product.product_code} (manual)`);
+      setBanner(formatTemplate(t.admin.remapped, { crop: cropName(crop), code: product.product_code }));
       setSearchHits((prev) => ({ ...prev, [crop.id]: [] }));
       setEditingId(null);
       bump();
       reload();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'แก้คู่ไม่สำเร็จ');
+      setError(err instanceof ApiError ? err.message : t.admin.remapFailed);
     } finally {
       setBusyKey(null);
     }
@@ -521,7 +557,7 @@ function DitMappingPanel(): React.ReactElement {
   const searchProducts = async (crop: DitCrop): Promise<void> => {
     const q = (searchQueries[crop.id] ?? '').trim();
     if (q === '') {
-      setError('พิมพ์ชื่อสินค้าเพื่อค้นหา');
+      setError(t.admin.searchHint);
       return;
     }
     setBusyKey(`search-${crop.id}`);
@@ -529,9 +565,9 @@ function DitMappingPanel(): React.ReactElement {
     try {
       const hits = await api.searchDitProducts(q);
       setSearchHits((prev) => ({ ...prev, [crop.id]: hits }));
-      setBanner(hits.length === 0 ? `ไม่พบสินค้าที่ตรงกับ “${q}”` : `พบ ${hits.length} รายการ`);
+      setBanner(hits.length === 0 ? formatTemplate(t.admin.searchNone, { q }) : formatTemplate(t.admin.searchFound, { count: hits.length }));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'ค้นหาสินค้าไม่สำเร็จ');
+      setError(err instanceof ApiError ? err.message : t.admin.searchFailed);
     } finally {
       setBusyKey(null);
     }
@@ -544,7 +580,7 @@ function DitMappingPanel(): React.ReactElement {
     try {
       const res = await api.syncDitPrices();
       setSyncJob(res.job);
-      setBanner('เริ่มดึงราคาเบื้องหลังแล้ว…');
+      setBanner(t.admin.fetchStarted);
       if (res.job.status === 'running') {
         startPoll();
       } else {
@@ -554,23 +590,23 @@ function DitMappingPanel(): React.ReactElement {
       }
     } catch (err) {
       setBusyKey(null);
-      setError(err instanceof ApiError ? err.message : 'ดึงราคาไม่สำเร็จ');
+      setError(err instanceof ApiError ? err.message : t.admin.fetchPriceFailed);
     }
   };
 
   const saveUnitFactor = async (crop: DitCrop): Promise<void> => {
     if (crop.dit_product_code === null) {
-      setError('ยังไม่มีรหัสสินค้า — จับคู่ก่อนแล้วค่อยใส่ตัวแปลง');
+      setError(t.admin.needProductCode);
       return;
     }
     const unitRaw = unitDraftFor(crop).trim();
     if (unitRaw === '') {
-      setUnitError(crop.id, 'ระบุตัวแปลงเป็นจำนวนกก. ต่อ 1 หน่วยต้นทาง');
+      setUnitError(crop.id, t.admin.unitFactorRequired);
       return;
     }
     const unit_to_kg = Number(unitRaw);
     if (!(unit_to_kg > 0)) {
-      setUnitError(crop.id, 'ตัวแปลงหน่วยต้องเป็นจำนวนบวก');
+      setUnitError(crop.id, t.admin.unitFactorPositive);
       return;
     }
     setBusyKey(`unit-${crop.id}`);
@@ -579,8 +615,8 @@ function DitMappingPanel(): React.ReactElement {
     setBanner(null);
     try {
       await api.setDitUnitFactor(crop.id, { unit_to_kg });
-      const base = unitBaseFromDit(crop.dit_unit);
-      setBanner(`บันทึกตัวแปลง ${crop.name_th}: 1 ${base} = ${unit_to_kg} กก.`);
+      const base = unitBaseFromDit(crop.dit_unit, t.admin.unitFallback);
+      setBanner(formatTemplate(t.admin.factorSaved, { crop: cropName(crop), base, kg: unit_to_kg }));
       bump();
       reload();
     } catch (err) {
@@ -592,7 +628,7 @@ function DitMappingPanel(): React.ReactElement {
           setError(err.message);
         }
       } else {
-        setError('บันทึกตัวแปลงไม่สำเร็จ');
+        setError(t.admin.saveFactorFailed);
       }
     } finally {
       setBusyKey(null);
@@ -603,23 +639,31 @@ function DitMappingPanel(): React.ReactElement {
     syncJob === null
       ? null
       : syncJob.status === 'running'
-        ? `กำลังดึงราคา ${syncJob.done}/${syncJob.total || '…'}`
+        ? formatTemplate(t.admin.syncRunning, {
+            done: syncJob.done,
+            total: syncJob.total || '…',
+          })
         : syncJob.status === 'done'
-          ? `ดึงล่าสุดเสร็จ · บันทึก ${syncJob.saved}`
+          ? formatTemplate(t.admin.syncDone, { saved: syncJob.saved })
           : syncJob.status === 'error'
-            ? `ดึงราคาล้มเหลว: ${syncJob.message ?? ''}`
+            ? formatTemplate(t.admin.syncFailed, { message: syncJob.message ?? '' })
             : null;
 
   const auto = data?.automation;
   const statusBar =
     auto !== undefined && auto.last_auto_hm !== null
-      ? `อัปเดตอัตโนมัติล่าสุด ${auto.last_auto_hm} · สำเร็จ ${auto.success_label}` +
-        (auto.next_retry_hm !== null ? ` · ลองใหม่ครั้งถัดไป ${auto.next_retry_hm}` : '')
-      : 'รออัปเดตอัตโนมัติหลังเปิดเซิร์ฟเวอร์…';
+      ? formatTemplate(t.admin.autoUpdated, {
+          hm: auto.last_auto_hm,
+          label: auto.success_label,
+        }) +
+        (auto.next_retry_hm !== null
+          ? formatTemplate(t.admin.autoNextRetry, { hm: auto.next_retry_hm })
+          : '')
+      : t.admin.waitingAuto;
 
   return (
     <Body>
-      <Text style={styles.lead}>ราคา DIT / MOC</Text>
+      <Text style={styles.lead}>{t.admin.ditLead}</Text>
       <Text style={styles.banner}>{statusBar}</Text>
       {auto?.message !== null && auto?.message !== undefined ? (
         <Text style={styles.meta}>{auto.message}</Text>
@@ -632,7 +676,7 @@ function DitMappingPanel(): React.ReactElement {
         error={loadError}
         data={data?.crops ?? null}
         onRetry={reload}
-        emptyText="ยังไม่มีพืชในระบบ"
+        emptyText={t.admin.emptyCrops}
         isEmpty={(rows) => rows.length === 0}
       >
         {(crops: DitCrop[]) => (
@@ -645,47 +689,60 @@ function DitMappingPanel(): React.ReactElement {
                   ? 'auto'
                   : crop.dit_match_source === 'manual'
                     ? 'manual'
-                    : 'ยังไม่จับคู่';
+                    : t.admin.notMapped;
               const advancedOpen = editingId === crop.id || advancedOpenId === crop.id;
               return (
                 <Card key={crop.id}>
-                  <Text style={styles.name}>{crop.name_th}</Text>
+                  <Text style={styles.name}>{cropName(crop)}</Text>
                   <Text style={styles.meta}>
-                    รหัส {crop.dit_product_code ?? '—'} · {matchLabel}
+                    {formatTemplate(t.admin.productCodeLine, {
+                      code: crop.dit_product_code ?? t.common.dash,
+                      match: matchLabel,
+                    })}
                     {crop.dit_unit !== null ? ` · ${crop.dit_unit}` : ''}
                   </Text>
                   {crop.dit_product_name !== null ? (
-                    <Text style={styles.meta}>สินค้า: {crop.dit_product_name}</Text>
+                    <Text style={styles.meta}>
+                      {formatTemplate(t.admin.productNameLine, { name: crop.dit_product_name })}
+                    </Text>
                   ) : null}
-                  <Text style={styles.meta}>ราคาตลาดในระบบ {crop.market_price_per_kg} บาท/กก.</Text>
+                  <Text style={styles.meta}>
+                    {formatTemplate(t.admin.marketPriceLine, {
+                      price: formatNumber(crop.market_price_per_kg),
+                    })}
+                  </Text>
                   {crop.latest_ref_price !== null && !crop.latest_ref_price.rejected_as_outlier ? (
                     <>
                       <Text style={styles.meta}>
-                        ราคาอ้างอิง {crop.latest_ref_price.wholesale_price}
-                        {crop.latest_ref_price.unit !== null ? ` ${crop.latest_ref_price.unit}` : ''}
-                        {' · '}
-                        {crop.latest_ref_price.date}
+                        {formatTemplate(t.admin.refPriceLine, {
+                          price: crop.latest_ref_price.wholesale_price,
+                          unit: crop.latest_ref_price.unit !== null ? ` ${crop.latest_ref_price.unit}` : '',
+                          date: crop.latest_ref_price.date,
+                        })}
                       </Text>
                       {crop.latest_ref_price.fetched_at !== null ? (
-                        <Text style={styles.meta}>ดึงเมื่อ {crop.latest_ref_price.fetched_at}</Text>
+                        <Text style={styles.meta}>
+                          {formatTemplate(t.admin.fetchedAt, { at: crop.latest_ref_price.fetched_at })}
+                        </Text>
                       ) : null}
                     </>
                   ) : (
                     <Text style={styles.meta}>
-                      ยังไม่มีราคาใช้ได้ —{' '}
-                      {crop.dit_price_status ?? 'ใช้ราคาประมาณ'}
+                      {formatTemplate(t.admin.noUsablePrice, {
+                        status: crop.dit_price_status ?? t.admin.estimatePrice,
+                      })}
                     </Text>
                   )}
                   {crop.dit_price_status !== null && crop.latest_ref_price !== null ? (
                     <Text style={styles.error}>{crop.dit_price_status}</Text>
                   ) : null}
                   {crop.latest_ref_price?.rejected_as_outlier ? (
-                    <Text style={styles.error}>flag: ราคาเพี้ยน — ไม่ใช้ประเมิน</Text>
+                    <Text style={styles.error}>{t.admin.outlierFlag}</Text>
                   ) : null}
                   <View style={styles.actions}>
                     <View style={styles.slot}>
                       <SecondaryButton
-                        label={advancedOpen ? 'ซ่อนขั้นสูง' : 'ขั้นสูง'}
+                        label={advancedOpen ? t.admin.hideAdvanced : t.admin.advanced}
                         disabled={busyKey !== null && !advancedOpen}
                         onPress={() => {
                           setAdvancedOpenId(advancedOpen ? null : crop.id);
@@ -699,36 +756,41 @@ function DitMappingPanel(): React.ReactElement {
                   </View>
                   {advancedOpen ? (
                     <>
-                      <Text style={styles.historyTitle}>ขั้นสูง</Text>
+                      <Text style={styles.historyTitle}>{t.admin.advanced}</Text>
                       {crop.dit_product_code !== null ? (
                         <>
                           <Text style={styles.meta}>
-                            หน่วยต้นทางจาก DIT:{' '}
-                            {crop.dit_unit !== null ? crop.dit_unit : 'ยังไม่ทราบ (รอราคา)'}
+                            {formatTemplate(t.admin.sourceUnit, {
+                              unit: crop.dit_unit !== null ? crop.dit_unit : t.admin.unitUnknown,
+                            })}
                           </Text>
                           <Field
                             label={
-                              crop.dit_unit !== null && !crop.dit_unit.includes('กก')
-                                ? `1 ${unitBaseFromDit(crop.dit_unit)} = กี่ กก.?`
-                                : 'ตัวแปลงเป็น กก. (ถ้าหน่วยไม่ใช่ กก.)'
+                              crop.dit_unit !== null && !isDitKgUnit(crop.dit_unit)
+                                ? formatTemplate(t.admin.factorLabelWithUnit, {
+                                    base: unitBaseFromDit(crop.dit_unit, t.admin.unitFallback),
+                                  })
+                                : t.admin.factorLabelOptional
                             }
                             value={unitDraftFor(crop)}
-                            onChangeText={(text) => {
-                              setUnitDrafts((prev) => ({ ...prev, [crop.id]: text }));
+                            onChangeText={(textValue) => {
+                              setUnitDrafts((prev) => ({ ...prev, [crop.id]: textValue }));
                               setUnitError(crop.id, null);
                             }}
                             keyboardType="numeric"
                             placeholder={
-                              crop.dit_unit !== null && !crop.dit_unit.includes('กก')
-                                ? `เช่น 0.5 ถ้า 1 ${unitBaseFromDit(crop.dit_unit)} = 0.5 กก.`
-                                : 'เว้นว่างถ้าเป็นบาท/กก.'
+                              crop.dit_unit !== null && !isDitKgUnit(crop.dit_unit)
+                                ? formatTemplate(t.admin.factorPlaceholderWithUnit, {
+                                    base: unitBaseFromDit(crop.dit_unit, t.admin.unitFallback),
+                                  })
+                                : t.admin.factorPlaceholderOptional
                             }
                             error={unitErrors[crop.id] ?? null}
                           />
                           <View style={styles.actions}>
                             <View style={styles.slot}>
                               <PrimaryButton
-                                label="บันทึกตัวแปลงหน่วย"
+                                label={t.admin.saveUnitFactor}
                                 loading={busyKey === `unit-${crop.id}`}
                                 disabled={busyKey !== null}
                                 onPress={() => void saveUnitFactor(crop)}
@@ -737,7 +799,10 @@ function DitMappingPanel(): React.ReactElement {
                           </View>
                           {crop.dit_unit_to_kg !== null ? (
                             <Text style={styles.meta}>
-                              ใช้ตอนนี้: 1 {unitBaseFromDit(crop.dit_unit)} = {crop.dit_unit_to_kg} กก.
+                              {formatTemplate(t.admin.factorInUse, {
+                                base: unitBaseFromDit(crop.dit_unit, t.admin.unitFallback),
+                                kg: crop.dit_unit_to_kg,
+                              })}
                             </Text>
                           ) : null}
                         </>
@@ -745,7 +810,7 @@ function DitMappingPanel(): React.ReactElement {
                       <View style={styles.actions}>
                         <View style={styles.slot}>
                           <PrimaryButton
-                            label="ดึงราคาตอนนี้"
+                            label={t.admin.fetchNow}
                             loading={busyKey === 'sync-prices' || syncJob?.status === 'running'}
                             disabled={busyKey !== null && busyKey !== 'sync-prices'}
                             onPress={() => void fetchPricesNow()}
@@ -753,7 +818,7 @@ function DitMappingPanel(): React.ReactElement {
                         </View>
                         <View style={styles.slot}>
                           <SecondaryButton
-                            label={editing ? 'ปิดการแก้คู่' : 'แก้คู่'}
+                            label={editing ? t.admin.closeMapping : t.admin.editMapping}
                             disabled={busyKey !== null}
                             onPress={() => {
                               setEditingId(editing ? null : crop.id);
@@ -765,15 +830,17 @@ function DitMappingPanel(): React.ReactElement {
                       {editing ? (
                         <>
                           <Field
-                            label="ค้นหาสินค้าด้วยชื่อ"
+                            label={t.admin.searchProducts}
                             value={searchQueries[crop.id] ?? ''}
-                            onChangeText={(text) => setSearchQueries((prev) => ({ ...prev, [crop.id]: text }))}
-                            placeholder={`เช่น ${crop.name_th}`}
+                            onChangeText={(textValue) =>
+                              setSearchQueries((prev) => ({ ...prev, [crop.id]: textValue }))
+                            }
+                            placeholder={cropName(crop)}
                           />
                           <View style={styles.actions}>
                             <View style={styles.slot}>
                               <SecondaryButton
-                                label="ค้นหา"
+                                label={t.admin.search}
                                 disabled={busyKey !== null}
                                 onPress={() => void searchProducts(crop)}
                               />
@@ -783,13 +850,16 @@ function DitMappingPanel(): React.ReactElement {
                             <View key={hit.product_id} style={styles.suggestionBox}>
                               <Text style={styles.name}>{hit.product_name}</Text>
                               <Text style={styles.meta}>
-                                {hit.product_id} · หน่วย {hit.unit}
+                                {formatTemplate(t.admin.hitUnitLine, {
+                                  code: hit.product_id,
+                                  unit: hit.unit,
+                                })}
                                 {hit.sell_type !== null ? ` · ${hit.sell_type}` : ''}
                               </Text>
                               <View style={styles.actions}>
                                 <View style={styles.slot}>
                                   <PrimaryButton
-                                    label="บันทึกคู่ (manual)"
+                                    label={t.admin.saveManualPair}
                                     loading={busyKey === `map-${crop.id}-${hit.product_id}`}
                                     disabled={busyKey !== null}
                                     onPress={() =>

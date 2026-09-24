@@ -22,6 +22,7 @@ export const crops = [
   {
     key: 'mango',
     nameTh: 'มะม่วง',
+    nameEn: 'Mango',
     baseShelfDays: 5,
     marketPricePerKg: 40,
     normalFeaturesTh:
@@ -31,6 +32,7 @@ export const crops = [
   {
     key: 'banana',
     nameTh: 'กล้วยน้ำว้า',
+    nameEn: 'Namwa banana',
     baseShelfDays: 4,
     marketPricePerKg: 25,
     normalFeaturesTh:
@@ -40,6 +42,7 @@ export const crops = [
   {
     key: 'tomato',
     nameTh: 'มะเขือเทศ',
+    nameEn: 'Tomato',
     baseShelfDays: 6,
     marketPricePerKg: 30,
     normalFeaturesTh: 'ผิวตึงตามความสุก, ขั้วเขียวหรือน้ำตาลอ่อน, จุดสีตามพันธุ์, ไม่มีน้ำไหล',
@@ -48,6 +51,7 @@ export const crops = [
   {
     key: 'morning-glory',
     nameTh: 'ผักบุ้ง',
+    nameEn: 'Morning glory',
     baseShelfDays: 2,
     marketPricePerKg: 20,
     normalFeaturesTh: 'ใบเขียวสด อาจมีจุดน้ำเล็กน้อยหลังเก็บ, ลำต้นกรอบ ไม่เหลืองทั้งต้น',
@@ -56,6 +60,7 @@ export const crops = [
   {
     key: 'lime',
     nameTh: 'มะนาว',
+    nameEn: 'Lime',
     baseShelfDays: 14,
     marketPricePerKg: 35,
     normalFeaturesTh: 'ผิวขรุขระตามพันธุ์, จุดน้ำมันบนเปลือก, สีเขียวถึงเหลืองอ่อนตามความสุก',

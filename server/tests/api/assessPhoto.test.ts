@@ -21,7 +21,9 @@ describe('POST /api/lots/assess-photo and AI lot creation', () => {
       ripeness: 3,
       confidence: 0.91,
       defects: ['แผลเล็ก'],
+      defects_en: ['Small wound'],
       note_th: 'สุกมาก',
+      note_en: 'Very ripe',
       low_confidence: false,
       model: 'test-model',
     });

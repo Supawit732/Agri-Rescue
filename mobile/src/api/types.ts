@@ -138,6 +138,7 @@ export interface DonorTermsMeta {
 export interface Crop {
   id: number;
   name_th: string;
+  name_en?: string | null;
   base_shelf_days: number;
   market_price_per_kg: number;
 }
@@ -185,7 +186,9 @@ export type AssessPhotoResponse =
       ripeness: number;
       confidence: number;
       defects: string[];
+      defects_en: string[];
       note_th: string;
+      note_en: string;
       low_confidence: boolean;
       model: string;
     }
@@ -232,6 +235,7 @@ export interface MyLot {
   status: string;
   created_at: string;
   crop_name_th: string;
+  crop_name_en?: string | null;
   plot_name: string;
   price_per_kg: number | null;
   bookings?: MyLotBooking[];
@@ -359,6 +363,7 @@ export interface Order {
   drop_otp: string;
   created_at: string;
   crop_name_th?: string;
+  crop_name_en?: string | null;
   grade?: Grade;
   ripeness?: number;
   photo_url?: string | null;
@@ -426,7 +431,7 @@ export interface DashboardPayload {
   };
   charts: {
     daily_kg: { date: string; kg: number }[];
-    by_crop: { crop_name_th: string; kg: number }[];
+    by_crop: { crop_name_th: string; crop_name_en?: string | null; kg: number }[];
     orders_by_status: { status: string; count: number }[];
     ai_accuracy: { total: number; matched: number; accuracy: number | null };
   };

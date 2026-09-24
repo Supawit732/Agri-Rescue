@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { DonorIntroModal, type DonorIntroChoice } from '../components/DonorIntroModal';
@@ -11,17 +11,13 @@ import {
   labelDonorTier,
   labelOrgStatus,
 } from '../src/donorLabels';
+import { formatTemplate, useI18n } from '../src/i18n';
 import { C } from '../src/theme';
 import type { BuyerType } from '../src/api/types';
 
-const buyerTypes: { key: BuyerType; label: string }[] = [
-  { key: 'vendor', label: 'รถเร่' },
-  { key: 'shop', label: 'ร้านค้า' },
-  { key: 'charity', label: 'รับบริจาค' },
-];
-
 export default function ProfileScreen(): React.ReactElement {
-  const { user, api, logout, mode, setMode, refreshUser } = useAuth();
+  const { user, api, mode, setMode, refreshUser } = useAuth();
+  const { t } = useI18n();
   const router = useRouter();
   const [lineId, setLineId] = useState(user?.line_id ?? '');
   const [buyerType, setBuyerType] = useState<BuyerType>(user?.buyer_type ?? 'vendor');
@@ -31,12 +27,21 @@ export default function ProfileScreen(): React.ReactElement {
   const [introVisible, setIntroVisible] = useState(false);
   const [pendingEnableBuy, setPendingEnableBuy] = useState(false);
 
+  const buyerTypes = useMemo(
+    () =>
+      (Object.entries(t.buyerType) as [BuyerType, string][]).map(([key, label]) => ({
+        key,
+        label,
+      })),
+    [t.buyerType],
+  );
+
   if (user === null) {
     return (
       <Screen>
-        <StackHeader title="โปรไฟล์" onBack={() => router.replace('/(tabs)/account')} />
+        <StackHeader title={t.profile.title} onBack={() => router.replace('/(tabs)/account')} />
         <Body>
-          <Text style={styles.muted}>กรุณาเข้าสู่ระบบ</Text>
+          <Text style={styles.muted}>{t.profile.pleaseLogin}</Text>
         </Body>
       </Screen>
     );
@@ -71,9 +76,9 @@ export default function ProfileScreen(): React.ReactElement {
         try {
           await api.saveDonorDraft({ draft_step: 0 });
           await refreshUser();
-          setMessage('บันทึกร่างแล้ว — กรอกคำขอรับบริจาคได้จากแบนเนอร์ด้านบน');
+          setMessage(t.profile.draftSaved);
         } catch (err) {
-          setError(err instanceof ApiError ? err.message : 'บันทึกร่างไม่สำเร็จ');
+          setError(err instanceof ApiError ? err.message : t.profile.draftFailed);
         } finally {
           setBusy(false);
         }
@@ -93,12 +98,12 @@ export default function ProfileScreen(): React.ReactElement {
       if (intent === 'later') {
         await api.saveDonorDraft({ draft_step: 0 });
         await refreshUser();
-        setMessage('เปิดโหมดซื้อแล้ว — คำขอรับบริจาคยังเป็นร่าง');
+        setMessage(t.profile.buyEnabledDraft);
       } else {
         setMessage(
           auth.user.org_status === 'draft' || auth.user.org_status === 'pending'
-            ? 'เปิดโหมดซื้อแล้ว — กรุณากรอกคำขอรับบริจาค'
-            : 'เปิดโหมดซื้อแล้ว',
+            ? t.profile.buyEnabledNeedApply
+            : t.profile.buyEnabled,
         );
         setMode('buy');
         router.replace('/donor-apply');
@@ -106,7 +111,7 @@ export default function ProfileScreen(): React.ReactElement {
       }
       setMode('buy');
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'อัปเดตไม่สำเร็จ');
+      setError(err instanceof ApiError ? err.message : t.profile.updateFailed);
     } finally {
       setBusy(false);
     }
@@ -118,11 +123,11 @@ export default function ProfileScreen(): React.ReactElement {
     setMessage(null);
     try {
       await api.updateProfile({ can_sell: true });
-      setMessage('เปิดโหมดขายแล้ว');
+      setMessage(t.profile.sellEnabled);
       setMode('sell');
       router.replace('/(tabs)/sell');
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'อัปเดตไม่สำเร็จ');
+      setError(err instanceof ApiError ? err.message : t.profile.updateFailed);
     } finally {
       setBusy(false);
     }
@@ -142,11 +147,11 @@ export default function ProfileScreen(): React.ReactElement {
         can_buy: true,
         ...(user.buyer_type === null ? { buyer_type: buyerType } : {}),
       });
-      setMessage('เปิดโหมดซื้อแล้ว');
+      setMessage(t.profile.buyEnabled);
       setMode('buy');
       router.replace('/(tabs)');
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'อัปเดตไม่สำเร็จ');
+      setError(err instanceof ApiError ? err.message : t.profile.updateFailed);
     } finally {
       setBusy(false);
     }
@@ -158,63 +163,80 @@ export default function ProfileScreen(): React.ReactElement {
     setMessage(null);
     try {
       await api.updateProfile({ line_id: lineId.trim() === '' ? null : lineId.trim() });
-      setMessage('บันทึก LINE ID แล้ว');
+      setMessage(t.profile.lineSaved);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'อัปเดตไม่สำเร็จ');
+      setError(err instanceof ApiError ? err.message : t.profile.updateFailed);
     } finally {
       setBusy(false);
     }
   };
 
+  const rights = [
+    user.can_sell ? t.account.rightSell : null,
+    user.can_buy ? t.account.rightBuy : null,
+    user.is_admin ? t.account.rightAdmin : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
   return (
     <Screen>
       <DonorIntroModal visible={introVisible} onChoice={onIntroChoice} />
-      <StackHeader title="โปรไฟล์" onBack={() => router.replace('/(tabs)/account')} />
+      <StackHeader title={t.profile.title} onBack={() => router.replace('/(tabs)/account')} />
       <Body>
         <Text style={styles.name}>{user.name}</Text>
         <Text style={styles.muted}>{user.phone}</Text>
         <Text style={styles.muted}>
-          สิทธิ์: {[user.can_sell ? 'ขาย' : null, user.can_buy ? 'ซื้อ' : null, user.is_admin ? 'ผู้ดูแล' : null]
-            .filter(Boolean)
-            .join(' · ')}
+          {t.profile.rightsLabel}: {rights || t.account.rightsNone}
         </Text>
         {user.can_buy ? (
           <Text style={styles.muted}>
-            ประเภทผู้ซื้อ:{' '}
-            {buyerTypes.find((t) => t.key === user.buyer_type)?.label ?? '-'}
-            {user.donor_tier !== null ? ` · ระดับผู้รับ ${labelDonorTier(user.donor_tier)}` : ''}
-            {user.donation_suspended ? ' · ระงับสิทธิ์รับบริจาค' : ''}
+            {t.profile.buyerTypeLabel}:{' '}
+            {buyerTypes.find((entry) => entry.key === user.buyer_type)?.label ?? t.common.dash}
+            {user.donor_tier !== null
+              ? formatTemplate(t.profile.donorTierSuffix, { tier: labelDonorTier(user.donor_tier, t) })
+              : ''}
+            {user.donation_suspended ? ` · ${t.profile.donationSuspended}` : ''}
           </Text>
         ) : null}
 
         {user.org_status === 'draft' ? (
           <View style={styles.banner}>
             <Text style={styles.bannerTitle}>
-              คำขอ{labelApplicationKind(user.application_kind)} · สถานะ {labelOrgStatus('draft')}
+              {formatTemplate(t.profile.requestStatus, {
+                kind: labelApplicationKind(user.application_kind, t),
+                status: labelOrgStatus('draft', t),
+              })}
             </Text>
-            <Text style={styles.bannerText}>ยังรับบริจาคไม่ได้จนกว่าจะส่งคำขอครบ (บุคคล) หรือได้รับอนุมัติ (องค์กร)</Text>
-            <PrimaryButton label="กรอกคำขอต่อ" onPress={() => router.push('/donor-apply')} />
+            <Text style={styles.bannerText}>{t.profile.draftBannerBody}</Text>
+            <PrimaryButton label={t.profile.continueApplication} onPress={() => router.push('/donor-apply')} />
           </View>
         ) : null}
 
         {user.org_status === 'pending' ? (
           <View style={styles.banner}>
             <Text style={styles.bannerTitle}>
-              คำขอ{labelApplicationKind(user.application_kind)} · สถานะ {labelOrgStatus('pending')}
+              {formatTemplate(t.profile.requestStatus, {
+                kind: labelApplicationKind(user.application_kind, t),
+                status: labelOrgStatus('pending', t),
+              })}
             </Text>
-            <Text style={styles.bannerText}>รอผู้ดูแลตรวจ — เปิดคำขอเดิมเพื่อส่งเอกสารเพิ่มหรือถอนได้</Text>
-            <PrimaryButton label="เปิดคำขอเดิม" onPress={() => router.push('/donor-apply')} />
+            <Text style={styles.bannerText}>{t.profile.pendingBannerBody}</Text>
+            <PrimaryButton label={t.profile.openExisting} onPress={() => router.push('/donor-apply')} />
           </View>
         ) : null}
         {user.org_status === 'needs_more_info' ? (
           <>
             <Text style={styles.error}>
-              คำขอ{labelApplicationKind(user.application_kind)} · {labelOrgStatus('needs_more_info')}:{' '}
-              {user.org_reject_reason ?? '-'}
+              {formatTemplate(t.profile.needsInfoLine, {
+                kind: labelApplicationKind(user.application_kind, t),
+                status: labelOrgStatus('needs_more_info', t),
+                reason: user.org_reject_reason ?? t.common.dash,
+              })}
             </Text>
-            <PrimaryButton label="แก้ไขคำขอ / อัปโหลดเอกสาร" onPress={() => router.push('/donor-apply')} />
+            <PrimaryButton label={t.profile.editUploadDocs} onPress={() => router.push('/donor-apply')} />
             <PrimaryButton
-              label="อัปโหลดเอกสารเพิ่ม (รูป)"
+              label={t.profile.uploadExtraPhoto}
               onPress={() => {
                 void (async () => {
                   setBusy(true);
@@ -222,7 +244,7 @@ export default function ProfileScreen(): React.ReactElement {
                   try {
                     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
                     if (!permission.granted) {
-                      setError('ไม่ได้รับสิทธิ์เข้าถึงรูปภาพ');
+                      setError(t.profile.photoDenied);
                       return;
                     }
                     const picked = await ImagePicker.launchImageLibraryAsync({
@@ -247,9 +269,9 @@ export default function ProfileScreen(): React.ReactElement {
                         doc_category: 'other',
                       },
                     ]);
-                    setMessage('อัปโหลดเอกสารเพิ่มแล้ว');
+                    setMessage(t.profile.uploadExtraOk);
                   } catch (err) {
-                    setError(err instanceof ApiError ? err.message : 'อัปโหลดไม่สำเร็จ');
+                    setError(err instanceof ApiError ? err.message : t.profile.uploadFailed);
                   } finally {
                     setBusy(false);
                   }
@@ -258,16 +280,16 @@ export default function ProfileScreen(): React.ReactElement {
               loading={busy}
             />
             <PrimaryButton
-              label="ส่งตรวจอีกครั้ง"
+              label={t.profile.resubmit}
               onPress={() => {
                 void (async () => {
                   setBusy(true);
                   setError(null);
                   try {
                     await api.resubmitOrg();
-                    setMessage('ส่งคำขอตรวจอีกครั้งแล้ว');
+                    setMessage(t.profile.resubmitOk);
                   } catch (err) {
-                    setError(err instanceof ApiError ? err.message : 'ส่งตรวจไม่สำเร็จ');
+                    setError(err instanceof ApiError ? err.message : t.profile.resubmitFailed);
                   } finally {
                     setBusy(false);
                   }
@@ -280,35 +302,51 @@ export default function ProfileScreen(): React.ReactElement {
         {user.org_status === 'rejected' ? (
           <>
             <Text style={styles.error}>
-              คำขอ{labelApplicationKind(user.application_kind)} {labelOrgStatus('rejected')}:{' '}
-              {user.org_reject_reason ?? '-'}
+              {formatTemplate(t.profile.rejectedLine, {
+                kind: labelApplicationKind(user.application_kind, t),
+                status: labelOrgStatus('rejected', t),
+                reason: user.org_reject_reason ?? t.common.dash,
+              })}
             </Text>
-            <PrimaryButton label="สมัครใหม่" onPress={() => router.push('/donor-apply')} />
+            <PrimaryButton label={t.profile.applyAgain} onPress={() => router.push('/donor-apply')} />
           </>
         ) : null}
         {user.org_status === 'approved' && user.application_kind === 'organization' ? (
           <Text style={styles.ok}>
-            คำขอองค์กร · {labelOrgStatus('approved')}: {user.org_name ?? '-'}
+            {formatTemplate(t.profile.approvedOrg, {
+              status: labelOrgStatus('approved', t),
+              name: user.org_name ?? t.common.dash,
+            })}
           </Text>
         ) : null}
         {user.org_status === 'approved' && user.application_kind === 'individual' ? (
-          <Text style={styles.ok}>คำขอบุคคล · {labelOrgStatus('approved')} · พร้อมรับบริจาค</Text>
+          <Text style={styles.ok}>
+            {formatTemplate(t.profile.approvedIndividual, {
+              status: labelOrgStatus('approved', t),
+            })}
+          </Text>
         ) : null}
 
-        <SectionTitle>LINE ID</SectionTitle>
-        <Field label="LINE ID" value={lineId} onChangeText={setLineId} placeholder="ไม่บังคับ" autoCapitalize="none" />
-        <PrimaryButton label="บันทึก LINE" onPress={saveLine} loading={busy} />
+        <SectionTitle>{t.profile.lineId}</SectionTitle>
+        <Field
+          label={t.profile.lineId}
+          value={lineId}
+          onChangeText={setLineId}
+          placeholder={t.profile.lineOptional}
+          autoCapitalize="none"
+        />
+        <PrimaryButton label={t.profile.saveLine} onPress={saveLine} loading={busy} />
 
         {!user.can_sell ? (
           <>
-            <SectionTitle>เปิดโหมดขาย</SectionTitle>
-            <PrimaryButton label="เปิดสิทธิ์ขาย" onPress={enableSell} loading={busy} />
+            <SectionTitle>{t.profile.sectionEnableSell}</SectionTitle>
+            <PrimaryButton label={t.profile.enableSell} onPress={enableSell} loading={busy} />
           </>
         ) : null}
 
         {!user.can_buy ? (
           <>
-            <SectionTitle>เปิดโหมดซื้อ</SectionTitle>
+            <SectionTitle>{t.profile.sectionEnableBuy}</SectionTitle>
             <View style={styles.row}>
               {buyerTypes.map((entry) => (
                 <Chip
@@ -319,14 +357,14 @@ export default function ProfileScreen(): React.ReactElement {
                 />
               ))}
             </View>
-            <PrimaryButton label="เปิดสิทธิ์ซื้อ" onPress={enableBuy} loading={busy} />
+            <PrimaryButton label={t.profile.enableBuy} onPress={enableBuy} loading={busy} />
           </>
         ) : null}
 
         {user.is_admin ? (
           <>
-            <SectionTitle>ผู้ดูแล</SectionTitle>
-            <SecondaryButton label="ดูคำขอองค์กร" onPress={() => router.push('/admin')} />
+            <SectionTitle>{t.profile.sectionAdmin}</SectionTitle>
+            <SecondaryButton label={t.profile.viewOrgRequests} onPress={() => router.push('/admin')} />
           </>
         ) : null}
 
@@ -336,18 +374,18 @@ export default function ProfileScreen(): React.ReactElement {
         user.org_status !== 'draft' &&
         user.org_status !== 'needs_more_info' ? (
           <>
-            <SectionTitle>รับบริจาค</SectionTitle>
+            <SectionTitle>{t.profile.sectionDonate}</SectionTitle>
             <PrimaryButton
-              label="เป็นจิตอาสา (เร็ว)"
+              label={t.profile.quickVolunteer}
               onPress={() => {
                 void (async () => {
                   setBusy(true);
                   setError(null);
                   try {
                     await api.becomeVolunteer();
-                    setMessage('เปิดสิทธิ์จิตอาสาแล้ว');
+                    setMessage(t.profile.volunteerEnabled);
                   } catch (err) {
-                    setError(err instanceof ApiError ? err.message : 'เปิดสิทธิ์ไม่สำเร็จ');
+                    setError(err instanceof ApiError ? err.message : t.profile.enableFailed);
                   } finally {
                     setBusy(false);
                   }
@@ -356,7 +394,7 @@ export default function ProfileScreen(): React.ReactElement {
               loading={busy}
             />
             <SecondaryButton
-              label="สมัครแบบทางการ"
+              label={t.profile.formalApply}
               onPress={() => {
                 setIntroVisible(true);
               }}
@@ -365,7 +403,11 @@ export default function ProfileScreen(): React.ReactElement {
         ) : null}
 
         {user.can_sell && user.can_buy ? (
-          <Text style={styles.hint}>โหมดปัจจุบัน: {mode === 'sell' ? 'ขาย' : 'ซื้อ'} — สลับได้ที่หัวข้อหน้า</Text>
+          <Text style={styles.hint}>
+            {formatTemplate(t.profile.modeHint, {
+              mode: mode === 'sell' ? t.profile.modeSell : t.profile.modeBuy,
+            })}
+          </Text>
         ) : null}
 
         {message !== null ? <Text style={styles.ok}>{message}</Text> : null}

@@ -24,6 +24,7 @@ export async function seed(): Promise<void> {
         crop.key,
         await upsertCrop(connection, {
           nameTh: crop.nameTh,
+          nameEn: crop.nameEn,
           baseShelfDays: crop.baseShelfDays,
           marketPricePerKg: crop.marketPricePerKg,
           normalFeaturesTh: crop.normalFeaturesTh,
@@ -98,6 +99,7 @@ async function upsertCrop(
   connection: PoolConnection,
   input: {
     nameTh: string;
+    nameEn: string;
     baseShelfDays: number;
     marketPricePerKg: number;
     normalFeaturesTh: string;
@@ -112,18 +114,32 @@ async function upsertCrop(
   if (row !== undefined) {
     await connection.query(
       `UPDATE crops
-       SET base_shelf_days = ?, market_price_per_kg = ?,
+       SET name_en = ?, base_shelf_days = ?, market_price_per_kg = ?,
            normal_features_th = ?, defect_examples_th = ?
        WHERE id = ?`,
-      [input.baseShelfDays, input.marketPricePerKg, input.normalFeaturesTh, input.defectExamplesTh, row.id],
+      [
+        input.nameEn,
+        input.baseShelfDays,
+        input.marketPricePerKg,
+        input.normalFeaturesTh,
+        input.defectExamplesTh,
+        row.id,
+      ],
     );
     return Number(row.id);
   }
   const [result] = await connection.query<ResultSetHeader>(
     `INSERT INTO crops
-       (name_th, base_shelf_days, market_price_per_kg, normal_features_th, defect_examples_th)
-     VALUES (?, ?, ?, ?, ?)`,
-    [input.nameTh, input.baseShelfDays, input.marketPricePerKg, input.normalFeaturesTh, input.defectExamplesTh],
+       (name_th, name_en, base_shelf_days, market_price_per_kg, normal_features_th, defect_examples_th)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [
+      input.nameTh,
+      input.nameEn,
+      input.baseShelfDays,
+      input.marketPricePerKg,
+      input.normalFeaturesTh,
+      input.defectExamplesTh,
+    ],
   );
   return result.insertId;
 }

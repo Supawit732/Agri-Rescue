@@ -14,10 +14,12 @@ import {
 import { useAuth } from '../../../src/context/AuthContext';
 import { useApiData } from '../../../src/hooks/useApiData';
 import { formatCountdown, hoursLeftFrom, useNow } from '../../../src/hooks/useNow';
+import { formatTemplate, useI18n } from '../../../src/i18n';
 import {
   availableAsOf,
   defaultQuantity,
   donationEligibility,
+  donationEligibilityLabels,
   marketSaleBadge,
   minOrderOf,
   remainingOf,
@@ -34,6 +36,7 @@ export default function LotDetailScreen(): React.ReactElement {
   const { id, intent } = useLocalSearchParams<{ id: string; intent?: string }>();
   const lotId = Number(id);
   const { api, user } = useAuth();
+  const { t, formatNumber, cropName } = useI18n();
   const router = useRouter();
   const now = useNow();
   const donationIntent = intent === 'donate';
@@ -131,11 +134,11 @@ export default function LotDetailScreen(): React.ReactElement {
     const remaining = remainingOf(lot);
     const min = minOrderOf(lot);
     if (splitAllowedOf(lot) && remaining + 1e-6 >= min && quantityKg + 1e-6 < min) {
-      setQuantityError(`ขั้นต่ำ ${min} กก.`);
+      setQuantityError(formatTemplate(t.lot.qtyMinOrder, { min: formatNumber(min) }));
       return;
     }
     if (quantityKg - remaining > 1e-6) {
-      setQuantityError('เกินจำนวนคงเหลือ');
+      setQuantityError(t.lot.qtyOverRemaining);
       return;
     }
     router.push({
@@ -153,7 +156,7 @@ export default function LotDetailScreen(): React.ReactElement {
   };
 
   return (
-    <SubScreen title="รายละเอียดล็อต" onBack={() => router.replace('/(tabs)')}>
+    <SubScreen title={t.lot.title} onBack={() => router.replace('/(tabs)')}>
       <DataState
         loading={!coordsReady || loading}
         error={error}
@@ -165,22 +168,23 @@ export default function LotDetailScreen(): React.ReactElement {
           const tone = urgency(hours);
           const remaining = remainingOf(lot);
           const available = availableAsOf(lot);
-          const elig = donationEligibility(user, lot, quantityKg);
-          const saleBadge = marketSaleBadge(lot);
+          const elig = donationEligibility(user, lot, quantityKg, donationEligibilityLabels(t));
+          const saleBadge = marketSaleBadge(lot, {
+            sell: t.market.badgeSell,
+            donate: t.market.badgeDonate,
+            donateOk: t.market.badgeDonateOk,
+          });
           const canDonate = donationIntent && elig.canDonate;
           const canBuy = !donationIntent && available.includes('buy') && lot.price_per_kg !== null;
           const area = lot.area_th ?? lot.plot_name ?? null;
-          const cropTitle =
-            lot.crop_name_en !== undefined && lot.crop_name_en !== null && lot.crop_name_en !== ''
-              ? `${lot.crop_name_th} (${lot.crop_name_en})`
-              : lot.crop_name_th;
+          const cropTitle = cropName({ name_th: lot.crop_name_th, name_en: lot.crop_name_en });
 
           return (
             <Body>
               <Card>
                 <View style={styles.header}>
                   <Text style={styles.title}>{cropTitle}</Text>
-                  <Badge text={formatCountdown(hours)} fg={tone.fg} bg={tone.bg} />
+                  <Badge text={formatCountdown(hours, t.countdown)} fg={tone.fg} bg={tone.bg} />
                 </View>
                 {saleBadge !== null ? (
                   <Badge
@@ -190,26 +194,33 @@ export default function LotDetailScreen(): React.ReactElement {
                   />
                 ) : null}
                 {lot.farmer_name !== undefined ? (
-                  <Text style={styles.line}>โดย {lot.farmer_name}</Text>
+                  <Text style={styles.line}>
+                    {t.market.byFarmer} {lot.farmer_name}
+                  </Text>
                 ) : null}
                 <Text style={styles.line}>
-                  เหลือ {remaining} / {lot.weight_kg} กก.
-                  {splitAllowedOf(lot) ? ` · ขั้นต่ำ ${minOrderOf(lot)} กก.` : ' · ขายยกล็อต'}
+                  {t.lot.remaining} {formatNumber(remaining)} / {formatNumber(lot.weight_kg)}{' '}
+                  {t.dashboard.unitKg}
+                  {splitAllowedOf(lot)
+                    ? ` · ${t.market.minOrder} ${formatNumber(minOrderOf(lot))} ${t.dashboard.unitKg}`
+                    : ` · ${t.market.wholeLot}`}
                 </Text>
                 <Text style={styles.line}>
-                  {lot.grade === 'substandard' ? 'ตกเกรด' : 'ปกติ'}
+                  {lot.grade === 'substandard' ? t.market.gradeSub : t.market.gradeNormal}
                   {area !== null ? ` · ${area}` : ''}
                 </Text>
                 {lot.distance_km !== null && lot.distance_km !== undefined ? (
-                  <Text style={styles.line}>ระยะประมาณ {lot.distance_km.toFixed(1)} กม.</Text>
+                  <Text style={styles.line}>
+                    {t.lot.approxDistance} {lot.distance_km.toFixed(1)} {t.market.km}
+                  </Text>
                 ) : null}
               </Card>
 
               {user === null ? (
                 <Card>
-                  <Text style={styles.line}>เข้าสู่ระบบเพื่อจองซื้อหรือขอรับบริจาค</Text>
+                  <Text style={styles.line}>{t.lot.loginToBook}</Text>
                   <PrimaryButton
-                    label={donationIntent ? 'เข้าสู่ระบบเพื่อขอรับบริจาค' : 'เข้าสู่ระบบเพื่อจอง'}
+                    label={donationIntent ? t.lot.loginToDonate : t.lot.loginToBuy}
                     tone={donationIntent ? 'turmeric' : undefined}
                     onPress={goLogin}
                   />
@@ -217,7 +228,7 @@ export default function LotDetailScreen(): React.ReactElement {
               ) : (
                 <>
                   <Card>
-                    <Text style={styles.qtyLabel}>จำนวน (กก.)</Text>
+                    <Text style={styles.qtyLabel}>{t.lot.qtyLabel}</Text>
                     <View style={styles.stepper}>
                       <Pressable
                         style={styles.stepBtn}
@@ -226,7 +237,7 @@ export default function LotDetailScreen(): React.ReactElement {
                       >
                         <Text style={styles.stepBtnText}>−</Text>
                       </Pressable>
-                      <Text style={styles.qtyValue}>{quantityKg}</Text>
+                      <Text style={styles.qtyValue}>{formatNumber(quantityKg)}</Text>
                       <Pressable
                         style={styles.stepBtn}
                         onPress={() => adjustQuantity(lot, 1)}
@@ -238,7 +249,9 @@ export default function LotDetailScreen(): React.ReactElement {
                     {quantityError !== null ? <Text style={styles.fieldError}>{quantityError}</Text> : null}
                     {!donationIntent && lot.price_per_kg !== null ? (
                       <Text style={styles.total}>
-                        รวมประมาณ {Math.round(lot.price_per_kg * quantityKg)} บาท
+                        {t.lot.approxTotal}{' '}
+                        {formatNumber(Math.round(lot.price_per_kg * quantityKg))}{' '}
+                        {t.dashboard.unitBaht}
                       </Text>
                     ) : null}
                     {donationIntent && !elig.canDonate && elig.reason !== null ? (
@@ -248,12 +261,12 @@ export default function LotDetailScreen(): React.ReactElement {
 
                   {canBuy || canDonate ? (
                     <PrimaryButton
-                      label="ไปหน้ายืนยัน"
+                      label={t.lot.goConfirm}
                       tone={donationIntent ? 'turmeric' : undefined}
                       onPress={() => goConfirm(lot)}
                     />
                   ) : (
-                    <SecondaryButton label="กลับไปตลาด" onPress={() => router.replace('/(tabs)')} />
+                    <SecondaryButton label={t.lot.backToMarket} onPress={() => router.replace('/(tabs)')} />
                   )}
                 </>
               )}

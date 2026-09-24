@@ -13,15 +13,6 @@ import { publicRateLimit } from '../middleware/publicRateLimit';
 export const publicMarketRouter = Router();
 publicMarketRouter.use(publicRateLimit);
 
-/** Temporary EN labels for seeded crops until 6.3 adds crops.name_en. */
-const CROP_NAME_EN: Record<string, string> = {
-  มะม่วง: 'Mango',
-  กล้วยน้ำว้า: 'Namwa banana',
-  มะเขือเทศ: 'Tomato',
-  ผักบุ้ง: 'Morning glory',
-  มะนาว: 'Lime',
-};
-
 const optionalCoordsSchema = z.object({
   lat: z.coerce.number().gte(-90).lte(90).optional(),
   lng: z.coerce.number().gte(-180).lte(180).optional(),
@@ -42,6 +33,7 @@ interface PublicMarketRow extends RowDataPacket {
   donation_opened: number;
   expires_at: Date;
   crop_name_th: string;
+  crop_name_en: string | null;
   base_shelf_days: number;
   lat: number;
   lng: number;
@@ -70,7 +62,7 @@ export type PublicLot = {
 const PUBLIC_LOT_SELECT = `SELECT h.id, h.weight_kg, h.min_order_kg, h.order_step_kg,
               h.grade, h.ripeness, h.start_price_per_kg, h.floor_price_per_kg,
               h.sale_mode, h.donation_opened, h.expires_at,
-              c.name_th AS crop_name_th, c.base_shelf_days,
+              c.name_th AS crop_name_th, c.name_en AS crop_name_en, c.base_shelf_days,
               p.lat, p.lng, p.name AS plot_name,
               COALESCE((
                 SELECT SUM(o.quantity_kg) FROM orders o
@@ -116,7 +108,7 @@ function presentPublicLot(
   return {
     id: Number(row.id),
     crop_name_th: row.crop_name_th,
-    crop_name_en: CROP_NAME_EN[row.crop_name_th] ?? null,
+    crop_name_en: row.crop_name_en === null || row.crop_name_en === '' ? null : String(row.crop_name_en),
     grade: row.grade,
     ripeness: Number(row.ripeness),
     weight_kg: weightKg,

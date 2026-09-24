@@ -17,17 +17,20 @@ import {
 } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
 import { useApiData } from '../src/hooks/useApiData';
+import { formatTemplate, useI18n } from '../src/i18n';
 import { C } from '../src/theme';
 import type { Stop } from '../src/api/types';
 
-const BATCH_STATUS: Record<string, string> = {
-  planned: 'ยังไม่เริ่ม',
-  in_progress: 'กำลังวิ่ง',
-  completed: 'เสร็จแล้ว',
-};
+function batchStatusLabel(status: string, t: ReturnType<typeof useI18n>['t']): string {
+  if (status === 'planned') return t.coordinator.statusPlanned;
+  if (status === 'in_progress') return t.coordinator.statusInProgress;
+  if (status === 'completed') return t.coordinator.statusCompleted;
+  return status;
+}
 
 export default function CoordinatorScreen(): React.ReactElement {
   const { logout } = useAuth();
+  const { t } = useI18n();
   const router = useRouter();
   const [selected, setSelected] = useState<number | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -36,7 +39,7 @@ export default function CoordinatorScreen(): React.ReactElement {
 
   return (
     <Screen>
-      <TopBar title="ผู้ประสาน" onImpact={() => router.push('/impact')} onLogout={logout} />
+      <TopBar title={t.coordinator.title} onImpact={() => router.push('/impact')} onLogout={logout} />
       {selected === null ? (
         <Overview refreshKey={refreshKey} onCreated={bump} onSelect={setSelected} />
       ) : (
@@ -56,6 +59,7 @@ function Overview({
   onSelect: (id: number) => void;
 }): React.ReactElement {
   const { api } = useAuth();
+  const { t } = useI18n();
   const drivers = useApiData(() => api.getDrivers(), []);
   const batches = useApiData(() => api.getBatches(), [refreshKey]);
   const [driverId, setDriverId] = useState<number | null>(null);
@@ -65,17 +69,22 @@ function Overview({
   const create = async (): Promise<void> => {
     setBanner(null);
     if (driverId === null) {
-      setBanner('กรุณาเลือกคนขับ');
+      setBanner(t.coordinator.needDriver);
       return;
     }
     setCreating(true);
     try {
       const result = await api.createBatch(driverId);
-      setBanner(`สร้างรอบ #${result.batch.id} สำเร็จ (${result.stops.length} จุดแวะ)`);
+      setBanner(
+        formatTemplate(t.coordinator.createSuccess, {
+          id: result.batch.id,
+          stops: result.stops.length,
+        }),
+      );
       onCreated();
       batches.reload();
     } catch (err) {
-      setBanner(err instanceof ApiError ? err.message : 'สร้างรอบไม่สำเร็จ');
+      setBanner(err instanceof ApiError ? err.message : t.coordinator.createFailed);
     } finally {
       setCreating(false);
     }
@@ -83,16 +92,16 @@ function Overview({
 
   return (
     <Body>
-      <SectionTitle>สร้างรอบวิ่ง</SectionTitle>
+      <SectionTitle>{t.coordinator.createSection}</SectionTitle>
       <Card>
-        <Text style={styles.label}>เลือกคนขับ</Text>
+        <Text style={styles.label}>{t.coordinator.pickDriver}</Text>
         <DataState
           loading={drivers.loading}
           error={drivers.error}
           data={drivers.data}
           onRetry={drivers.reload}
           isEmpty={(list) => list.length === 0}
-          emptyText="ยังไม่มีคนขับในระบบ"
+          emptyText={t.coordinator.noDrivers}
         >
           {(list) => (
             <View style={styles.row}>
@@ -108,28 +117,32 @@ function Overview({
           )}
         </DataState>
         {banner !== null ? <Text style={styles.banner}>{banner}</Text> : null}
-        <PrimaryButton label="สร้างรอบ" onPress={() => void create()} loading={creating} />
+        <PrimaryButton label={t.coordinator.createBatch} onPress={() => void create()} loading={creating} />
       </Card>
 
-      <SectionTitle>รอบทั้งหมด</SectionTitle>
+      <SectionTitle>{t.coordinator.allBatches}</SectionTitle>
       <DataState
         loading={batches.loading}
         error={batches.error}
         data={batches.data}
         onRetry={batches.reload}
         isEmpty={(list) => list.length === 0}
-        emptyText="ยังไม่มีรอบวิ่ง"
+        emptyText={t.coordinator.emptyBatches}
       >
         {(list) => (
           <>
             {list.map((batch) => (
               <Card key={batch.id}>
                 <View style={styles.rowBetween}>
-                  <Text style={styles.title}>รอบ #{batch.id}</Text>
-                  <Badge text={BATCH_STATUS[batch.status] ?? batch.status} fg={C.leaf} bg={C.leafSoft} />
+                  <Text style={styles.title}>
+                    {formatTemplate(t.coordinator.batchTitle, { id: batch.id })}
+                  </Text>
+                  <Badge text={batchStatusLabel(batch.status, t)} fg={C.leaf} bg={C.leafSoft} />
                 </View>
-                <Text style={styles.line}>ระยะรวม {batch.planned_km} กม.</Text>
-                <SecondaryButton label="ตรวจจุดแวะ / ปลดล็อก" onPress={() => onSelect(batch.id)} />
+                <Text style={styles.line}>
+                  {formatTemplate(t.coordinator.totalKm, { km: batch.planned_km })}
+                </Text>
+                <SecondaryButton label={t.coordinator.reviewStops} onPress={() => onSelect(batch.id)} />
               </Card>
             ))}
           </>
@@ -141,6 +154,7 @@ function Overview({
 
 function BatchReview({ batchId, onBack }: { batchId: number; onBack: () => void }): React.ReactElement {
   const { api } = useAuth();
+  const { t } = useI18n();
   const { data, loading, error, reload } = useApiData(() => api.getBatch(batchId), [batchId]);
   const [banner, setBanner] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
@@ -152,7 +166,7 @@ function BatchReview({ batchId, onBack }: { batchId: number; onBack: () => void 
       await api.unlockStop(stop.id);
       reload();
     } catch (err) {
-      setBanner(err instanceof ApiError ? err.message : 'ปลดล็อกไม่สำเร็จ');
+      setBanner(err instanceof ApiError ? err.message : t.coordinator.unlockFailed);
     } finally {
       setBusyId(null);
     }
@@ -164,40 +178,60 @@ function BatchReview({ batchId, onBack }: { batchId: number; onBack: () => void 
         const flagged = detail.stops.filter((stop) => stop.weight_flag);
         return (
           <Body>
-            <Text style={styles.title}>รอบ #{detail.batch.id}</Text>
-            <Text style={styles.line}>ระยะรวม {detail.batch.planned_km} กม.</Text>
+            <Text style={styles.title}>
+              {formatTemplate(t.coordinator.batchTitle, { id: detail.batch.id })}
+            </Text>
+            <Text style={styles.line}>
+              {formatTemplate(t.coordinator.totalKm, { km: detail.batch.planned_km })}
+            </Text>
             {banner !== null ? <Text style={styles.banner}>{banner}</Text> : null}
 
-            <SectionTitle>จุดที่น้ำหนักผิดปกติ (weight_flag)</SectionTitle>
+            <SectionTitle>{t.coordinator.weightFlags}</SectionTitle>
             {flagged.length === 0 ? (
-              <Text style={styles.mutedLine}>ไม่มีจุดที่น้ำหนักต่างเกิน 10%</Text>
+              <Text style={styles.mutedLine}>{t.coordinator.noWeightFlags}</Text>
             ) : (
               flagged.map((stop) => (
                 <Card key={`flag-${stop.id}`} style={{ borderColor: C.chili }}>
-                  <Text style={styles.flagTitle}>ลำดับ {stop.seq} · ล็อต #{stop.lot_id ?? '-'}</Text>
-                  <Text style={styles.line}>ชั่งได้ {stop.confirmed_weight_kg ?? '-'} กก. (ต่างเกิน 10%)</Text>
+                  <Text style={styles.flagTitle}>
+                    {formatTemplate(t.coordinator.flagStop, {
+                      seq: stop.seq,
+                      lot: stop.lot_id ?? t.common.dash,
+                    })}
+                  </Text>
+                  <Text style={styles.line}>
+                    {formatTemplate(t.coordinator.weighedDiff, {
+                      kg: stop.confirmed_weight_kg ?? t.common.dash,
+                    })}
+                  </Text>
                 </Card>
               ))
             )}
 
-            <SectionTitle>จุดแวะทั้งหมด</SectionTitle>
+            <SectionTitle>{t.coordinator.allStops}</SectionTitle>
             {detail.stops.map((stop) => (
               <Card key={stop.id}>
                 <View style={styles.stopHeader}>
                   <CircleSeq seq={stop.seq} color={stop.stop_type === 'pickup' ? C.turmeric : C.leaf} />
                   <View style={styles.stopText}>
                     <Text style={styles.stopTitle}>
-                      {stop.stop_type === 'pickup' ? 'รับของ' : 'ส่งมอบ'} · ช่วง {stop.leg_km} กม.
+                      {formatTemplate(t.coordinator.legKm, {
+                        type: stop.stop_type === 'pickup' ? t.coordinator.pickup : t.coordinator.drop,
+                        km: stop.leg_km,
+                      })}
                     </Text>
-                    <Text style={styles.stopSub}>{stop.status === 'done' ? 'เสร็จแล้ว' : 'รอดำเนินการ'}</Text>
+                    <Text style={styles.stopSub}>
+                      {stop.status === 'done' ? t.coordinator.done : t.coordinator.pending}
+                    </Text>
                   </View>
-                  {stop.weight_flag ? <Badge text="น้ำหนักผิดปกติ" fg={C.chili} bg={C.chiliSoft} /> : null}
+                  {stop.weight_flag ? (
+                    <Badge text={t.coordinator.weightAbnormal} fg={C.chili} bg={C.chiliSoft} />
+                  ) : null}
                 </View>
                 {stop.locked ? (
                   <>
-                    <Text style={styles.lockedLine}>ถูกล็อก (OTP ผิดครบ 5 ครั้ง)</Text>
+                    <Text style={styles.lockedLine}>{t.coordinator.locked}</Text>
                     <PrimaryButton
-                      label="ปลดล็อก OTP"
+                      label={t.coordinator.unlockOtp}
                       tone="chili"
                       loading={busyId === stop.id}
                       onPress={() => void unlock(stop)}
@@ -207,7 +241,7 @@ function BatchReview({ batchId, onBack }: { batchId: number; onBack: () => void 
               </Card>
             ))}
 
-            <SecondaryButton label="กลับ" onPress={onBack} />
+            <SecondaryButton label={t.common.back} onPress={onBack} />
           </Body>
         );
       }}

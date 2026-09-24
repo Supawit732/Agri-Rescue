@@ -2,43 +2,129 @@ import { Tabs, usePathname, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useI18n } from '../../src/i18n';
 import { C } from '../../src/theme';
 
 const SIDEBAR_BREAKPOINT = 900;
 
-const TAB_ITEMS: {
-  name: string;
-  href: string;
-  label: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  iconOutline: keyof typeof Ionicons.glyphMap;
-}[] = [
-  { name: 'index', href: '/(tabs)', label: 'ตลาด', icon: 'storefront', iconOutline: 'storefront-outline' },
-  { name: 'sell', href: '/(tabs)/sell', label: 'ขาย', icon: 'leaf', iconOutline: 'leaf-outline' },
-  {
-    name: 'orders',
-    href: '/(tabs)/orders',
-    label: 'คำสั่งซื้อ',
-    icon: 'receipt',
-    iconOutline: 'receipt-outline',
-  },
-  {
-    name: 'notifications',
-    href: '/(tabs)/notifications',
-    label: 'แจ้งเตือน',
-    icon: 'notifications',
-    iconOutline: 'notifications-outline',
-  },
-  {
-    name: 'account',
-    href: '/(tabs)/account',
-    label: 'บัญชี',
-    icon: 'person',
-    iconOutline: 'person-outline',
-  },
-];
+export default function TabsLayout(): React.ReactElement {
+  const { width } = useWindowDimensions();
+  const isWide = width >= SIDEBAR_BREAKPOINT;
+  const { t } = useI18n();
 
-function SideNav(): React.ReactElement {
+  const tabItems: {
+    name: string;
+    href: string;
+    label: string;
+    icon: keyof typeof Ionicons.glyphMap;
+    iconOutline: keyof typeof Ionicons.glyphMap;
+  }[] = [
+    { name: 'index', href: '/(tabs)', label: t.tabs.market, icon: 'storefront', iconOutline: 'storefront-outline' },
+    { name: 'sell', href: '/(tabs)/sell', label: t.tabs.sell, icon: 'leaf', iconOutline: 'leaf-outline' },
+    {
+      name: 'orders',
+      href: '/(tabs)/orders',
+      label: t.tabs.orders,
+      icon: 'receipt',
+      iconOutline: 'receipt-outline',
+    },
+    {
+      name: 'notifications',
+      href: '/(tabs)/notifications',
+      label: t.tabs.notifications,
+      icon: 'notifications',
+      iconOutline: 'notifications-outline',
+    },
+    {
+      name: 'account',
+      href: '/(tabs)/account',
+      label: t.tabs.account,
+      icon: 'person',
+      iconOutline: 'person-outline',
+    },
+  ];
+
+  return (
+    <View style={[styles.root, isWide ? styles.rootWide : null]}>
+      {isWide ? <SideNav items={tabItems} /> : null}
+      <View style={styles.tabsWrap}>
+        <Tabs
+          screenOptions={{
+            headerShown: false,
+            tabBarActiveTintColor: C.leaf,
+            tabBarInactiveTintColor: C.mute,
+            tabBarStyle: isWide
+              ? { display: 'none' }
+              : { backgroundColor: C.white, borderTopColor: C.line },
+            sceneStyle: { backgroundColor: C.bg },
+          }}
+        >
+          <Tabs.Screen
+            name="index"
+            options={{
+              title: t.tabs.market,
+              tabBarIcon: ({ color, size, focused }) => (
+                <Ionicons name={focused ? 'storefront' : 'storefront-outline'} size={size} color={color} />
+              ),
+            }}
+          />
+          <Tabs.Screen
+            name="sell"
+            options={{
+              title: t.tabs.sell,
+              tabBarIcon: ({ color, size, focused }) => (
+                <Ionicons name={focused ? 'leaf' : 'leaf-outline'} size={size} color={color} />
+              ),
+            }}
+          />
+          <Tabs.Screen
+            name="orders"
+            options={{
+              title: t.tabs.orders,
+              tabBarIcon: ({ color, size, focused }) => (
+                <Ionicons name={focused ? 'receipt' : 'receipt-outline'} size={size} color={color} />
+              ),
+            }}
+          />
+          <Tabs.Screen
+            name="notifications"
+            options={{
+              title: t.tabs.notifications,
+              tabBarIcon: ({ color, size, focused }) => (
+                <Ionicons
+                  name={focused ? 'notifications' : 'notifications-outline'}
+                  size={size}
+                  color={color}
+                />
+              ),
+            }}
+          />
+          <Tabs.Screen
+            name="account"
+            options={{
+              title: t.tabs.account,
+              tabBarIcon: ({ color, size, focused }) => (
+                <Ionicons name={focused ? 'person' : 'person-outline'} size={size} color={color} />
+              ),
+            }}
+          />
+        </Tabs>
+      </View>
+    </View>
+  );
+}
+
+function SideNav({
+  items,
+}: {
+  items: {
+    name: string;
+    href: string;
+    label: string;
+    icon: keyof typeof Ionicons.glyphMap;
+    iconOutline: keyof typeof Ionicons.glyphMap;
+  }[];
+}): React.ReactElement {
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
@@ -53,7 +139,7 @@ function SideNav(): React.ReactElement {
   return (
     <View style={[styles.sideNav, { paddingTop: insets.top + 12 }]}>
       <Text style={styles.brand}>Agri-Rescue</Text>
-      {TAB_ITEMS.map((item) => {
+      {items.map((item) => {
         const active = isActive(item.href);
         return (
           <Pressable
@@ -71,80 +157,6 @@ function SideNav(): React.ReactElement {
           </Pressable>
         );
       })}
-    </View>
-  );
-}
-
-export default function TabsLayout(): React.ReactElement {
-  const { width } = useWindowDimensions();
-  const isWide = width >= SIDEBAR_BREAKPOINT;
-
-  return (
-    <View style={[styles.root, isWide ? styles.rootWide : null]}>
-      {isWide ? <SideNav /> : null}
-      <View style={styles.tabsWrap}>
-        <Tabs
-          screenOptions={{
-            headerShown: false,
-            tabBarActiveTintColor: C.leaf,
-            tabBarInactiveTintColor: C.mute,
-            tabBarStyle: isWide
-              ? { display: 'none' }
-              : { backgroundColor: C.white, borderTopColor: C.line },
-            sceneStyle: { backgroundColor: C.bg },
-          }}
-        >
-          <Tabs.Screen
-            name="index"
-            options={{
-              title: 'ตลาด',
-              tabBarIcon: ({ color, size, focused }) => (
-                <Ionicons name={focused ? 'storefront' : 'storefront-outline'} size={size} color={color} />
-              ),
-            }}
-          />
-          <Tabs.Screen
-            name="sell"
-            options={{
-              title: 'ขาย',
-              tabBarIcon: ({ color, size, focused }) => (
-                <Ionicons name={focused ? 'leaf' : 'leaf-outline'} size={size} color={color} />
-              ),
-            }}
-          />
-          <Tabs.Screen
-            name="orders"
-            options={{
-              title: 'คำสั่งซื้อ',
-              tabBarIcon: ({ color, size, focused }) => (
-                <Ionicons name={focused ? 'receipt' : 'receipt-outline'} size={size} color={color} />
-              ),
-            }}
-          />
-          <Tabs.Screen
-            name="notifications"
-            options={{
-              title: 'แจ้งเตือน',
-              tabBarIcon: ({ color, size, focused }) => (
-                <Ionicons
-                  name={focused ? 'notifications' : 'notifications-outline'}
-                  size={size}
-                  color={color}
-                />
-              ),
-            }}
-          />
-          <Tabs.Screen
-            name="account"
-            options={{
-              title: 'บัญชี',
-              tabBarIcon: ({ color, size, focused }) => (
-                <Ionicons name={focused ? 'person' : 'person-outline'} size={size} color={color} />
-              ),
-            }}
-          />
-        </Tabs>
-      </View>
     </View>
   );
 }
