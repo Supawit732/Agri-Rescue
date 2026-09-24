@@ -9,7 +9,6 @@ import {
   DataState,
   Field,
   PrimaryButton,
-  SecondaryButton,
   SectionTitle,
   SubScreen,
 } from '../../src/components/ui';
@@ -23,7 +22,7 @@ import { C, urgency } from '../../src/theme';
 export default function OrderDetailScreen(): React.ReactElement {
   const { id } = useLocalSearchParams<{ id: string }>();
   const orderId = Number(id);
-  const { api, user } = useAuth();
+  const { api } = useAuth();
   const router = useRouter();
   const now = useNow();
   const { data, loading, error, reload } = useApiData(() => api.getOrder(orderId), [orderId]);
@@ -70,7 +69,37 @@ export default function OrderDetailScreen(): React.ReactElement {
           const lat = order.lat ?? order.plot_lat ?? null;
           const lng = order.lng ?? order.plot_lng ?? null;
           const active = order.status === 'reserved' || order.status === 'picked';
-          const showSellerStub = user?.can_sell === true;
+          const isSellerView = order.viewer === 'seller';
+          const canBuyerCancel =
+            !isSellerView && order.status === 'reserved' && order.batch_id === null;
+
+          const confirmSeller = (): void => {
+            const weight = Number(weightInput);
+            if (!/^\d{4}$/.test(otpInput.trim())) {
+              setBanner('กรอกรหัส OTP 4 หลัก');
+              return;
+            }
+            if (!(weight > 0)) {
+              setBanner('กรอกน้ำหนักที่ชั่งได้');
+              return;
+            }
+            setBusy(true);
+            setBanner(null);
+            void (async () => {
+              try {
+                await api.sellerConfirmOrder(order.id, {
+                  otp: otpInput.trim(),
+                  weight_kg: weight,
+                });
+                Alert.alert('ส่งมอบสำเร็จ', 'บันทึกน้ำหนักและผลลัพธ์แล้ว');
+                reload();
+              } catch (err) {
+                setBanner(err instanceof ApiError ? err.message : 'ยืนยันไม่สำเร็จ');
+              } finally {
+                setBusy(false);
+              }
+            })();
+          };
 
           return (
             <Body>
@@ -133,12 +162,12 @@ export default function OrderDetailScreen(): React.ReactElement {
                 <Text style={styles.step}>4) ถ้าไม่พอใจ อย่าให้รหัส</Text>
               </Card>
 
-              {active ? (
+              {active && !isSellerView ? (
                 <>
                   <SectionTitle>รหัส OTP</SectionTitle>
                   <Card>
                     <View style={styles.otpBox}>
-                      <Text style={styles.otpLabel}>แสดงให้ผู้ขายเมื่อตรวจของแล้ว</Text>
+                      <Text style={styles.otpLabel}>ให้รหัสนี้กับผู้ขายเมื่อตรวจของแล้ว</Text>
                       <Text style={styles.otpValue}>{order.drop_otp}</Text>
                     </View>
                   </Card>
@@ -157,30 +186,31 @@ export default function OrderDetailScreen(): React.ReactElement {
                 </Text>
               </Card>
 
-              {showSellerStub && order.status === 'reserved' ? (
+              {isSellerView && order.status === 'reserved' ? (
                 <>
-                  <SectionTitle>ฝั่งผู้ขาย (ยืนยันรับของ)</SectionTitle>
+                  <SectionTitle>ยืนยันรับของ (ผู้ขาย)</SectionTitle>
                   <Card>
                     <Text style={styles.muted}>
-                      การกรอก OTP + น้ำหนักจริงสำหรับผู้ขายจะพร้อมในขั้นส่งมอบ (6.4) —
-                      ตอนนี้ดูรายการผู้จองได้จากแท็บขาย → ล็อตของฉัน
+                      ผู้ซื้อจะให้รหัส OTP 4 หลัก — กรอกรหัสและน้ำหนักที่ชั่งได้เพื่อยืนยันส่งมอบ
                     </Text>
-                    <Field label="OTP (ยังไม่บันทึก)" value={otpInput} onChangeText={setOtpInput} />
+                    <Field label="OTP" value={otpInput} onChangeText={setOtpInput} keyboardType="number-pad" />
                     <Field
-                      label="น้ำหนักจริง กก. (ยังไม่บันทึก)"
+                      label="น้ำหนักจริง (กก.)"
                       value={weightInput}
                       onChangeText={setWeightInput}
                       keyboardType="numeric"
+                      placeholder={String(qty)}
                     />
-                    <SecondaryButton
-                      label="ไปล็อตของฉัน"
-                      onPress={() => router.push('/(tabs)/sell')}
+                    <PrimaryButton
+                      label="ยืนยันส่งมอบ"
+                      loading={busy}
+                      onPress={confirmSeller}
                     />
                   </Card>
                 </>
               ) : null}
 
-              {order.status === 'reserved' && order.batch_id === null ? (
+              {canBuyerCancel ? (
                 <PrimaryButton
                   label="ยกเลิกการจอง"
                   tone="chili"

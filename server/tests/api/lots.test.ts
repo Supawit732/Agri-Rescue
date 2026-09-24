@@ -4,7 +4,7 @@ import { PLAN_WEATHER_FALLBACK } from '../../src/db/seedData';
 import { pool } from '../../src/db/pool';
 import { lotPricePerKg, suggestedFloorPrice, suggestedStartPrice } from '../../src/domain/sellerPricing';
 import { predictShelfHours } from '../../src/domain/shelfLife';
-import { bearer, insertCrop, registerUser, testApp } from '../helpers';
+import { bearer, insertCrop, insertLot, insertPlot, registerUser, testApp } from '../helpers';
 import { installWeatherFailure, installWeatherSuccess } from '../weatherMock';
 
 describe('lots and plots', () => {
@@ -138,5 +138,64 @@ describe('lots and plots', () => {
     } finally {
       warn.mockRestore();
     }
+  });
+
+  it('soft-deletes owner lots with no orders and blocks when orders exist or other farmer', async () => {
+    const owner = await registerUser(app, { role: 'farmer', name: 'เจ้าของลบ' });
+    const other = await registerUser(app, { role: 'farmer', name: 'คนอื่น' });
+    const cropId = await insertCrop('มะนาว', 14, 35);
+    const plotId = await insertPlot(owner.user.id, 13.66, 100.61);
+    const emptyLotId = await insertLot({
+      plotId,
+      cropId,
+      expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+      weightKg: 8,
+    });
+    const bookedLotId = await insertLot({
+      plotId,
+      cropId,
+      expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+      weightKg: 12,
+    });
+    const buyer = await registerUser(app, { role: 'buyer', buyer_type: 'shop' });
+    const booked = await request(app)
+      .post('/api/orders')
+      .set(bearer(buyer.token))
+      .send({ lot_id: bookedLotId, donation: false, quantity_kg: 3 });
+    expect(booked.status).toBe(201);
+
+    const forbidden = await request(app)
+      .delete(`/api/lots/${emptyLotId}`)
+      .set(bearer(other.token));
+    expect(forbidden.status).toBe(403);
+
+    const conflict = await request(app)
+      .delete(`/api/lots/${bookedLotId}`)
+      .set(bearer(owner.token));
+    expect(conflict.status).toBe(409);
+    expect(conflict.body.error.code).toBe('HAS_ORDERS');
+
+    const ok = await request(app).delete(`/api/lots/${emptyLotId}`).set(bearer(owner.token));
+    expect(ok.status).toBe(200);
+    expect(ok.body).toEqual({ ok: true });
+
+    const [rows] = await pool.query<RowDataPacket[]>(
+      'SELECT status, deleted_at FROM harvest_lots WHERE id = ?',
+      [emptyLotId],
+    );
+    expect(rows[0]?.status).toBe('cancelled');
+    expect(rows[0]?.deleted_at).not.toBeNull();
+
+    const [logs] = await pool.query<RowDataPacket[]>(
+      'SELECT lot_id, farmer_id, snapshot_json FROM lot_delete_logs WHERE lot_id = ?',
+      [emptyLotId],
+    );
+    expect(logs).toHaveLength(1);
+    expect(Number(logs[0]?.farmer_id)).toBe(owner.user.id);
+
+    const mine = await request(app).get('/api/lots/mine').set(bearer(owner.token));
+    expect(mine.status).toBe(200);
+    expect(mine.body.lots.map((l: { id: number }) => l.id)).not.toContain(emptyLotId);
+    expect(mine.body.lots.map((l: { id: number }) => l.id)).toContain(bookedLotId);
   });
 });

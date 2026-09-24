@@ -9,6 +9,7 @@ import type {
   BatchDetail,
   BuyerType,
   Crop,
+  DashboardPayload,
   DitCropsResponse,
   DitProductSearchHit,
   DitSuggestion,
@@ -151,6 +152,12 @@ interface Api {
   }>;
   unlockStop: (id: number) => Promise<{ id: number; otp_attempts: number; locked: boolean }>;
   getImpact: () => Promise<ImpactSummary>;
+  getDashboard: () => Promise<DashboardPayload>;
+  deleteLot: (id: number) => Promise<{ ok: boolean }>;
+  sellerConfirmOrder: (
+    id: number,
+    body: { otp: string; weight_kg: number },
+  ) => Promise<{ order: Order; lot_status: string }>;
   getMyOrders: () => Promise<Order[]>;
   cancelOrder: (id: number) => Promise<unknown>;
 }
@@ -423,6 +430,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
         ),
       unlockStop: (id) => authed<{ id: number; otp_attempts: number; locked: boolean }>('POST', `/api/stops/${id}/unlock`),
       getImpact: () => authed<{ summary: ImpactSummary }>('GET', '/api/impact/summary').then((r) => r.summary),
+      getDashboard: () => authed<DashboardPayload>('GET', '/api/dashboard'),
+      deleteLot: (id) => authed<{ ok: boolean }>('DELETE', `/api/lots/${id}`),
+      sellerConfirmOrder: (id, body) =>
+        authed<{ order: Order; lot_status: string }>('POST', `/api/orders/${id}/seller-confirm`, body),
     };
   }, [token, updateProfile]);
 

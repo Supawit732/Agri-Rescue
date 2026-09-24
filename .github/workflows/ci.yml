@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server:
+    name: Server test / lint / build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+          MYSQL_DATABASE: agri_rescue_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      - name: Write .env.test
+        run: |
+          printf '%s\n' \
+            'PORT=3000' \
+            'DB_HOST=127.0.0.1' \
+            'DB_PORT=3306' \
+            'DB_USER=root' \
+            'DB_PASSWORD=' \
+            'DB_NAME=agri_rescue_test' \
+            'JWT_SECRET=ci-test-secret' \
+            'DEPOT_LAT=13.65' \
+            'DEPOT_LNG=100.62' \
+            > .env.test
+      - run: npm test
+      - run: npm run lint
+      - run: npm run build
+
+  mobile:
+    name: Mobile expo export
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci
+      - name: Bundle web + ios
+        run: npm run build
+        env:
+          EXPO_PUBLIC_API_URL: http://127.0.0.1:3000
