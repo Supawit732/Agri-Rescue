@@ -22,6 +22,7 @@ beforeAll(async () => {
     DELETE FROM batches;
     DELETE FROM lot_delete_logs;
     DELETE FROM quality_assessments;
+    DELETE FROM lot_photos;
     DELETE FROM harvest_lots;
     DELETE FROM plots;
     DELETE FROM crops;

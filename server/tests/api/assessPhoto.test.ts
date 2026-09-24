@@ -39,6 +39,8 @@ describe('POST /api/lots/assess-photo and AI lot creation', () => {
     expect(response.status).toBe(200);
     expect(response.body.available).toBe(true);
     expect(response.body.ripeness).toBe(3);
+    expect(typeof response.body.photo_url).toBe('string');
+    expect(response.body.photo_url).toMatch(/^\/uploads\/lots\//);
     expect(vision.assessRipenessFromPhoto).toHaveBeenCalled();
   });
 

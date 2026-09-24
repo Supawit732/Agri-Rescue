@@ -8,5 +8,6 @@ coverage/
 *.log
 .DS_Store
 server/private_uploads/
-server/uploads/
+server/uploads/*
+!server/uploads/.gitkeep
 server/.cache/

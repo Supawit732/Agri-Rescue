@@ -191,6 +191,7 @@ export type AssessPhotoResponse =
       note_en: string;
       low_confidence: boolean;
       model: string;
+      photo_url?: string;
     }
   | {
       available: true;
@@ -243,6 +244,7 @@ export interface MyLot {
 
 export interface MarketLot {
   id: number;
+  crop_id?: number;
   crop_name_th: string;
   crop_name_en?: string | null;
   /** Present on authenticated market; omitted on public API. */
@@ -264,6 +266,7 @@ export interface MarketLot {
   hours_left: number;
   distance_km: number | null;
   price_per_kg: number | null;
+  market_price_per_kg?: number | null;
   market_price_label?: string | null;
   start_price_per_kg?: number | null;
   floor_price_per_kg?: number | null;
@@ -276,6 +279,9 @@ export interface MarketLot {
   district_th?: string | null;
   area_rai?: number;
   photo_url?: string | null;
+  photos?: string[];
+  can_request_donation?: boolean;
+  reason?: string | null;
 }
 
 export interface DitCropRefPrice {

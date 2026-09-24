@@ -1,103 +1,55 @@
 import request from 'supertest';
 import { pool } from '../../src/db/pool';
-import { resetPublicRateLimit } from '../../src/middleware/publicRateLimit';
-import { insertCrop, insertLot, insertPlot, registerUser, testApp } from '../helpers';
-
-const FORBIDDEN_KEYS = [
-  'lat',
-  'lng',
-  'farmer_name',
-  'phone',
-  'line_id',
-  'sale_mode',
-  'plot_id',
-  'user_id',
-  'farmer_id',
-  'donation_opened',
-];
-
-function assertNoForbiddenFields(payload: unknown): void {
-  const json = JSON.stringify(payload);
-  for (const key of FORBIDDEN_KEYS) {
-    expect(json).not.toContain(`"${key}"`);
-  }
-}
+import { roundDistanceKm } from '../../src/routes/publicMarket';
+import { resetPublicMarketRateLimit } from '../../src/middleware/publicMarketRateLimit';
+import { insertCrop, insertLot, insertPlot, registerUser, testApp, bearer } from '../helpers';
 
 describe('public market', () => {
   const app = testApp();
 
-  beforeEach(async () => {
-    await resetPublicRateLimit();
+  beforeEach(() => {
+    resetPublicMarketRateLimit();
   });
 
-  it('lists open lots without auth and omits forbidden fields', async () => {
-    const farmer = await registerUser(app, { role: 'farmer' });
-    const cropId = await insertCrop('มะม่วง', 5, 40, 'Mango');
-    const plotId = await insertPlot(farmer.user.id, 13.662, 100.611, 'แปลงใกล้ตลาด');
+  it('returns 200 without auth and omits private fields', async () => {
+    const farmer = await registerUser(app, { role: 'farmer', name: 'ลุงลับ' });
+    const cropId = await insertCrop('มะม่วงสาธารณะ', 5, 40, 'Public Mango');
+    const plotId = await insertPlot(farmer.user.id, 13.662, 100.611, 'แปลงชุมชน');
     const lotId = await insertLot({
       plotId,
       cropId,
       expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
-      grade: 'normal',
     });
 
-    const response = await request(app)
-      .get('/api/public/market')
-      .query({ lat: 13.662, lng: 100.611, radius_km: 15 });
+    const response = await request(app).get('/api/public/market').query({ sort: 'urgent' });
     expect(response.status).toBe(200);
-    expect(Array.isArray(response.body.lots)).toBe(true);
     const lot = response.body.lots.find((row: { id: number }) => row.id === lotId);
     expect(lot).toBeDefined();
-    expect(lot.crop_name_th).toBe('มะม่วง');
-    expect(lot.crop_name_en).toBe('Mango');
-    expect(lot.grade).toBe('normal');
-    expect(typeof lot.ripeness).toBe('number');
-    expect(lot.weight_kg).toBeGreaterThan(0);
-    expect(lot.remaining_kg).toBeGreaterThan(0);
-    expect(lot.min_order_kg).toBeGreaterThan(0);
-    expect(lot.price_per_kg).not.toBeNull();
-    expect(lot.hours_left).toBeGreaterThan(0);
-    expect(lot.distance_km).toBeGreaterThanOrEqual(0);
-    expect(lot.distance_km * 2).toBe(Math.round(lot.distance_km * 2));
-    expect(lot.area_th).toBe('แปลงใกล้ตลาด');
-    expect(lot.subdistrict_th).toBeNull();
-    expect(lot.district_th).toBeNull();
+    expect(lot.crop_name_th).toBe('มะม่วงสาธารณะ');
+    expect(lot.crop_name_en).toBe('Public Mango');
+    expect(lot.plot_name).toBe('แปลงชุมชน');
     expect(lot.available_as).toEqual(['buy']);
-    assertNoForbiddenFields(lot);
+    expect(lot.distance_km).toBeNull();
+    expect(lot.photos).toEqual([]);
+    expect(lot.sale_mode).toBeUndefined();
+    expect(lot.farmer_name).toBeUndefined();
+    expect(lot.lat).toBeUndefined();
+    expect(lot.lng).toBeUndefined();
+    expect(lot.can_request_donation).toBeUndefined();
+
+    const raw = JSON.stringify(response.body);
+    expect(raw).not.toContain('sale_mode');
+    expect(raw).not.toContain('farmer_name');
+    expect(raw).not.toContain('"lat"');
+    expect(raw).not.toContain('"lng"');
+    expect(raw).not.toContain('ลุงลับ');
   });
 
-  it('sorts by hours_left when lat/lng omitted', async () => {
+  it('hides donate wording for sell_then_donate before open; donate-only has null price', async () => {
     const farmer = await registerUser(app, { role: 'farmer' });
-    const cropId = await insertCrop('มะนาว', 14, 35);
-    const plotId = await insertPlot(farmer.user.id, 13.7, 100.7, 'แปลงเรียง');
-    const soonId = await insertLot({
-      plotId,
-      cropId,
-      expiresAt: new Date(Date.now() + 10 * 60 * 60 * 1000),
-    });
-    const laterId = await insertLot({
-      plotId,
-      cropId,
-      expiresAt: new Date(Date.now() + 72 * 60 * 60 * 1000),
-    });
-
-    const response = await request(app).get('/api/public/market');
-    expect(response.status).toBe(200);
-    const ids = (response.body.lots as Array<{ id: number }>)
-      .map((row) => row.id)
-      .filter((id) => id === soonId || id === laterId);
-    expect(ids[0]).toBe(soonId);
-    expect(ids[1]).toBe(laterId);
-    for (const lot of response.body.lots as Array<{ distance_km: number | null }>) {
-      expect(lot.distance_km).toBeNull();
-    }
-  });
-
-  it('hides donate wording for sell_then_donate until opened; donate-only has no price', async () => {
-    const farmer = await registerUser(app, { role: 'farmer' });
-    const cropId = await insertCrop('กล้วยน้ำว้า', 4, 25);
-    const plotId = await insertPlot(farmer.user.id, 13.662, 100.611, 'แปลงสาธารณะ');
-    const stdId = await insertLot({
+    const cropId = await insertCrop('กล้วยสาธารณะ', 4, 25);
+    const plotId = await insertPlot(farmer.user.id, 13.662, 100.611, 'แปลงบริจาค');
+    const pendingId = await insertLot({
       plotId,
       cropId,
       saleMode: 'sell_then_donate',
@@ -107,28 +59,102 @@ describe('public market', () => {
       plotId,
       cropId,
       saleMode: 'donate',
-      expiresAt: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000),
+      expiresAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
     });
 
-    const before = await request(app).get(`/api/public/lots/${stdId}`).query({ lat: 13.662, lng: 100.611 });
-    expect(before.status).toBe(200);
-    expect(before.body.lot.available_as).toEqual(['buy']);
-    expect(before.body.lot.price_per_kg).not.toBeNull();
-    expect(JSON.stringify(before.body)).not.toContain('donate');
-    assertNoForbiddenFields(before.body.lot);
+    const response = await request(app)
+      .get('/api/public/market')
+      .query({ lat: 13.662, lng: 100.611, radius_km: 15, sort: 'urgent' });
+    expect(response.status).toBe(200);
 
+    const pending = response.body.lots.find((row: { id: number }) => row.id === pendingId);
+    expect(pending.available_as).toEqual(['buy']);
+    expect(JSON.stringify(pending)).not.toContain('sale_mode');
+    expect(JSON.stringify(pending)).not.toContain('sell_then_donate');
+    expect(JSON.stringify(pending)).not.toContain('donate');
+    expect(pending.distance_km).toBe(roundDistanceKm(0));
+
+    const donate = response.body.lots.find((row: { id: number }) => row.id === donateId);
+    expect(donate.available_as).toEqual(['donate']);
+    expect(donate.price_per_kg).toBeNull();
+
+    const detail = await request(app).get(`/api/public/lots/${pendingId}`);
+    expect(detail.status).toBe(200);
+    expect(detail.body.lot.available_as).toEqual(['buy']);
+    expect(detail.body.lot.lat).toBeUndefined();
+    expect(detail.body.lot.farmer_name).toBeUndefined();
+    expect(JSON.stringify(detail.body)).not.toContain('sell_then_donate');
+  });
+
+  it('includes donation eligibility hints when Bearer token present', async () => {
+    const farmer = await registerUser(app, { role: 'farmer' });
+    const buyer = await registerUser(app, { role: 'buyer', buyer_type: 'vendor' });
+    const cropId = await insertCrop('มะเขือสาธารณะ', 5, 30);
+    const plotId = await insertPlot(farmer.user.id, 13.662, 100.611);
+    const lotId = await insertLot({
+      plotId,
+      cropId,
+      saleMode: 'donate',
+      expiresAt: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
+    });
+
+    const anon = await request(app).get(`/api/public/lots/${lotId}`);
+    expect(anon.status).toBe(200);
+    expect(anon.body.lot.can_request_donation).toBeUndefined();
+    expect(anon.body.lot.donation_audience).toBeUndefined();
+
+    const authed = await request(app).get(`/api/public/lots/${lotId}`).set(bearer(buyer.token));
+    expect(authed.status).toBe(200);
+    expect(authed.body.lot.donation_audience).toBeDefined();
+    expect(authed.body.lot.can_request_donation).toBe(false);
+    expect(typeof authed.body.lot.reason).toBe('string');
+  });
+
+  it('filters by crop_id and sorts cheap', async () => {
+    const farmer = await registerUser(app, { role: 'farmer' });
+    const mango = await insertCrop('มะม่วงถูก', 5, 40);
+    const banana = await insertCrop('กล้วยแพง', 4, 25);
+    const plotId = await insertPlot(farmer.user.id, 13.65, 100.62);
+    const mangoId = await insertLot({
+      plotId,
+      cropId: mango,
+      startPricePerKg: 20,
+      floorPricePerKg: 8,
+      expiresAt: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000),
+    });
+    await insertLot({
+      plotId,
+      cropId: banana,
+      startPricePerKg: 15,
+      floorPricePerKg: 6,
+      expiresAt: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
+    });
+
+    const filtered = await request(app).get('/api/public/market').query({ crop_id: mango, sort: 'cheap' });
+    expect(filtered.status).toBe(200);
+    expect(filtered.body.lots.every((lot: { crop_id: number }) => lot.crop_id === mango)).toBe(true);
+    expect(filtered.body.lots.some((lot: { id: number }) => lot.id === mangoId)).toBe(true);
+  });
+
+  it('opens donation on sell_then_donate after donation_opened', async () => {
+    const farmer = await registerUser(app, { role: 'farmer' });
+    const cropId = await insertCrop('ส้มสาธารณะ', 5, 35);
+    const plotId = await insertPlot(farmer.user.id, 13.662, 100.611);
+    const lotId = await insertLot({
+      plotId,
+      cropId,
+      saleMode: 'sell_then_donate',
+      expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+    });
     await pool.query(`UPDATE harvest_lots SET donation_opened = 1, allow_donation = 1 WHERE id = ?`, [
-      stdId,
+      lotId,
     ]);
-    const after = await request(app).get(`/api/public/lots/${stdId}`);
-    expect(after.status).toBe(200);
-    expect(after.body.lot.available_as).toEqual(['buy', 'donate']);
 
-    const donateOnly = await request(app).get(`/api/public/lots/${donateId}`);
-    expect(donateOnly.status).toBe(200);
-    expect(donateOnly.body.lot.available_as).toEqual(['donate']);
-    expect(donateOnly.body.lot.price_per_kg).toBeNull();
-    assertNoForbiddenFields(donateOnly.body.lot);
+    const response = await request(app).get('/api/public/market');
+    const lot = response.body.lots.find((row: { id: number }) => row.id === lotId);
+    expect(lot.available_as).toEqual(['buy', 'donate']);
+    expect(JSON.stringify(lot)).not.toContain('sell_then_donate');
+    expect(JSON.stringify(lot)).not.toContain('sale_mode');
   });
 
   it('returns 404 for missing public lot', async () => {

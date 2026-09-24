@@ -51,9 +51,11 @@ export type Messages = {
     title: string;
     empty: string;
     enableBuy: string;
+    enableBuyBrowse: string;
     goAccount: string;
     guestBanner: string;
     buy: string;
+    bookBuy: string;
     requestDonation: string;
     byFarmer: string;
     distanceUnknown: string;
@@ -66,6 +68,17 @@ export type Messages = {
     badgeDonate: string;
     badgeDonateOk: string;
     km: string;
+    sortUrgent: string;
+    sortNear: string;
+    sortCheap: string;
+    subWithLocation: string;
+    subNoLocation: string;
+    changeLocation: string;
+    selectLocation: string;
+    locationForDistance: string;
+    searchCrop: string;
+    allCrops: string;
+    plotFallback: string;
   };
   lot: {
     title: string;
@@ -78,6 +91,7 @@ export type Messages = {
     approxTotal: string;
     remaining: string;
     approxDistance: string;
+    donateNoPrice: string;
     qtyOverRemaining: string;
     qtyMinOrder: string;
     orgOnlyBadge: string;

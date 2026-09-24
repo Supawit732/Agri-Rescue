@@ -1,7 +1,9 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as Location from 'expo-location';
+import { API_BASE_URL } from '../../../src/api/config';
+import type { MarketLot } from '../../../src/api/types';
 import {
   Badge,
   Body,
@@ -28,7 +30,17 @@ import {
   stepOf,
 } from '../../../src/lot/helpers';
 import { C, urgency } from '../../../src/theme';
-import type { MarketLot } from '../../../src/api/types';
+
+function photoUri(lot: MarketLot): string | null {
+  const raw = lot.photos?.[0] ?? lot.photo_url ?? null;
+  if (raw === null || raw === '') {
+    return null;
+  }
+  if (raw.startsWith('http://') || raw.startsWith('https://')) {
+    return raw;
+  }
+  return `${API_BASE_URL}${raw.startsWith('/') ? raw : `/${raw}`}`;
+}
 
 type ViewerCoords = { lat: number; lng: number } | null;
 
@@ -131,6 +143,10 @@ export default function LotDetailScreen(): React.ReactElement {
       router.push({ pathname: '/login', params: { returnTo } });
       return;
     }
+    if (!user.can_buy) {
+      router.push('/(tabs)/account');
+      return;
+    }
     const remaining = remainingOf(lot);
     const min = minOrderOf(lot);
     if (splitAllowedOf(lot) && remaining + 1e-6 >= min && quantityKg + 1e-6 < min) {
@@ -174,13 +190,17 @@ export default function LotDetailScreen(): React.ReactElement {
             donate: t.market.badgeDonate,
             donateOk: t.market.badgeDonateOk,
           });
-          const canDonate = donationIntent && elig.canDonate;
+          const canDonate = donationIntent && elig.canDonate && available.includes('donate');
           const canBuy = !donationIntent && available.includes('buy') && lot.price_per_kg !== null;
           const area = lot.area_th ?? lot.plot_name ?? null;
           const cropTitle = cropName({ name_th: lot.crop_name_th, name_en: lot.crop_name_en });
+          const uri = photoUri(lot);
 
           return (
             <Body>
+              {uri !== null ? (
+                <Image source={{ uri }} style={styles.hero} resizeMode="cover" />
+              ) : null}
               <Card>
                 <View style={styles.header}>
                   <Text style={styles.title}>{cropTitle}</Text>
@@ -193,7 +213,7 @@ export default function LotDetailScreen(): React.ReactElement {
                     bg={saleBadge.donate ? C.turmericSoft : C.leafSoft}
                   />
                 ) : null}
-                {lot.farmer_name !== undefined ? (
+                {lot.farmer_name !== undefined && lot.farmer_name !== '' ? (
                   <Text style={styles.line}>
                     {t.market.byFarmer} {lot.farmer_name}
                   </Text>
@@ -214,6 +234,13 @@ export default function LotDetailScreen(): React.ReactElement {
                     {t.lot.approxDistance} {lot.distance_km.toFixed(1)} {t.market.km}
                   </Text>
                 ) : null}
+                {lot.price_per_kg !== null ? (
+                  <Text style={styles.line}>
+                    {formatNumber(lot.price_per_kg)} {t.dashboard.unitBaht}/{t.dashboard.unitKg}
+                  </Text>
+                ) : (
+                  <Text style={styles.line}>{t.lot.donateNoPrice}</Text>
+                )}
               </Card>
 
               {user === null ? (
@@ -279,6 +306,7 @@ export default function LotDetailScreen(): React.ReactElement {
 }
 
 const styles = StyleSheet.create({
+  hero: { width: '100%', height: 200, borderRadius: 16, marginBottom: 12, backgroundColor: C.leafSoft },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   title: { fontSize: 20, fontWeight: '800', color: C.ink, flex: 1, marginRight: 8 },
   line: { color: C.ink, marginTop: 4 },
