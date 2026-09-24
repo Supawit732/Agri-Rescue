@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Alert, Linking, StyleSheet, Text, View } from 'react-native';
 import { ApiError } from '../../src/api/client';
 import { FormField, useFieldErrors, useFieldScroll } from '../../src/components/form';
+import { formatIsoSlotShort } from '../../src/components/PickupSlotPicker';
 import {
   Badge,
   Body,
@@ -185,6 +186,15 @@ export default function OrderDetailScreen(): React.ReactElement {
               <SectionTitle>{t.orderDetail.sectionPickup}</SectionTitle>
               <Card>
                 <Text style={styles.line}>{pickupLabel}</Text>
+                {order.pickup_slot_start != null && order.pickup_slot_end != null ? (
+                  <Text style={styles.slot}>
+                    {t.orderDetail.pickupSlot}:{' '}
+                    {formatIsoSlotShort(order.pickup_slot_start, order.pickup_slot_end, {
+                      today: t.confirmBooking.today,
+                      tomorrow: t.confirmBooking.tomorrow,
+                    })}
+                  </Text>
+                ) : null}
                 {order.distance_km !== null && order.distance_km !== undefined ? (
                   <Text style={styles.line}>
                     {formatTemplate(t.orderDetail.approxDistance, {
@@ -349,6 +359,7 @@ const styles = StyleSheet.create({
   nextAction: { flex: 1, minWidth: 120, fontWeight: '600', color: C.ink, fontSize: 14 },
   title: { fontSize: 18, fontWeight: '800', color: C.ink, marginBottom: 6 },
   line: { color: C.ink, marginBottom: 4 },
+  slot: { color: C.leafDeep, fontWeight: '600', marginBottom: 6 },
   muted: { color: C.mute, marginTop: 6, lineHeight: 20 },
   step: { color: C.ink, marginBottom: 6, lineHeight: 20 },
   otpBox: { backgroundColor: C.leafSoft, borderRadius: 12, padding: 12, alignItems: 'center' },

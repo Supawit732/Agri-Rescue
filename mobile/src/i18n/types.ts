@@ -364,6 +364,9 @@ export type Messages = {
     cancel: string;
     cancelling: string;
     cancelFailed: string;
+    openRoute: string;
+    pickupSlot: string;
+    routeEmpty: string;
   };
   orderDetail: {
     title: string;
@@ -371,6 +374,7 @@ export type Messages = {
     lotFallback: string;
     sectionItem: string;
     sectionPickup: string;
+    pickupSlot: string;
     sectionDeadline: string;
     sectionNextSteps: string;
     sectionOtp: string;
@@ -428,6 +432,17 @@ export type Messages = {
     confirmBuy: string;
     goBack: string;
     failed: string;
+    pickupTitle: string;
+    pickupHint: string;
+    today: string;
+    tomorrow: string;
+    selectSlot: string;
+    slotUnavailable: string;
+    needSlot: string;
+    reasonStarted: string;
+    reasonPast: string;
+    reasonExpiry: string;
+    slotRange: string;
   };
   bookingSuccess: {
     title: string;
@@ -953,6 +968,7 @@ export type Messages = {
   notif: {
     shop_new_lot: string;
     lot_booked: string;
+    lot_bookedWithSlot: string;
     order_delivered: string;
     donor_review: string;
     donor_proof_due: string;
@@ -1122,6 +1138,27 @@ export type Messages = {
     sellMode: string;
     buyMode: string;
     noData: string;
+  };
+  route: {
+    title: string;
+    subtitle: string;
+    today: string;
+    tomorrow: string;
+    dayLabel: string;
+    openRoute: string;
+    openStop: string;
+    orderedBySlot: string;
+    orderedByDistance: string;
+    routeKm: string;
+    naiveKm: string;
+    savingsKm: string;
+    empty: string;
+    locationRequired: string;
+    stopIndex: string;
+    items: string;
+    slot: string;
+    leg: string;
+    otpHint: string;
   };
 };
 

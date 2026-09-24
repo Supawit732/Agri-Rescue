@@ -4,7 +4,7 @@ import { PLAN_WEATHER_FALLBACK } from '../../src/db/seedData';
 import { pool } from '../../src/db/pool';
 import { lotPricePerKg, suggestedFloorPrice, suggestedStartPrice } from '../../src/domain/sellerPricing';
 import { predictShelfHours } from '../../src/domain/shelfLife';
-import { bearer, insertCrop, insertLot, insertPlot, registerUser, testApp } from '../helpers';
+import { bearer, insertCrop, insertLot, insertPlot, registerUser, testApp, pickAvailablePickupSlot } from '../helpers';
 import { installWeatherFailure, installWeatherSuccess } from '../weatherMock';
 
 describe('lots and plots', () => {
@@ -161,7 +161,7 @@ describe('lots and plots', () => {
     const booked = await request(app)
       .post('/api/orders')
       .set(bearer(buyer.token))
-      .send({ lot_id: bookedLotId, donation: false, quantity_kg: 3 });
+      .send({ lot_id: bookedLotId, donation: false, quantity_kg: 3, ...pickAvailablePickupSlot() });
     expect(booked.status).toBe(201);
 
     const forbidden = await request(app)

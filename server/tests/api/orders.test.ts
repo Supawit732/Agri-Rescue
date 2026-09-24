@@ -1,7 +1,7 @@
 import request from 'supertest';
 import type { RowDataPacket } from 'mysql2';
 import { pool } from '../../src/db/pool';
-import { bearer, insertCrop, insertLot, insertPlot, loginStaff, registerUser, testApp } from '../helpers';
+import { bearer, insertCrop, insertLot, insertPlot, loginStaff, registerUser, testApp, pickAvailablePickupSlot } from '../helpers';
 
 describe('orders', () => {
   const app = testApp();
@@ -27,11 +27,11 @@ describe('orders', () => {
       request(app)
         .post('/api/orders')
         .set(bearer(first.token))
-        .send({ lot_id: lotId, donation: false, quantity_kg: 10 }),
+        .send({ lot_id: lotId, donation: false, quantity_kg: 10, ...pickAvailablePickupSlot() }),
       request(app)
         .post('/api/orders')
         .set(bearer(second.token))
-        .send({ lot_id: lotId, donation: false, quantity_kg: 10 }),
+        .send({ lot_id: lotId, donation: false, quantity_kg: 10, ...pickAvailablePickupSlot() }),
     ]);
     const statuses = [left.status, right.status].sort((a, b) => a - b);
     expect(statuses).toEqual([201, 409]);
@@ -73,7 +73,7 @@ describe('orders', () => {
     const booked = await request(app)
       .post('/api/orders')
       .set(bearer(buyer.token))
-      .send({ lot_id: lotId, donation: false, quantity_kg: 4 });
+      .send({ lot_id: lotId, donation: false, quantity_kg: 4, ...pickAvailablePickupSlot() });
     expect(booked.status).toBe(201);
     const orderId = booked.body.order.id as number;
 
@@ -142,7 +142,7 @@ describe('orders', () => {
     const booked = await request(app)
       .post('/api/orders')
       .set(bearer(buyer.token))
-      .send({ lot_id: lotId, donation: false, quantity_kg: 4 });
+      .send({ lot_id: lotId, donation: false, quantity_kg: 4, ...pickAvailablePickupSlot() });
     expect(booked.status).toBe(201);
     const orderId = booked.body.order.id as number;
     expect(JSON.stringify(booked.body)).not.toContain('seller.line');
@@ -245,7 +245,7 @@ describe('orders', () => {
     const booked = await request(app)
       .post('/api/orders')
       .set(bearer(buyer.token))
-      .send({ lot_id: lotId, donation: false, quantity_kg: 10 });
+      .send({ lot_id: lotId, donation: false, quantity_kg: 10, ...pickAvailablePickupSlot() });
     expect(booked.status).toBe(201);
     const orderId = booked.body.order.id as number;
     const otp = booked.body.order.drop_otp as string;
@@ -273,4 +273,90 @@ describe('orders', () => {
     expect(Number(impact[0]?.kg_saved)).toBe(9.5);
     expect(Number(impact[0]?.co2e_kg)).toBeCloseTo(9.5 * 2.5, 5);
   });
+
+  it('requires pickup slot for self-pickup and returns available windows', async () => {
+    const { lotId } = await openLot(false);
+    const buyer = await registerUser(app, { role: 'buyer', buyer_type: 'shop', lat: 13.65, lng: 100.62 });
+    const missing = await request(app)
+      .post('/api/orders')
+      .set(bearer(buyer.token))
+      .send({ lot_id: lotId, donation: false, quantity_kg: 4 });
+    expect(missing.status).toBe(400);
+    expect(missing.body.error.code).toBe('PICKUP_SLOT_REQUIRED');
+
+    const slots = await request(app)
+      .get(`/api/orders/pickup-slots?lot_id=${String(lotId)}`)
+      .set(bearer(buyer.token));
+    expect(slots.status).toBe(200);
+    expect(slots.body.slots).toHaveLength(8);
+    expect(slots.body.slots.some((s: { available: boolean }) => s.available)).toBe(true);
+
+    const slot = slots.body.slots.find((s: { available: boolean }) => s.available);
+    const ok = await request(app)
+      .post('/api/orders')
+      .set(bearer(buyer.token))
+      .send({
+        lot_id: lotId,
+        donation: false,
+        quantity_kg: 4,
+        pickup_slot_start: slot.start_at,
+        pickup_slot_end: slot.end_at,
+      });
+    expect(ok.status).toBe(201);
+    expect(ok.body.order.pickup_slot_start).toBe(slot.start_at);
+
+    const detail = await request(app)
+      .get(`/api/orders/${String(ok.body.order.id)}`)
+      .set(bearer(buyer.token));
+    expect(detail.body.order.pickup_slot_start).toBeTruthy();
+    expect(detail.body.order.pickup_slot_end).toBeTruthy();
+  });
+
+  it('builds buyer route ordered by appointment and distances', async () => {
+    const buyer = await registerUser(app, { role: 'buyer', buyer_type: 'shop', lat: 13.65, lng: 100.62 });
+    const { lotId } = await openLot(false);
+    const slotsRes = await request(app)
+      .get(`/api/orders/pickup-slots?lot_id=${String(lotId)}`)
+      .set(bearer(buyer.token));
+    const available = slotsRes.body.slots.filter((s: { available: boolean }) => s.available);
+    expect(available.length).toBeGreaterThan(0);
+
+    const booked = await request(app)
+      .post('/api/orders')
+      .set(bearer(buyer.token))
+      .send({
+        lot_id: lotId,
+        donation: false,
+        quantity_kg: 5,
+        pickup_slot_start: available[0].start_at,
+        pickup_slot_end: available[0].end_at,
+      });
+    expect(booked.status).toBe(201);
+
+    const start = new Date(available[0].start_at);
+    const date = start.toISOString().slice(0, 10);
+    // Bangkok day of slot
+    const bkk = new Date(start.getTime() + 7 * 3600 * 1000);
+    const day = `${String(bkk.getUTCFullYear())}-${String(bkk.getUTCMonth() + 1).padStart(2, '0')}-${String(bkk.getUTCDate()).padStart(2, '0')}`;
+    const route = await request(app)
+      .get(`/api/orders/route?date=${day}`)
+      .set(bearer(buyer.token));
+    expect(route.status).toBe(200);
+    expect(route.body.stops.length).toBeGreaterThan(0);
+    expect(route.body.route_km).toBeGreaterThan(0);
+    expect(route.body.naive_km).toBeGreaterThanOrEqual(route.body.route_km - 1e-6);
+    expect(['distance', 'pickup_slot']).toContain(route.body.ordered_by);
+    const maps = route.body.stops[0];
+    expect(maps.lat).toBeGreaterThan(0);
+    expect(maps.lng).toBeGreaterThan(0);
+    expect(maps.items.length).toBeGreaterThan(0);
+    void date;
+  });
+
+  it('rejects invalid Google Maps day param', async () => {
+    const buyer = await registerUser(app, { role: 'buyer', buyer_type: 'vendor' });
+    const bad = await request(app).get('/api/orders/route?date=nope').set(bearer(buyer.token));
+    expect(bad.status).toBe(400);
+  });
+
 });

@@ -51,6 +51,12 @@ export const SERVER_MESSAGE_TO_CODE: Record<string, string> = {
   'กรุณาระบุประเภทผู้ซื้อ': 'MUST_SELECT',
   'ประเภทผู้ซื้อใช้ได้เฉพาะเมื่อเปิดสิทธิ์ซื้อ': 'INVALID',
   'ไม่มีข้อมูลที่จะอัปเดต': 'VALIDATION',
+  'กรุณาเลือกช่วงเวลามารับของ': 'PICKUP_SLOT_REQUIRED',
+  'ช่วงเวลารับของไม่ถูกต้อง': 'PICKUP_SLOT_INVALID',
+  'กรุณาเลือกช่วงเวลารับของที่ระบบกำหนด': 'PICKUP_SLOT_INVALID',
+  'ช่วงเวลานี้เริ่มแล้ว กรุณาเลือกช่วงถัดไป': 'PICKUP_SLOT_INVALID',
+  'ช่วงรับของต้องจบก่อนล็อตหมดอายุอย่างน้อย 2 ชม.': 'PICKUP_SLOT_TOO_CLOSE',
+  'กรุณาตั้งตำแหน่งผู้ซื้อที่โปรไฟล์ก่อนดูเส้นทาง': 'LOCATION_REQUIRED',
 };
 
 export function resolveMessageCode(codeOrMessage: string): string {

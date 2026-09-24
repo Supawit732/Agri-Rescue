@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import type { RowDataPacket } from 'mysql2';
 import { pool } from '../../src/db/pool';
 import { JWT_EXPIRES_IN } from '../../src/middleware/auth';
-import { bearer, insertCrop, insertLot, insertPlot, loginStaff, registerUser, testApp } from '../helpers';
+import { bearer, insertCrop, insertLot, insertPlot, loginStaff, registerUser, testApp, pickAvailablePickupSlot } from '../helpers';
 
 describe('auth', () => {
   const app = testApp();
@@ -130,7 +130,7 @@ describe('auth', () => {
     const ownBook = await request(app)
       .post('/api/orders')
       .set(bearer(seller.token))
-      .send({ lot_id: ownLot, donation: false, quantity_kg: 10 });
+      .send({ lot_id: ownLot, donation: false, quantity_kg: 10, ...pickAvailablePickupSlot() });
     expect(ownBook.status).toBe(403);
     expect(ownBook.body.error.code).toBe('FORBIDDEN');
 
@@ -145,7 +145,7 @@ describe('auth', () => {
     const bookOther = await request(app)
       .post('/api/orders')
       .set(bearer(seller.token))
-      .send({ lot_id: otherLot, donation: false, quantity_kg: 10 });
+      .send({ lot_id: otherLot, donation: false, quantity_kg: 10, ...pickAvailablePickupSlot() });
     expect(bookOther.status).toBe(201);
 
     const enableBuy = await registerUser(app, { role: 'farmer', name: 'เปิดซื้อทีหลัง' });

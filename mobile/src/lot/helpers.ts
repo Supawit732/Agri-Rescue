@@ -147,6 +147,30 @@ export function googleMapsUrl(lat: number, lng: number): string {
   return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
 }
 
+/** Multi-waypoint Google Maps directions (origin + waypoints + optional destination home). */
+export function googleDirectionsUrl(
+  origin: { lat: number; lng: number },
+  waypoints: ReadonlyArray<{ lat: number; lng: number }>,
+  destination?: { lat: number; lng: number },
+): string {
+  const parts = [
+    'https://www.google.com/maps/dir/?api=1',
+    `origin=${origin.lat},${origin.lng}`,
+  ];
+  if (waypoints.length > 0) {
+    parts.push(`waypoints=${waypoints.map((p) => `${p.lat},${p.lng}`).join('%7C')}`);
+  }
+  if (destination !== undefined) {
+    parts.push(`destination=${destination.lat},${destination.lng}`);
+  } else if (waypoints.length > 0) {
+    const last = waypoints[waypoints.length - 1] as { lat: number; lng: number };
+    parts.push(`destination=${last.lat},${last.lng}`);
+  } else {
+    parts.push(`destination=${origin.lat},${origin.lng}`);
+  }
+  return parts.join('&');
+}
+
 /** Prefer server location_label (ตำบล/อำเภอ) then plot_name. */
 export function lotLocationLabel(
   lot: Pick<MarketLot, 'location_label' | 'subdistrict_th' | 'district_th' | 'plot_name'>,

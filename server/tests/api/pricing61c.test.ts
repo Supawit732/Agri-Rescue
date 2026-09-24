@@ -3,7 +3,7 @@ import type { RowDataPacket } from 'mysql2';
 import { pool } from '../../src/db/pool';
 import * as mocClient from '../../src/pricing/mocClient';
 import { clearMocProductCacheForTests, useTempMocProductCacheForTests } from '../../src/pricing/mocProductCache';
-import { bearer, insertCrop, insertLot, insertPlot, loginStaff, registerUser, testApp } from '../helpers';
+import { bearer, insertCrop, insertLot, insertPlot, loginStaff, registerUser, testApp, pickAvailablePickupSlot } from '../helpers';
 
 describe('lots patch and pricing 6.1c', () => {
   const app = testApp();
@@ -44,7 +44,7 @@ describe('lots patch and pricing 6.1c', () => {
     const booked = await request(app)
       .post('/api/orders')
       .set(bearer(buyer.token))
-      .send({ lot_id: lotId, donation: false, quantity_kg: 18 });
+      .send({ lot_id: lotId, donation: false, quantity_kg: 18, ...pickAvailablePickupSlot() });
     expect(booked.status).toBe(201);
 
     // Fully reserved → 409; if still editable somehow, weight below reserved → 400 (6.1e).
@@ -96,7 +96,7 @@ describe('lots patch and pricing 6.1c', () => {
     const paid = await request(app)
       .post('/api/orders')
       .set(bearer(buyer.token))
-      .send({ lot_id: created.body.lot.id, donation: false, quantity_kg: 8 });
+      .send({ lot_id: created.body.lot.id, donation: false, quantity_kg: 8, ...pickAvailablePickupSlot() });
     expect(paid.status).toBe(403);
   });
 });

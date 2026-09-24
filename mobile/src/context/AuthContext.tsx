@@ -46,6 +46,8 @@ import type {
   AdminUserRow,
   User,
   UserRole,
+  PickupSlotOption,
+  BuyerRoute,
 } from '../api/types';
 
 interface RegisterInput {
@@ -177,8 +179,15 @@ interface Api {
     lotId: number,
     donation: boolean,
     quantityKg: number,
-    extras?: { distribution_place?: string; distribution_at?: string },
+    extras?: {
+      distribution_place?: string;
+      distribution_at?: string;
+      pickup_slot_start?: string;
+      pickup_slot_end?: string;
+    },
   ) => Promise<{ order: Order }>;
+  getPickupSlots: (lotId: number) => Promise<{ slots: PickupSlotOption[] }>;
+  getBuyerRoute: (date: string) => Promise<BuyerRoute>;
   getOrder: (id: number) => Promise<Order>;
   becomeVolunteer: () => Promise<AuthResponse>;
   getDonorTerms: () => Promise<DonorTermsMeta>;
@@ -536,6 +545,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
           quantity_kg: quantityKg,
           ...extras,
         }),
+      getPickupSlots: (lotId) =>
+        authed<{ slots: PickupSlotOption[] }>('GET', `/api/orders/pickup-slots?lot_id=${String(lotId)}`),
+      getBuyerRoute: (date) =>
+        authed<BuyerRoute>('GET', `/api/orders/route?date=${encodeURIComponent(date)}`),
       getOrder: (id) => authed<{ order: Order }>('GET', `/api/orders/${id}`).then((r) => r.order),
       becomeVolunteer: async () => {
         const res = await authed<{ user: User }>('POST', '/api/donors/volunteer', {});

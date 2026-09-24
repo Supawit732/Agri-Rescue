@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, Text } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { ApiError } from '../../../src/api/client';
 import {
   Body,
@@ -10,6 +10,7 @@ import {
   SecondaryButton,
   SubScreen,
 } from '../../../src/components/ui';
+import { PickupSlotPicker } from '../../../src/components/PickupSlotPicker';
 import { useAuth } from '../../../src/context/AuthContext';
 import { useApiData } from '../../../src/hooks/useApiData';
 import { formatCountdown, hoursLeftFrom, useNow } from '../../../src/hooks/useNow';
@@ -37,20 +38,43 @@ export default function LotConfirmScreen(): React.ReactElement {
     () => api.getMarketLot(lotId, lat, lng),
     [lotId, lat, lng],
   );
+  const slots = useApiData(() => api.getPickupSlots(lotId), [lotId, donation]);
   const [busy, setBusy] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
+  const [slotError, setSlotError] = useState<string | null>(null);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+
+  const selectedSlot = slots.data?.slots.find((s) => s.key === selectedKey) ?? null;
 
   const confirm = async (): Promise<void> => {
     setBanner(null);
+    setSlotError(null);
+    if (!donation) {
+      if (selectedSlot === null) {
+        setSlotError(t.confirmBooking.needSlot);
+        return;
+      }
+      if (!selectedSlot.available) {
+        setSlotError(t.confirmBooking.slotUnavailable);
+        return;
+      }
+    }
     setBusy(true);
     try {
-      const extras =
-        donation && needsPlace
-          ? {
-              distribution_place: t.confirmBooking.distributionPlaceDefault,
-              distribution_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-            }
-          : undefined;
+      const extras: {
+        distribution_place?: string;
+        distribution_at?: string;
+        pickup_slot_start?: string;
+        pickup_slot_end?: string;
+      } = {};
+      if (donation && needsPlace) {
+        extras.distribution_place = t.confirmBooking.distributionPlaceDefault;
+        extras.distribution_at = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      }
+      if (selectedSlot !== null) {
+        extras.pickup_slot_start = selectedSlot.start_at;
+        extras.pickup_slot_end = selectedSlot.end_at;
+      }
       const result = await api.createOrder(lotId, donation, quantityKg, extras);
       await refreshUser();
       router.replace({
@@ -128,14 +152,55 @@ export default function LotConfirmScreen(): React.ReactElement {
                 </Text>
                 <Text style={styles.terms}>{t.confirmBooking.terms}</Text>
               </Card>
+
+              {slots.loading && slots.data === null ? (
+                <Text style={styles.slotLoad}>{t.common.loading}</Text>
+              ) : null}
+              {slots.error !== null && slots.data === null ? (
+                <Text style={styles.banner}>{slots.error}</Text>
+              ) : null}
+              {slots.data !== null && slots.data.slots.length > 0 ? (
+                <Card>
+                  <PickupSlotPicker
+                    slots={slots.data.slots}
+                    selectedKey={selectedKey}
+                    onSelect={(key) => {
+                      setSelectedKey(key);
+                      setSlotError(null);
+                    }}
+                  />
+                  {slotError !== null ? <Text style={styles.banner}>{slotError}</Text> : null}
+                  {selectedSlot !== null && selectedSlot.available ? (
+                    <Text style={styles.selected}>
+                      {formatTemplate(t.confirmBooking.slotRange, {
+                        day:
+                          selectedSlot.day === 'today'
+                            ? t.confirmBooking.today
+                            : t.confirmBooking.tomorrow,
+                        start: (() => {
+                          const d = new Date(selectedSlot.start_at);
+                          return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+                        })(),
+                        end: (() => {
+                          const d = new Date(selectedSlot.end_at);
+                          return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+                        })(),
+                      })}
+                    </Text>
+                  ) : null}
+                </Card>
+              ) : null}
+
               <PrimaryButton
                 label={donation ? t.confirmBooking.confirmDonate : t.confirmBooking.confirmBuy}
                 tone={donation ? 'turmeric' : undefined}
+                block
                 loading={busy}
                 onPress={() => void confirm()}
               />
               <SecondaryButton
                 label={t.confirmBooking.goBack}
+                block
                 onPress={() =>
                   router.replace({
                     pathname: '/lots/[id]',
@@ -157,4 +222,6 @@ const styles = StyleSheet.create({
   line: { color: C.ink, marginBottom: 4 },
   total: { fontSize: 16, fontWeight: '700', color: C.leaf, marginVertical: 6 },
   terms: { color: C.mute, marginTop: 10, lineHeight: 20 },
+  slotLoad: { color: C.mute, marginBottom: 8 },
+  selected: { color: C.leafDeep, fontWeight: '600', marginTop: 4 },
 });
