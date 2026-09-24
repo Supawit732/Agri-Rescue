@@ -11,8 +11,20 @@ export async function resolveMapsLink(url: string): Promise<{ lat: number; lng: 
 export async function reverseGeocode(
   lat: number,
   lng: number,
-): Promise<{ lat: number; lng: number; display_name: string | null }> {
-  return apiRequest<{ lat: number; lng: number; display_name: string | null }>({
+): Promise<{
+  lat: number;
+  lng: number;
+  display_name: string | null;
+  subdistrict_th?: string | null;
+  district_th?: string | null;
+}> {
+  return apiRequest<{
+    lat: number;
+    lng: number;
+    display_name: string | null;
+    subdistrict_th?: string | null;
+    district_th?: string | null;
+  }>({
     method: 'GET',
     path: `/api/geo/reverse?lat=${encodeURIComponent(String(lat))}&lng=${encodeURIComponent(String(lng))}`,
   });

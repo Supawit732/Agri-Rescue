@@ -38,6 +38,7 @@ import {
   availableAsOf,
   donationEligibility,
   donationEligibilityLabels,
+  lotLocationLabel,
   marketSaleBadge,
   minOrderOf,
   remainingOf,
@@ -422,7 +423,7 @@ function MarketCatalog(): React.ReactElement {
                       {meta}
                     </Text>
                     <Text style={styles.cardMeta} numberOfLines={1}>
-                      {lot.plot_name ?? t.market.plotFallback}
+                      {lotLocationLabel(lot, t.market.plotFallback)}
                       {dist !== null ? ` · ${dist}` : ''}
                     </Text>
                     {lot.shop_name != null && lot.shop_name !== '' ? (

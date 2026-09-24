@@ -28,6 +28,7 @@ describe('public market', () => {
     expect(lot.crop_name_th).toBe('มะม่วงสาธารณะ');
     expect(lot.crop_name_en).toBe('Public Mango');
     expect(lot.plot_name).toBe('แปลงชุมชน');
+    expect(lot.location_label).toBe('แปลงชุมชน');
     expect(lot.available_as).toEqual(['buy']);
     expect(lot.distance_km).toBeNull();
     expect(lot.photos).toEqual([]);

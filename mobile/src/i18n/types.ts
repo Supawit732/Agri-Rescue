@@ -408,6 +408,10 @@ export type Messages = {
     deliverySuccessTitle: string;
     deliverySuccessBody: string;
     confirmFailed: string;
+    sectionContact: string;
+    contactHint: string;
+    call: string;
+    openLine: string;
   };
   confirmBooking: {
     title: string;
@@ -458,6 +462,8 @@ export type Messages = {
     emailPlaceholder: string;
     pickupLocation: string;
     changeLocation: string;
+    pickupHint: string;
+    pickupRequired: string;
     donorCardTitle: string;
     donorWeekUsage: string;
     donorUpgradeOrg: string;
@@ -466,6 +472,7 @@ export type Messages = {
     saveFailed: string;
     saveContact: string;
     saveShop: string;
+    saveLocation: string;
     changePhoto: string;
     rightsLabel: string;
     buyerTypeLabel: string;

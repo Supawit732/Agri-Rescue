@@ -107,6 +107,75 @@ describe('orders', () => {
     expect(denied.status).toBe(403);
   });
 
+  it('returns counterparty phone/LINE only after booking (D034)', async () => {
+    const farmer = await registerUser(app, { role: 'farmer', name: 'ผู้ขายลุง' });
+    const sellerPhone = farmer.user.phone;
+    await pool.query(`UPDATE users SET line_id = ? WHERE id = ?`, ['seller.line', farmer.user.id]);
+    const buyer = await registerUser(app, { role: 'buyer', buyer_type: 'shop', name: 'ผู้ซื้อร้าน' });
+    const buyerPhone = buyer.user.phone;
+    await pool.query(`UPDATE users SET line_id = ? WHERE id = ?`, ['buyer.line', buyer.user.id]);
+    const cropId = await insertCrop('กล้วย', 5, 30);
+    const plotId = await insertPlot(farmer.user.id, 13.66, 100.61, 'แปลงกล้วย');
+    const lotId = await insertLot({
+      plotId,
+      cropId,
+      expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+    });
+
+    // Before booking: market APIs must not leak phone / line_id of the seller.
+    const market = await request(app)
+      .get('/api/market')
+      .query({ lat: 13.66, lng: 100.61, radius_km: 15 })
+      .set(bearer(buyer.token));
+    expect(market.status).toBe(200);
+    expect(JSON.stringify(market.body)).not.toContain('seller.line');
+    expect(JSON.stringify(market.body)).not.toContain(sellerPhone);
+    expect(JSON.stringify(market.body)).not.toContain('"phone"');
+    expect(JSON.stringify(market.body)).not.toContain('"line_id"');
+
+    const publicMarket = await request(app).get('/api/public/market');
+    expect(publicMarket.status).toBe(200);
+    expect(JSON.stringify(publicMarket.body)).not.toContain('seller.line');
+    expect(JSON.stringify(publicMarket.body)).not.toContain('"phone"');
+    expect(JSON.stringify(publicMarket.body)).not.toContain('"line_id"');
+
+    const booked = await request(app)
+      .post('/api/orders')
+      .set(bearer(buyer.token))
+      .send({ lot_id: lotId, donation: false, quantity_kg: 4 });
+    expect(booked.status).toBe(201);
+    const orderId = booked.body.order.id as number;
+    expect(JSON.stringify(booked.body)).not.toContain('seller.line');
+    expect(JSON.stringify(booked.body)).not.toContain('"line_id"');
+
+    const asBuyer = await request(app).get(`/api/orders/${orderId}`).set(bearer(buyer.token));
+    expect(asBuyer.status).toBe(200);
+    expect(asBuyer.body.order.contact).toMatchObject({
+      name: 'ผู้ขายลุง',
+      phone: sellerPhone,
+      line_id: 'seller.line',
+    });
+    expect(JSON.stringify(asBuyer.body)).not.toContain('buyer.line');
+    expect(JSON.stringify(asBuyer.body)).not.toContain(buyerPhone);
+
+    const asSeller = await request(app).get(`/api/orders/${orderId}`).set(bearer(farmer.token));
+    expect(asSeller.status).toBe(200);
+    expect(asSeller.body.order.contact).toMatchObject({
+      name: 'ผู้ซื้อร้าน',
+      phone: buyerPhone,
+      line_id: 'buyer.line',
+    });
+
+    const cancelled = await request(app)
+      .delete(`/api/orders/${orderId}`)
+      .set(bearer(buyer.token));
+    expect(cancelled.status).toBe(200);
+    const afterCancel = await request(app).get(`/api/orders/${orderId}`).set(bearer(buyer.token));
+    expect(afterCancel.status).toBe(200);
+    expect(afterCancel.body.order.contact).toBeNull();
+    expect(JSON.stringify(afterCancel.body)).not.toContain('seller.line');
+  });
+
   it('rejects donation from a non-charity buyer and from a closed lot', async () => {
     const vendorLot = await openLot(true);
     const vendor = await registerUser(app, { role: 'buyer', buyer_type: 'vendor' });

@@ -5,6 +5,7 @@ import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-nat
 import { ApiError } from '../src/api/client';
 import { initialsOf } from '../src/components/LogoMark';
 import { FormField, useFieldErrors, useFieldScroll } from '../src/components/form';
+import { LocationPicker, type LatLng } from '../src/components/LocationPicker';
 import { PhoneEmailField } from '../src/components/PhoneEmailField';
 import { Body, PrimaryButton, Screen, StackHeader } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
@@ -23,6 +24,9 @@ export default function ProfileScreen(): React.ReactElement {
   const [email, setEmail] = useState(user?.email ?? '');
   const [lineId, setLineId] = useState(user?.line_id ?? '');
   const [shopName, setShopName] = useState(user?.name ?? '');
+  const [coords, setCoords] = useState<LatLng | null>(() =>
+    user?.lat != null && user?.lng != null ? { lat: user.lat, lng: user.lng } : null,
+  );
   const { errors, setErrors, setFieldError, applyServerFields } = useFieldErrors();
   const { scrollRef, registerY, scrollToField } = useFieldScroll();
 
@@ -91,6 +95,35 @@ export default function ProfileScreen(): React.ReactElement {
         email: emailTrim === '' ? '' : emailTrim,
         line_id: lineId.trim() === '' ? null : lineId.trim(),
       });
+      await refreshUser();
+      setMessage(t.profile.saved);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        applyServerFields(err.fields);
+        if (err.fields !== undefined && Object.keys(err.fields).length > 0) {
+          scrollToField(Object.keys(err.fields)[0] ?? null);
+        } else {
+          setError(translateError(err.code, err.message));
+        }
+      } else {
+        setError(t.profile.saveFailed);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveLocation = async (): Promise<void> => {
+    if (coords === null) {
+      setErrors({ lat: t.profile.pickupRequired });
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    setErrors({});
+    try {
+      await api.updateProfile({ lat: coords.lat, lng: coords.lng });
       await refreshUser();
       setMessage(t.profile.saved);
     } catch (err) {
@@ -249,7 +282,23 @@ export default function ProfileScreen(): React.ReactElement {
           />
         </View>
 
-        {/* Pickup location hidden for demo — PATCH /profile has no lat/lng save. */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>{t.profile.pickupLocation}</Text>
+          <Text style={styles.muted}>{t.profile.pickupHint}</Text>
+          <LocationPicker
+            value={coords}
+            onChange={setCoords}
+            label={t.profile.pickupLocation}
+            error={errors.lat ?? null}
+          />
+          <PrimaryButton
+            label={t.profile.saveLocation}
+            block
+            disabled={coords === null}
+            onPress={() => void saveLocation()}
+            loading={busy}
+          />
+        </View>
 
         <Pressable style={styles.card} onPress={() => router.push('/donor-apply')}>
           <View style={styles.linkRow}>

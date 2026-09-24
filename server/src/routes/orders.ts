@@ -26,6 +26,7 @@ import { HttpError } from '../http/errors';
 import { requireAuth, requireCapability } from '../middleware/auth';
 import { finalizeLotIfComplete, sumReservedQuantityKg, syncLotBookableStatus } from '../orders/lotInventoryService';
 import { notifyUser } from '../notifications/notificationService';
+import { locationDisplayLabel } from '../geo/locationLabel';
 
 export const ordersRouter = Router();
 
@@ -84,6 +85,14 @@ interface OrderDetailRow extends OrderRow {
   farmer_id: number;
   buyer_lat: number | null;
   buyer_lng: number | null;
+  buyer_name: string;
+  buyer_phone: string;
+  buyer_line_id: string | null;
+  seller_name: string;
+  seller_phone: string;
+  seller_line_id: string | null;
+  plot_subdistrict_th: string | null;
+  plot_district_th: string | null;
 }
 
 ordersRouter.use(requireAuth);
@@ -296,12 +305,16 @@ ordersRouter.get(
               o.batch_id, o.drop_otp, o.distribution_place, o.distribution_at, o.created_at,
               c.name_th AS crop_name_th, c.name_en AS crop_name_en, h.grade, h.ripeness, h.photo_url, h.expires_at,
               p.name AS plot_name, p.lat AS plot_lat, p.lng AS plot_lng, p.farmer_id,
-              bu.lat AS buyer_lat, bu.lng AS buyer_lng
+              p.subdistrict_th AS plot_subdistrict_th, p.district_th AS plot_district_th,
+              bu.lat AS buyer_lat, bu.lng AS buyer_lng,
+              bu.name AS buyer_name, bu.phone AS buyer_phone, bu.line_id AS buyer_line_id,
+              fu.name AS seller_name, fu.phone AS seller_phone, fu.line_id AS seller_line_id
        FROM orders o
        JOIN harvest_lots h ON h.id = o.lot_id
        JOIN crops c ON c.id = h.crop_id
        JOIN plots p ON p.id = h.plot_id
        JOIN users bu ON bu.id = o.buyer_id
+       JOIN users fu ON fu.id = p.farmer_id
        WHERE o.id = ?`,
       [orderId],
     );
@@ -325,6 +338,8 @@ ordersRouter.get(
         { lat: plotLat, lng: plotLng },
       );
     }
+    // D034: contact only after booking (status ≠ cancelled). Never before an order exists.
+    const booked = row.status !== 'cancelled';
     res.json({
       order: {
         id: Number(row.id),
@@ -344,6 +359,11 @@ ordersRouter.get(
         drop_otp: row.drop_otp,
         expires_at: new Date(row.expires_at).toISOString(),
         plot_name: row.plot_name,
+        location_label: locationDisplayLabel(
+          row.plot_subdistrict_th,
+          row.plot_district_th,
+          row.plot_name,
+        ),
         lat: plotLat,
         lng: plotLng,
         distance_km: distanceKm,
@@ -352,6 +372,13 @@ ordersRouter.get(
           row.distribution_at === null ? null : new Date(row.distribution_at).toISOString(),
         created_at: new Date(row.created_at).toISOString(),
         viewer: isSeller ? 'seller' : 'buyer',
+        contact: booked
+          ? {
+              name: isSeller ? row.buyer_name : row.seller_name,
+              phone: isSeller ? row.buyer_phone : row.seller_phone,
+              line_id: isSeller ? row.buyer_line_id : row.seller_line_id,
+            }
+          : null,
       },
     });
   }),

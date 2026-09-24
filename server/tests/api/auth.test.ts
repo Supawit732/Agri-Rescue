@@ -171,4 +171,47 @@ describe('auth', () => {
     expect(approved.status).toBe(200);
     expect(approved.body.user.charity_approved).toBe(true);
   });
+
+  it('saves pickup lat/lng with reverse-geocode labels and syncs seller plots', async () => {
+    const { resetNominatimState } = await import('../../src/geo/nominatim');
+    resetNominatimState();
+    const farmer = await registerUser(app, { role: 'farmer', name: 'บันทึกตำแหน่ง' });
+    await insertPlot(farmer.user.id, 13.65, 100.62, 'แปลงเก่า');
+
+    const patched = await request(app)
+      .patch('/api/auth/profile')
+      .set(bearer(farmer.token))
+      .send({ lat: 13.72, lng: 100.56 });
+    expect(patched.status).toBe(200);
+    expect(patched.body.user.lat).toBeCloseTo(13.72, 5);
+    expect(patched.body.user.lng).toBeCloseTo(100.56, 5);
+    expect(patched.body.user.subdistrict_th).toBe('คลองเตย');
+    expect(patched.body.user.district_th).toBe('คลองเตย');
+
+    const [users] = await pool.query<RowDataPacket[]>(
+      'SELECT lat, lng, subdistrict_th, district_th FROM users WHERE id = ?',
+      [farmer.user.id],
+    );
+    expect(Number(users[0]?.lat)).toBeCloseTo(13.72, 5);
+    expect(users[0]?.subdistrict_th).toBe('คลองเตย');
+
+    const [plots] = await pool.query<RowDataPacket[]>(
+      'SELECT lat, lng, subdistrict_th, district_th FROM plots WHERE farmer_id = ?',
+      [farmer.user.id],
+    );
+    expect(plots).toHaveLength(1);
+    expect(Number(plots[0]?.lat)).toBeCloseTo(13.72, 5);
+    expect(plots[0]?.subdistrict_th).toBe('คลองเตย');
+    expect(plots[0]?.district_th).toBe('คลองเตย');
+  });
+
+  it('rejects profile patch with only lat or only lng', async () => {
+    const buyer = await registerUser(app, { role: 'buyer' });
+    const onlyLat = await request(app)
+      .patch('/api/auth/profile')
+      .set(bearer(buyer.token))
+      .send({ lat: 13.7 });
+    expect(onlyLat.status).toBe(400);
+    expect(onlyLat.body.error.fields?.lat ?? onlyLat.body.error.message).toBeTruthy();
+  });
 });

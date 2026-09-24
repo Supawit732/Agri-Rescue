@@ -8,6 +8,7 @@ import { remainingLotKg } from '../domain/lotInventory';
 import type { ProduceGrade } from '../domain/pricing';
 import { availableAs, lotAcceptsDonation, lotPricePerKg } from '../domain/sellerPricing';
 import { usedDonationKgThisWeek } from '../donors/donationService';
+import { locationDisplayLabel } from '../geo/locationLabel';
 import { asyncHandler } from '../http/asyncHandler';
 import { HttpError } from '../http/errors';
 import { optionalAuth } from '../middleware/optionalAuth';
@@ -58,6 +59,8 @@ interface PublicMarketRow extends RowDataPacket {
   lat: number;
   lng: number;
   plot_name: string;
+  subdistrict_th: string | null;
+  district_th: string | null;
 }
 
 const PUBLIC_LOT_SELECT = `SELECT h.id, h.crop_id, p.farmer_id, s.name AS shop_name,
@@ -66,7 +69,7 @@ const PUBLIC_LOT_SELECT = `SELECT h.id, h.crop_id, p.farmer_id, s.name AS shop_n
               h.start_price_per_kg, h.floor_price_per_kg, h.sale_mode, h.donation_opened,
               h.market_price_snapshot, h.expires_at,
               c.name_th AS crop_name_th, c.name_en AS crop_name_en, c.base_shelf_days,
-              p.lat, p.lng, p.name AS plot_name,
+              p.lat, p.lng, p.name AS plot_name, p.subdistrict_th, p.district_th,
               COALESCE((
                 SELECT SUM(o.quantity_kg) FROM orders o
                 WHERE o.lot_id = h.id AND o.status IN ('reserved', 'picked', 'delivered')
@@ -89,6 +92,9 @@ export interface PublicLotView {
   crop_name_th: string;
   crop_name_en: string | null;
   plot_name: string;
+  subdistrict_th: string | null;
+  district_th: string | null;
+  location_label: string | null;
   photos: string[];
   photo_url: string | null;
   weight_kg: number;
@@ -206,6 +212,9 @@ function presentPublicLot(
     crop_name_th: row.crop_name_th,
     crop_name_en: row.crop_name_en === null || row.crop_name_en === '' ? null : String(row.crop_name_en),
     plot_name: row.plot_name,
+    subdistrict_th: row.subdistrict_th ?? null,
+    district_th: row.district_th ?? null,
+    location_label: locationDisplayLabel(row.subdistrict_th, row.district_th, row.plot_name),
     photos: photoList,
     photo_url: photoList[0] ?? row.photo_url,
     weight_kg: weightKg,

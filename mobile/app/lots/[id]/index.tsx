@@ -22,6 +22,7 @@ import {
   defaultQuantity,
   donationEligibility,
   donationEligibilityLabels,
+  lotLocationLabel,
   marketSaleBadge,
   minOrderOf,
   remainingOf,
@@ -192,7 +193,7 @@ export default function LotDetailScreen(): React.ReactElement {
           });
           const canDonate = donationIntent && elig.canDonate && available.includes('donate');
           const canBuy = !donationIntent && available.includes('buy') && lot.price_per_kg !== null;
-          const area = lot.area_th ?? lot.plot_name ?? null;
+          const area = lotLocationLabel(lot, t.market.plotFallback);
           const cropTitle = cropName({ name_th: lot.crop_name_th, name_en: lot.crop_name_en });
           const uri = photoUri(lot);
 
@@ -227,7 +228,7 @@ export default function LotDetailScreen(): React.ReactElement {
                 </Text>
                 <Text style={styles.line}>
                   {lot.grade === 'substandard' ? t.market.gradeSub : t.market.gradeNormal}
-                  {area !== null ? ` · ${area}` : ''}
+                  {area !== '' ? ` · ${area}` : ''}
                 </Text>
                 {lot.distance_km !== null && lot.distance_km !== undefined ? (
                   <Text style={styles.line}>

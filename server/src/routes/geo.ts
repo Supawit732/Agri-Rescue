@@ -36,7 +36,13 @@ geoRouter.get(
       throw new HttpError(400, 'VALIDATION', query.error.issues[0]?.message ?? 'พิกัดไม่ถูกต้อง');
     }
     const { lat, lng } = query.data;
-    const { displayName } = await reverseGeocode(lat, lng);
-    res.json({ lat, lng, display_name: displayName });
+    const { displayName, subdistrictTh, districtTh } = await reverseGeocode(lat, lng);
+    res.json({
+      lat,
+      lng,
+      display_name: displayName,
+      subdistrict_th: subdistrictTh,
+      district_th: districtTh,
+    });
   }),
 );

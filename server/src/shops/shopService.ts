@@ -2,6 +2,7 @@ import type { PoolConnection } from 'mysql2/promise';
 import type { ResultSetHeader, RowDataPacket } from 'mysql2';
 import { pool } from '../db/pool';
 import { haversineKm } from '../domain/geo';
+import { locationDisplayLabel } from '../geo/locationLabel';
 
 export interface ShopRow {
   user_id: number;
@@ -145,8 +146,9 @@ export async function isFollowing(followerId: number | null, shopId: number): Pr
 export async function loadShopOwner(userId: number): Promise<RowDataPacket | null> {
   const [rows] = await pool.query<RowDataPacket[]>(
     `SELECT s.user_id, s.name, s.avatar, s.cover, s.description,
-            u.lat, u.lng,
-            p.name AS plot_name, p.lat AS plot_lat, p.lng AS plot_lng
+            u.lat, u.lng, u.subdistrict_th AS user_subdistrict_th, u.district_th AS user_district_th,
+            p.name AS plot_name, p.lat AS plot_lat, p.lng AS plot_lng,
+            p.subdistrict_th AS plot_subdistrict_th, p.district_th AS plot_district_th
      FROM shops s
      JOIN users u ON u.id = s.user_id
      LEFT JOIN plots p ON p.farmer_id = u.id
@@ -196,8 +198,11 @@ export async function commonCrops(shopId: number, limit = 3): Promise<string[]> 
 
 function locationLabel(row: RowDataPacket): string | null {
   const plotName = row.plot_name === null || row.plot_name === undefined ? null : String(row.plot_name);
-  // No tambon/amphoe in schema yet (D022) — plot name only.
-  return plotName;
+  return locationDisplayLabel(
+    row.plot_subdistrict_th ?? row.user_subdistrict_th,
+    row.plot_district_th ?? row.user_district_th,
+    plotName,
+  );
 }
 
 export async function loadPublicShop(
