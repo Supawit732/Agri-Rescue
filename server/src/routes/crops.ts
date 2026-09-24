@@ -9,7 +9,7 @@ cropsRouter.get(
   '/',
   asyncHandler(async (_req, res) => {
     const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT id, name_th, base_shelf_days, market_price_per_kg,
+      `SELECT id, name_th, name_en, base_shelf_days, market_price_per_kg,
               dit_product_code, dit_unit, dit_unit_to_kg,
               normal_features_th, defect_examples_th
        FROM crops
@@ -19,6 +19,7 @@ cropsRouter.get(
       crops: rows.map((row) => ({
         id: Number(row.id),
         name_th: String(row.name_th),
+        name_en: row.name_en === null ? null : String(row.name_en),
         base_shelf_days: Number(row.base_shelf_days),
         market_price_per_kg: Number(row.market_price_per_kg),
         dit_product_code: row.dit_product_code === null ? null : String(row.dit_product_code),

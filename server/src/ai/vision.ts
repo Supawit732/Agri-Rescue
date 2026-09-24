@@ -11,7 +11,9 @@ export const aiAssessmentSchema = z.object({
   ripeness: z.number().int().min(0).max(4),
   confidence: z.number().min(0).max(1),
   defects: z.array(z.string()),
+  defects_en: z.array(z.string()),
   note_th: z.string(),
+  note_en: z.string(),
 });
 
 export type AiAssessment = z.infer<typeof aiAssessmentSchema>;
@@ -23,7 +25,9 @@ export type AssessPhotoResult =
       ripeness: number;
       confidence: number;
       defects: string[];
+      defects_en: string[];
       note_th: string;
+      note_en: string;
       low_confidence: boolean;
       model: string;
     }
@@ -62,10 +66,11 @@ export function buildRipenessPrompt(
     `ตั้ง subject_match = true เฉพาะเมื่อในรูปเห็น${cropNameTh}ชัดเจน ถ้าไม่มีหรือเป็นพืชอื่นให้เป็น false`,
     `ลักษณะปกติของ${cropNameTh} (ห้ามนับเป็นตำหนิ): ${normal}`,
     `ตัวอย่างตำหนิของ${cropNameTh}: ${defects}`,
-    `ห้ามนับลักษณะปกติเป็นตำหนิ; ถ้าไม่มีตำหนิจริงให้ defects เป็น [] ได้`,
+    `ห้ามนับลักษณะปกติเป็นตำหนิ; ถ้าไม่มีตำหนิจริงให้ defects และ defects_en เป็น [] ได้`,
     `ระดับความสุกที่อนุญาต: ${levels}`,
-    `ตอบเป็น JSON เท่านั้น ตามสคีมา: {"subject_match":true|false,"ripeness":0-4,"confidence":0-1,"defects":["ตำหนิเป็นภาษาไทย"],"note_th":"คำอธิบายสั้นภาษาไทย"}`,
-    `ถ้า subject_match เป็น false ยังต้องใส่ ripeness/confidence/defects/note_th ได้ (ค่าประมาณก็ได้) แต่ระบบจะไม่ใช้ค่าความสุก`,
+    `ตอบเป็น JSON เท่านั้น ตามสคีมา: {"subject_match":true|false,"ripeness":0-4,"confidence":0-1,"defects":["ตำหนิเป็นภาษาไทย"],"defects_en":["same defects in English"],"note_th":"คำอธิบายสั้นภาษาไทย","note_en":"short English note"}`,
+    `defects และ defects_en ต้องมีความหมายคู่กัน (จำนวนและลำดับเดียวกัน); note_th กับ note_en เช่นกัน`,
+    `ถ้า subject_match เป็น false ยังต้องใส่ ripeness/confidence/defects/defects_en/note_th/note_en ได้ (ค่าประมาณก็ได้) แต่ระบบจะไม่ใช้ค่าความสุก`,
     `อย่าใส่ข้อความอื่นนอก JSON`,
   ].join('\n');
 }
@@ -77,9 +82,11 @@ const ripenessJsonSchema = {
     ripeness: { type: 'integer', minimum: 0, maximum: 4 },
     confidence: { type: 'number', minimum: 0, maximum: 1 },
     defects: { type: 'array', items: { type: 'string' } },
+    defects_en: { type: 'array', items: { type: 'string' } },
     note_th: { type: 'string' },
+    note_en: { type: 'string' },
   },
-  required: ['subject_match', 'ripeness', 'confidence', 'defects', 'note_th'],
+  required: ['subject_match', 'ripeness', 'confidence', 'defects', 'defects_en', 'note_th', 'note_en'],
   additionalProperties: false,
 } as const;
 
@@ -259,7 +266,9 @@ export async function assessRipenessFromPhoto(input: {
       ripeness: parsed.ripeness,
       confidence: parsed.confidence,
       defects: parsed.defects,
+      defects_en: parsed.defects_en,
       note_th: parsed.note_th,
+      note_en: parsed.note_en,
       low_confidence: parsed.confidence < 0.6,
       model: config.model,
     };

@@ -36,6 +36,7 @@ interface MarketRow extends RowDataPacket {
   donation_opened: number;
   expires_at: Date;
   crop_name_th: string;
+  crop_name_en: string | null;
   base_shelf_days: number;
   lat: number;
   lng: number;
@@ -47,7 +48,7 @@ interface MarketRow extends RowDataPacket {
 const MARKET_LOT_SELECT = `SELECT h.id, h.weight_kg, h.split_allowed, h.min_order_kg, h.order_step_kg,
               h.grade, h.ripeness, h.allow_donation, h.donation_audience, h.photo_url,
               h.start_price_per_kg, h.floor_price_per_kg, h.sale_mode, h.donation_opened, h.expires_at,
-              c.name_th AS crop_name_th, c.base_shelf_days,
+              c.name_th AS crop_name_th, c.name_en AS crop_name_en, c.base_shelf_days,
               p.lat, p.lng, p.name AS plot_name, p.area_rai, u.name AS farmer_name,
               COALESCE((
                 SELECT SUM(o.quantity_kg) FROM orders o
@@ -65,6 +66,7 @@ function presentBuyerLot(
 ): {
   id: number;
   crop_name_th: string;
+  crop_name_en: string | null;
   farmer_name: string;
   plot_name: string;
   area_rai: number;
@@ -114,6 +116,7 @@ function presentBuyerLot(
   return {
     id: Number(row.id),
     crop_name_th: row.crop_name_th,
+    crop_name_en: row.crop_name_en === null || row.crop_name_en === '' ? null : String(row.crop_name_en),
     farmer_name: row.farmer_name,
     plot_name: row.plot_name,
     area_rai: Number(row.area_rai),

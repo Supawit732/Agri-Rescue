@@ -17,6 +17,7 @@ import { formatCountdown, hoursLeftFrom, useNow } from '../hooks/useNow';
 import {
   availableAsOf,
   donationEligibility,
+  donationEligibilityLabels,
   marketSaleBadge,
   minOrderOf,
   remainingOf,
@@ -140,7 +141,7 @@ function MarketList(): React.ReactElement {
               const hours = hoursLeftFrom(lot.expires_at, now);
               const tone = urgency(hours);
               const remaining = remainingOf(lot);
-              const elig = donationEligibility(user, lot, remaining);
+              const elig = donationEligibility(user, lot, remaining, donationEligibilityLabels(t));
               const available = availableAsOf(lot);
               const canBuy =
                 available.includes('buy') && lot.price_per_kg !== null && remaining > 0;
@@ -169,7 +170,7 @@ function MarketList(): React.ReactElement {
                     <Text style={styles.cardTitle}>
                       {cropTitle} · {t.market.remaining} {remaining} / {lot.weight_kg} {t.dashboard.unitKg}
                     </Text>
-                    <Badge text={formatCountdown(hours)} fg={tone.fg} bg={tone.bg} />
+                    <Badge text={formatCountdown(hours, t.countdown)} fg={tone.fg} bg={tone.bg} />
                   </View>
                   <View style={styles.badgeRow}>
                     {saleBadge !== null ? (

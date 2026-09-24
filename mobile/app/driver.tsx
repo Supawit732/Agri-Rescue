@@ -14,26 +14,28 @@ import {
   SecondaryButton,
   TopBar,
 } from '../src/components/ui';
-import { STATUS_LABELS } from '../src/constants';
 import { useAuth } from '../src/context/AuthContext';
 import { useApiData } from '../src/hooks/useApiData';
+import { formatTemplate, useI18n } from '../src/i18n';
 import { C } from '../src/theme';
 import type { Stop } from '../src/api/types';
 
-const BATCH_STATUS: Record<string, string> = {
-  planned: 'ยังไม่เริ่ม',
-  in_progress: 'กำลังวิ่ง',
-  completed: 'เสร็จแล้ว',
-};
+function batchStatusLabel(status: string, t: ReturnType<typeof useI18n>['t']): string {
+  if (status === 'planned') return t.driver.statusPlanned;
+  if (status === 'in_progress') return t.driver.statusInProgress;
+  if (status === 'completed') return t.driver.statusCompleted;
+  return status;
+}
 
 export default function DriverScreen(): React.ReactElement {
   const { logout } = useAuth();
+  const { t } = useI18n();
   const router = useRouter();
   const [selected, setSelected] = useState<number | null>(null);
 
   return (
     <Screen>
-      <TopBar title="คนขับ" onImpact={() => router.push('/impact')} onLogout={logout} />
+      <TopBar title={t.driver.title} onImpact={() => router.push('/impact')} onLogout={logout} />
       {selected === null ? (
         <BatchList onSelect={setSelected} />
       ) : (
@@ -45,6 +47,7 @@ export default function DriverScreen(): React.ReactElement {
 
 function BatchList({ onSelect }: { onSelect: (id: number) => void }): React.ReactElement {
   const { api } = useAuth();
+  const { t } = useI18n();
   const { data, loading, error, reload } = useApiData(() => api.getBatches(), []);
 
   return (
@@ -54,18 +57,18 @@ function BatchList({ onSelect }: { onSelect: (id: number) => void }): React.Reac
       data={data}
       onRetry={reload}
       isEmpty={(batches) => batches.length === 0}
-      emptyText="ยังไม่มีรอบวิ่งที่ได้รับมอบหมาย"
+      emptyText={t.driver.emptyBatches}
     >
       {(batches) => (
         <Body>
           {batches.map((batch) => (
             <Card key={batch.id}>
               <View style={styles.rowBetween}>
-                <Text style={styles.title}>รอบ #{batch.id}</Text>
-                <Badge text={BATCH_STATUS[batch.status] ?? batch.status} fg={C.leaf} bg={C.leafSoft} />
+                <Text style={styles.title}>{formatTemplate(t.driver.batchTitle, { id: batch.id })}</Text>
+                <Badge text={batchStatusLabel(batch.status, t)} fg={C.leaf} bg={C.leafSoft} />
               </View>
-              <Text style={styles.line}>ระยะรวม {batch.planned_km} กม.</Text>
-              <SecondaryButton label="ดูจุดแวะ" onPress={() => onSelect(batch.id)} />
+              <Text style={styles.line}>{formatTemplate(t.driver.totalKm, { km: batch.planned_km })}</Text>
+              <SecondaryButton label={t.driver.viewStops} onPress={() => onSelect(batch.id)} />
             </Card>
           ))}
         </Body>
@@ -76,6 +79,7 @@ function BatchList({ onSelect }: { onSelect: (id: number) => void }): React.Reac
 
 function BatchDetailView({ batchId, onBack }: { batchId: number; onBack: () => void }): React.ReactElement {
   const { api } = useAuth();
+  const { t } = useI18n();
   const { data, loading, error, reload } = useApiData(() => api.getBatch(batchId), [batchId]);
 
   return (
@@ -83,14 +87,16 @@ function BatchDetailView({ batchId, onBack }: { batchId: number; onBack: () => v
       {(detail) => (
         <Body>
           <View style={styles.rowBetween}>
-            <Text style={styles.title}>รอบ #{detail.batch.id}</Text>
-            <Badge text={BATCH_STATUS[detail.batch.status] ?? detail.batch.status} fg={C.leaf} bg={C.leafSoft} />
+            <Text style={styles.title}>{formatTemplate(t.driver.batchTitle, { id: detail.batch.id })}</Text>
+            <Badge text={batchStatusLabel(detail.batch.status, t)} fg={C.leaf} bg={C.leafSoft} />
           </View>
-          <Text style={styles.totalKm}>ระยะรวม {detail.batch.planned_km} กม.</Text>
+          <Text style={styles.totalKm}>
+            {formatTemplate(t.driver.totalKm, { km: detail.batch.planned_km })}
+          </Text>
           {detail.stops.map((stop) => (
             <StopCard key={stop.id} stop={stop} onDone={reload} />
           ))}
-          <SecondaryButton label="กลับไปรายการรอบ" onPress={onBack} />
+          <SecondaryButton label={t.driver.backToBatches} onPress={onBack} />
         </Body>
       )}
     </DataState>
@@ -99,6 +105,7 @@ function BatchDetailView({ batchId, onBack }: { batchId: number; onBack: () => v
 
 function StopCard({ stop, onDone }: { stop: Stop; onDone: () => void }): React.ReactElement {
   const { api } = useAuth();
+  const { t } = useI18n();
   const isPickup = stop.stop_type === 'pickup';
   const color = isPickup ? C.turmeric : C.leaf;
   const [weight, setWeight] = useState('');
@@ -113,7 +120,7 @@ function StopCard({ stop, onDone }: { stop: Stop; onDone: () => void }): React.R
       if (isPickup) {
         const w = Number(weight);
         if (!(w > 0)) {
-          setError('กรุณากรอกน้ำหนักที่ชั่งได้');
+          setError(t.driver.weightRequired);
           setBusy(false);
           return;
         }
@@ -123,7 +130,7 @@ function StopCard({ stop, onDone }: { stop: Stop; onDone: () => void }): React.R
       }
       onDone();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'ยืนยันไม่สำเร็จ');
+      setError(err instanceof ApiError ? err.message : t.driver.confirmFailed);
     } finally {
       setBusy(false);
     }
@@ -135,42 +142,56 @@ function StopCard({ stop, onDone }: { stop: Stop; onDone: () => void }): React.R
         <CircleSeq seq={stop.seq} color={color} />
         <View style={styles.stopHeaderText}>
           <Text style={styles.stopTitle}>
-            {isPickup ? 'รับของ (pickup)' : 'ส่งมอบ (drop)'} · ช่วง {stop.leg_km} กม.
+            {formatTemplate(t.driver.legKm, {
+              type: isPickup ? t.driver.pickup : t.driver.drop,
+              km: stop.leg_km,
+            })}
           </Text>
           <Text style={styles.stopSub}>
-            {isPickup ? `ล็อต #${stop.lot_id ?? '-'}` : `ผู้ซื้อ #${stop.buyer_id ?? '-'}`}
+            {isPickup
+              ? formatTemplate(t.driver.lotId, { id: stop.lot_id ?? t.common.dash })
+              : formatTemplate(t.driver.buyerId, { id: stop.buyer_id ?? t.common.dash })}
           </Text>
         </View>
-        {stop.status === 'done' ? <Badge text="เสร็จแล้ว" fg={C.leaf} bg={C.leafSoft} /> : null}
+        {stop.status === 'done' ? <Badge text={t.driver.done} fg={C.leaf} bg={C.leafSoft} /> : null}
       </View>
 
       {stop.status === 'done' ? (
         <Text style={styles.doneLine}>
-          {isPickup && stop.confirmed_weight_kg !== null ? `ชั่งได้ ${stop.confirmed_weight_kg} กก.` : 'ยืนยันแล้ว'}
-          {stop.weight_flag ? ' · น้ำหนักต่างเกิน 10%' : ''}
+          {isPickup && stop.confirmed_weight_kg !== null
+            ? formatTemplate(t.driver.weighed, { kg: stop.confirmed_weight_kg })
+            : t.driver.confirmed}
+          {stop.weight_flag ? t.driver.weightDiff : ''}
         </Text>
       ) : stop.locked ? (
-        <Text style={styles.lockedLine}>จุดนี้ถูกล็อก (กรอก OTP ผิดครบ 5 ครั้ง) — ติดต่อผู้ประสานเพื่อปลดล็อก</Text>
+        <Text style={styles.lockedLine}>{t.driver.locked}</Text>
       ) : (
         <>
           {isPickup ? (
-            <Field label="น้ำหนักที่ชั่งได้ (กก.)" value={weight} onChangeText={setWeight} keyboardType="numeric" />
+            <Field
+              label={t.driver.weightLabel}
+              value={weight}
+              onChangeText={setWeight}
+              keyboardType="numeric"
+            />
           ) : (
             <Field
-              label="รหัส OTP จากผู้ซื้อ"
+              label={t.driver.otpLabel}
               value={otp}
               onChangeText={setOtp}
               keyboardType="number-pad"
               maxLength={4}
-              placeholder="4 หลัก"
+              placeholder={t.driver.otpPlaceholder}
             />
           )}
           {stop.otp_attempts > 0 && !isPickup ? (
-            <Text style={styles.attemptLine}>กรอกผิดแล้ว {stop.otp_attempts}/5 ครั้ง</Text>
+            <Text style={styles.attemptLine}>
+              {formatTemplate(t.driver.attempts, { n: stop.otp_attempts })}
+            </Text>
           ) : null}
           {error !== null ? <Text style={styles.errorLine}>{error}</Text> : null}
           <PrimaryButton
-            label={isPickup ? 'ยืนยันรับของ' : 'ยืนยันส่งมอบ'}
+            label={isPickup ? t.driver.confirmPickup : t.driver.confirmDrop}
             tone={isPickup ? 'turmeric' : 'leaf'}
             loading={busy}
             onPress={() => void confirm()}

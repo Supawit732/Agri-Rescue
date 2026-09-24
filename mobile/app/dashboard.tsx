@@ -10,7 +10,6 @@ import {
   SectionTitle,
   SubScreen,
 } from '../src/components/ui';
-import { STATUS_LABELS } from '../src/constants';
 import { useAuth } from '../src/context/AuthContext';
 import { useApiData } from '../src/hooks/useApiData';
 import { useI18n } from '../src/i18n';
@@ -32,7 +31,7 @@ function StatCard({ label, value, unit }: { label: string; value: string; unit?:
 }
 
 function DashboardBody({ data }: { data: DashboardPayload }): React.ReactElement {
-  const { t } = useI18n();
+  const { t, formatNumber, cropName } = useI18n();
   const daily = useMemo(
     () =>
       data.charts.daily_kg.map((row) => ({
@@ -44,24 +43,29 @@ function DashboardBody({ data }: { data: DashboardPayload }): React.ReactElement
   );
   const byCrop = useMemo(
     () =>
-      data.charts.by_crop.map((row) => ({
-        value: row.kg,
-        label: row.crop_name_th.slice(0, 6),
-        frontColor: C.leaf,
-        topLabelComponent: () => <Text style={styles.barTop}>{Math.round(row.kg)}</Text>,
-      })),
-    [data.charts.by_crop],
+      data.charts.by_crop.map((row) => {
+        const name = cropName({ name_th: row.crop_name_th, name_en: row.crop_name_en });
+        return {
+          value: row.kg,
+          label: name.slice(0, 6),
+          frontColor: C.leaf,
+          topLabelComponent: () => (
+            <Text style={styles.barTop}>{formatNumber(Math.round(row.kg))}</Text>
+          ),
+        };
+      }),
+    [data.charts.by_crop, cropName, formatNumber],
   );
   const pie = useMemo(() => {
     const colors = [C.leaf, C.turmeric, C.chili, '#5B8C5A', '#8B7355', C.mute];
     return data.charts.orders_by_status.map((row, i) => ({
       value: row.count,
       color: colors[i % colors.length],
-      text: `${t.status[row.status] ?? STATUS_LABELS[row.status] ?? row.status} ${row.count}`,
+      text: `${t.status[row.status] ?? row.status} ${formatNumber(row.count)}`,
     }));
-  }, [data.charts.orders_by_status, t.status]);
+  }, [data.charts.orders_by_status, t.status, formatNumber]);
   const ai = data.charts.ai_accuracy;
-  const aiPct = ai.accuracy === null ? '—' : `${Math.round(ai.accuracy * 100)}%`;
+  const aiPct = ai.accuracy === null ? t.common.dash : `${Math.round(ai.accuracy * 100)}%`;
 
   return (
     <Body>
@@ -69,15 +73,27 @@ function DashboardBody({ data }: { data: DashboardPayload }): React.ReactElement
         {data.scope === 'admin' ? t.dashboard.scopeAdmin : t.dashboard.scopeSeller}
       </Text>
       <View style={styles.statGrid}>
-        <StatCard label={t.dashboard.kgSaved} value={String(data.cards.kg_saved)} unit={t.dashboard.unitKg} />
-        <StatCard label={t.dashboard.co2e} value={String(data.cards.co2e_kg)} unit={t.dashboard.unitKg} />
+        <StatCard
+          label={t.dashboard.kgSaved}
+          value={formatNumber(data.cards.kg_saved)}
+          unit={t.dashboard.unitKg}
+        />
+        <StatCard
+          label={t.dashboard.co2e}
+          value={formatNumber(data.cards.co2e_kg)}
+          unit={t.dashboard.unitKg}
+        />
         <StatCard
           label={t.dashboard.farmerIncome}
-          value={String(data.cards.farmer_income)}
+          value={formatNumber(data.cards.farmer_income)}
           unit={t.dashboard.unitBaht}
         />
-        <StatCard label={t.dashboard.donatedKg} value={String(data.cards.donated_kg)} unit={t.dashboard.unitKg} />
-        <StatCard label={t.dashboard.orderCount} value={String(data.cards.order_count)} />
+        <StatCard
+          label={t.dashboard.donatedKg}
+          value={formatNumber(data.cards.donated_kg)}
+          unit={t.dashboard.unitKg}
+        />
+        <StatCard label={t.dashboard.orderCount} value={formatNumber(data.cards.order_count)} />
       </View>
 
       <SectionTitle>{t.dashboard.dailyKg}</SectionTitle>
@@ -147,7 +163,7 @@ function DashboardBody({ data }: { data: DashboardPayload }): React.ReactElement
       <Card>
         <Text style={styles.aiBig}>{aiPct}</Text>
         <Text style={styles.aiSub}>
-          {t.dashboard.matched} {ai.matched} / {ai.total}
+          {t.dashboard.matched} {formatNumber(ai.matched)} / {formatNumber(ai.total)}
         </Text>
       </Card>
     </Body>

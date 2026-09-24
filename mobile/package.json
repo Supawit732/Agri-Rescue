@@ -40,7 +40,8 @@
     "web": "expo start --web",
     "export:web": "expo export --platform web",
     "export:ios": "expo export --platform ios",
-    "build": "npm run export:web && npm run export:ios"
+    "build": "npm run export:web && npm run export:ios",
+    "check:i18n": "node ../scripts/check-no-thai-ui.mjs && cd ../server && npx tsx ../scripts/check-i18n-keys.mjs"
   },
   "private": true
 }

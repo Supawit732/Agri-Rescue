@@ -14,11 +14,12 @@ import {
 import { useAuth } from '../../../src/context/AuthContext';
 import { useApiData } from '../../../src/hooks/useApiData';
 import { formatCountdown, hoursLeftFrom, useNow } from '../../../src/hooks/useNow';
-import { useI18n } from '../../../src/i18n';
+import { formatTemplate, useI18n } from '../../../src/i18n';
 import {
   availableAsOf,
   defaultQuantity,
   donationEligibility,
+  donationEligibilityLabels,
   marketSaleBadge,
   minOrderOf,
   remainingOf,
@@ -35,7 +36,7 @@ export default function LotDetailScreen(): React.ReactElement {
   const { id, intent } = useLocalSearchParams<{ id: string; intent?: string }>();
   const lotId = Number(id);
   const { api, user } = useAuth();
-  const { t, locale } = useI18n();
+  const { t, formatNumber, cropName } = useI18n();
   const router = useRouter();
   const now = useNow();
   const donationIntent = intent === 'donate';
@@ -133,11 +134,11 @@ export default function LotDetailScreen(): React.ReactElement {
     const remaining = remainingOf(lot);
     const min = minOrderOf(lot);
     if (splitAllowedOf(lot) && remaining + 1e-6 >= min && quantityKg + 1e-6 < min) {
-      setQuantityError(`ขั้นต่ำ ${min} กก.`);
+      setQuantityError(formatTemplate(t.lot.qtyMinOrder, { min: formatNumber(min) }));
       return;
     }
     if (quantityKg - remaining > 1e-6) {
-      setQuantityError('เกินจำนวนคงเหลือ');
+      setQuantityError(t.lot.qtyOverRemaining);
       return;
     }
     router.push({
@@ -167,7 +168,7 @@ export default function LotDetailScreen(): React.ReactElement {
           const tone = urgency(hours);
           const remaining = remainingOf(lot);
           const available = availableAsOf(lot);
-          const elig = donationEligibility(user, lot, quantityKg);
+          const elig = donationEligibility(user, lot, quantityKg, donationEligibilityLabels(t));
           const saleBadge = marketSaleBadge(lot, {
             sell: t.market.badgeSell,
             donate: t.market.badgeDonate,
@@ -176,19 +177,14 @@ export default function LotDetailScreen(): React.ReactElement {
           const canDonate = donationIntent && elig.canDonate;
           const canBuy = !donationIntent && available.includes('buy') && lot.price_per_kg !== null;
           const area = lot.area_th ?? lot.plot_name ?? null;
-          const cropTitle =
-            locale === 'en' && lot.crop_name_en
-              ? `${lot.crop_name_en} (${lot.crop_name_th})`
-              : lot.crop_name_en
-                ? `${lot.crop_name_th} (${lot.crop_name_en})`
-                : lot.crop_name_th;
+          const cropTitle = cropName({ name_th: lot.crop_name_th, name_en: lot.crop_name_en });
 
           return (
             <Body>
               <Card>
                 <View style={styles.header}>
                   <Text style={styles.title}>{cropTitle}</Text>
-                  <Badge text={formatCountdown(hours)} fg={tone.fg} bg={tone.bg} />
+                  <Badge text={formatCountdown(hours, t.countdown)} fg={tone.fg} bg={tone.bg} />
                 </View>
                 {saleBadge !== null ? (
                   <Badge
@@ -203,9 +199,10 @@ export default function LotDetailScreen(): React.ReactElement {
                   </Text>
                 ) : null}
                 <Text style={styles.line}>
-                  {t.lot.remaining} {remaining} / {lot.weight_kg} {t.dashboard.unitKg}
+                  {t.lot.remaining} {formatNumber(remaining)} / {formatNumber(lot.weight_kg)}{' '}
+                  {t.dashboard.unitKg}
                   {splitAllowedOf(lot)
-                    ? ` · ${t.market.minOrder} ${minOrderOf(lot)} ${t.dashboard.unitKg}`
+                    ? ` · ${t.market.minOrder} ${formatNumber(minOrderOf(lot))} ${t.dashboard.unitKg}`
                     : ` · ${t.market.wholeLot}`}
                 </Text>
                 <Text style={styles.line}>
@@ -240,7 +237,7 @@ export default function LotDetailScreen(): React.ReactElement {
                       >
                         <Text style={styles.stepBtnText}>−</Text>
                       </Pressable>
-                      <Text style={styles.qtyValue}>{quantityKg}</Text>
+                      <Text style={styles.qtyValue}>{formatNumber(quantityKg)}</Text>
                       <Pressable
                         style={styles.stepBtn}
                         onPress={() => adjustQuantity(lot, 1)}
@@ -252,7 +249,8 @@ export default function LotDetailScreen(): React.ReactElement {
                     {quantityError !== null ? <Text style={styles.fieldError}>{quantityError}</Text> : null}
                     {!donationIntent && lot.price_per_kg !== null ? (
                       <Text style={styles.total}>
-                        {t.lot.approxTotal} {Math.round(lot.price_per_kg * quantityKg)}{' '}
+                        {t.lot.approxTotal}{' '}
+                        {formatNumber(Math.round(lot.price_per_kg * quantityKg))}{' '}
                         {t.dashboard.unitBaht}
                       </Text>
                     ) : null}

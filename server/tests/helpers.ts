@@ -100,10 +100,15 @@ export async function loginStaff(
   return response.body as AuthBody;
 }
 
-export async function insertCrop(name = 'มะม่วง', days = 5, price = 40): Promise<number> {
+export async function insertCrop(
+  name = 'มะม่วง',
+  days = 5,
+  price = 40,
+  nameEn: string | null = null,
+): Promise<number> {
   const [result] = await pool.query<ResultSetHeader>(
-    'INSERT INTO crops (name_th, base_shelf_days, market_price_per_kg) VALUES (?, ?, ?)',
-    [name, days, price],
+    'INSERT INTO crops (name_th, name_en, base_shelf_days, market_price_per_kg) VALUES (?, ?, ?, ?)',
+    [name, nameEn, days, price],
   );
   return result.insertId;
 }

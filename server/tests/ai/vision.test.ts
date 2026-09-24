@@ -11,7 +11,9 @@ const sampleAssessment = {
   ripeness: 2,
   confidence: 0.82,
   defects: ['จุดช้ำเล็กน้อย'],
+  defects_en: ['Slight bruise'],
   note_th: 'สุกพอดี เหมาะขายด่วน',
+  note_en: 'Just ripe, good for quick sale',
 };
 
 const testConfig: VisionConfig = {
@@ -50,13 +52,15 @@ describe('AI vision client', () => {
 
   it('extracts JSON from a fenced code block', () => {
     const text =
-      'ผลลัพธ์:\n```json\n{"subject_match":true,"ripeness":3,"confidence":0.9,"defects":[],"note_th":"สุกมาก"}\n```\n';
+      'ผลลัพธ์:\n```json\n{"subject_match":true,"ripeness":3,"confidence":0.9,"defects":[],"defects_en":[],"note_th":"สุกมาก","note_en":"Very ripe"}\n```\n';
     expect(extractJsonObject(text)).toEqual({
       subject_match: true,
       ripeness: 3,
       confidence: 0.9,
       defects: [],
+      defects_en: [],
       note_th: 'สุกมาก',
+      note_en: 'Very ripe',
     });
   });
 
@@ -75,7 +79,9 @@ describe('AI vision client', () => {
       ripeness: sampleAssessment.ripeness,
       confidence: sampleAssessment.confidence,
       defects: sampleAssessment.defects,
+      defects_en: sampleAssessment.defects_en,
       note_th: sampleAssessment.note_th,
+      note_en: sampleAssessment.note_en,
       low_confidence: false,
       model: 'test-model',
     });
@@ -206,7 +212,9 @@ describe('AI vision client', () => {
       ripeness: low.ripeness,
       confidence: low.confidence,
       defects: low.defects,
+      defects_en: low.defects_en,
       note_th: low.note_th,
+      note_en: low.note_en,
       low_confidence: true,
       model: 'test-model',
     });
@@ -218,7 +226,9 @@ describe('AI vision client', () => {
       ripeness: 0,
       confidence: 0.1,
       defects: [],
+      defects_en: [],
       note_th: 'ไม่พบมะม่วงในภาพ',
+      note_en: 'No mango in the photo',
     };
     const fetchImpl = jest.fn(async () => jsonResponse(completionWithContent(JSON.stringify(mismatch))));
     const result = await assessRipenessFromPhoto({

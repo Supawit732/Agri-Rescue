@@ -32,7 +32,7 @@ describe('public market', () => {
 
   it('lists open lots without auth and omits forbidden fields', async () => {
     const farmer = await registerUser(app, { role: 'farmer' });
-    const cropId = await insertCrop('มะม่วง', 5, 40);
+    const cropId = await insertCrop('มะม่วง', 5, 40, 'Mango');
     const plotId = await insertPlot(farmer.user.id, 13.662, 100.611, 'แปลงใกล้ตลาด');
     const lotId = await insertLot({
       plotId,

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Image, Platform, StyleSheet, Text, View } from 'react-native';
-import { SecondaryButton } from './ui';
+import { useI18n } from '../i18n';
 import { C } from '../theme';
+import { SecondaryButton } from './ui';
 
 const MAX_BYTES_BEFORE_RESIZE = 10 * 1024 * 1024;
 const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp']);
@@ -12,12 +13,18 @@ export interface PickedImage {
   height: number;
 }
 
-function validateFile(file: File): string | null {
+type AiPhotoMessages = {
+  jpegPngWebpOnly: string;
+  tooLarge: string;
+  readFailed: string;
+};
+
+function validateFile(file: File, messages: AiPhotoMessages): string | null {
   if (!ALLOWED_MIME.has(file.type)) {
-    return 'รองรับเฉพาะไฟล์ JPEG, PNG หรือ WebP';
+    return messages.jpegPngWebpOnly;
   }
   if (file.size > MAX_BYTES_BEFORE_RESIZE) {
-    return 'ไฟล์ใหญ่เกิน 10MB';
+    return messages.tooLarge;
   }
   return null;
 }
@@ -27,7 +34,7 @@ async function fileToPickedImage(file: File): Promise<PickedImage> {
   const size = await new Promise<{ width: number; height: number }>((resolve, reject) => {
     const image = new window.Image();
     image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
-    image.onerror = () => reject(new Error('อ่านรูปไม่สำเร็จ'));
+    image.onerror = () => reject(new Error('read_failed'));
     image.src = uri;
   });
   return { uri, width: size.width, height: size.height };
@@ -52,6 +59,7 @@ export function AiPhotoInput({
   onClear: () => void;
   onInvalid: (message: string) => void;
 }): React.ReactElement {
+  const { t } = useI18n();
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -60,7 +68,7 @@ export function AiPhotoInput({
       if (file == null) {
         return;
       }
-      const invalid = validateFile(file);
+      const invalid = validateFile(file, t.aiPhoto);
       if (invalid !== null) {
         onInvalid(invalid);
         return;
@@ -69,10 +77,10 @@ export function AiPhotoInput({
         const picked = await fileToPickedImage(file);
         onImageReady(picked);
       } catch {
-        onInvalid('อ่านรูปไม่สำเร็จ');
+        onInvalid(t.aiPhoto.readFailed);
       }
     },
-    [onImageReady, onInvalid],
+    [onImageReady, onInvalid, t.aiPhoto],
   );
 
   useEffect(() => {
@@ -118,11 +126,15 @@ export function AiPhotoInput({
   if (previewUri !== null) {
     return (
       <View style={styles.previewBlock}>
-        <Image source={{ uri: previewUri }} style={styles.photoPreview} accessibilityLabel="รูปผลผลิต" />
+        <Image
+          source={{ uri: previewUri }}
+          style={styles.photoPreview}
+          accessibilityLabel={t.aiPhoto.photoA11y}
+        />
         <View style={styles.previewActions}>
           <View style={styles.actionSlot}>
             <SecondaryButton
-              label="เปลี่ยนรูป"
+              label={t.aiPhoto.changePhoto}
               onPress={() => {
                 if (Platform.OS === 'web') {
                   openFileDialog();
@@ -134,7 +146,11 @@ export function AiPhotoInput({
             />
           </View>
           <View style={styles.actionSlot}>
-            <SecondaryButton label="ลบรูป" onPress={onClear} disabled={disabled || assessing} />
+            <SecondaryButton
+              label={t.aiPhoto.removePhoto}
+              onPress={onClear}
+              disabled={disabled || assessing}
+            />
           </View>
         </View>
         {fileInput}
@@ -207,9 +223,9 @@ export function AiPhotoInput({
           }}
         >
           <Text style={styles.dropTitle}>
-            {assessing ? 'กำลังประเมินจากภาพ…' : 'ลากรูปมาวาง หรือคลิกเพื่อเลือกรูป'}
+            {assessing ? t.aiPhoto.assessing : t.aiPhoto.dropOrClick}
           </Text>
-          <Text style={styles.dropHint}>JPEG / PNG / WebP ไม่เกิน 10MB · วางด้วย Cmd/Ctrl+V ได้</Text>
+          <Text style={styles.dropHint}>{t.aiPhoto.dropHint}</Text>
         </div>
         {fileInput}
       </View>
@@ -219,7 +235,7 @@ export function AiPhotoInput({
   return (
     <View style={styles.nativeWrap}>
       <SecondaryButton
-        label={assessing ? 'กำลังประเมินจากภาพ…' : 'ถ่ายรูปให้ AI ประเมิน'}
+        label={assessing ? t.aiPhoto.assessing : t.aiPhoto.takeForAi}
         onPress={onPickNative}
         disabled={disabled || assessing}
       />

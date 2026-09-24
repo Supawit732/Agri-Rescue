@@ -17,7 +17,7 @@ export interface DashboardResponse {
   cards: DashboardCards;
   charts: {
     daily_kg: { date: string; kg: number }[];
-    by_crop: { crop_name_th: string; kg: number }[];
+    by_crop: { crop_name_th: string; crop_name_en: string | null; kg: number }[];
     orders_by_status: { status: string; count: number }[];
     ai_accuracy: { total: number; matched: number; accuracy: number | null };
   };
@@ -37,6 +37,7 @@ interface DailyRow extends RowDataPacket {
 
 interface CropRow extends RowDataPacket {
   crop_name_th: string;
+  crop_name_en: string | null;
   kg: number;
 }
 
@@ -142,9 +143,9 @@ export async function buildDashboard(
          JOIN plots p ON p.id = h.plot_id
          WHERE p.farmer_id = ?`;
   const [cropRows] = await pool.query<CropRow[]>(
-    `SELECT c.name_th AS crop_name_th, COALESCE(SUM(i.kg_saved), 0) AS kg
+    `SELECT c.name_th AS crop_name_th, c.name_en AS crop_name_en, COALESCE(SUM(i.kg_saved), 0) AS kg
      ${cropJoin}
-     GROUP BY c.id, c.name_th
+     GROUP BY c.id, c.name_th, c.name_en
      ORDER BY kg DESC, c.name_th ASC`,
     farmerId === null ? [] : [farmerId],
   );
@@ -191,6 +192,8 @@ export async function buildDashboard(
       daily_kg,
       by_crop: cropRows.map((r) => ({
         crop_name_th: String(r.crop_name_th),
+        crop_name_en:
+          r.crop_name_en === null || r.crop_name_en === '' ? null : String(r.crop_name_en),
         kg: round2(Number(r.kg)),
       })),
       orders_by_status: statusRows.map((r) => ({

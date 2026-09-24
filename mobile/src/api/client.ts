@@ -57,7 +57,8 @@ export async function apiRequest<T>({ method = 'GET', path, token, body }: Reque
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch {
-    throw new ApiError(0, 'NETWORK', 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาลองใหม่');
+    // Message is the code; UI should display via translateError(err.code, err.message).
+    throw new ApiError(0, 'NETWORK', 'NETWORK');
   }
 
   if (response.status === 401) {
@@ -66,7 +67,7 @@ export async function apiRequest<T>({ method = 'GET', path, token, body }: Reque
       if (unauthorizedHandler !== null) {
         unauthorizedHandler();
       }
-      throw new ApiError(401, 'UNAUTHORIZED', 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่');
+      throw new ApiError(401, 'UNAUTHORIZED', 'UNAUTHORIZED');
     }
   }
 
@@ -90,7 +91,8 @@ export async function apiRequest<T>({ method = 'GET', path, token, body }: Reque
       };
     } | null;
     const code = errorBody?.error?.code ?? 'ERROR';
-    const message = errorBody?.error?.message ?? 'เกิดข้อผิดพลาด กรุณาลองใหม่';
+    // Prefer stable code for client translation; keep server message as fallback.
+    const message = errorBody?.error?.message ?? code;
     const fields = errorBody?.error?.fields;
     const details = errorBody?.error?.details;
     throw new ApiError(response.status, code, message, fields, details);

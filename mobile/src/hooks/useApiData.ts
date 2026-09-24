@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError } from '../api/client';
+import { useI18n } from '../i18n';
 
 interface ApiDataState<T> {
   data: T | null;
@@ -9,6 +10,7 @@ interface ApiDataState<T> {
 }
 
 export function useApiData<T>(loader: () => Promise<T>, deps: readonly unknown[]): ApiDataState<T> {
+  const { translateError } = useI18n();
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +32,11 @@ export function useApiData<T>(loader: () => Promise<T>, deps: readonly unknown[]
         }
       } catch (err) {
         if (active) {
-          setError(err instanceof ApiError ? err.message : 'เกิดข้อผิดพลาด กรุณาลองใหม่');
+          if (err instanceof ApiError) {
+            setError(translateError(err.code, err.message));
+          } else {
+            setError(translateError('ERROR'));
+          }
         }
       } finally {
         if (active) {
@@ -42,7 +48,7 @@ export function useApiData<T>(loader: () => Promise<T>, deps: readonly unknown[]
       active = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [...deps, nonce]);
+  }, [...deps, nonce, translateError]);
 
   return { data, loading, error, reload };
 }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { formatTemplate, type Messages } from '../i18n';
 
 // Ticks every `intervalMs` so countdowns from expires_at stay live.
 export function useNow(intervalMs = 30000): number {
@@ -14,19 +15,19 @@ export function hoursLeftFrom(expiresAtIso: string, now: number): number {
   return (new Date(expiresAtIso).getTime() - now) / (60 * 60 * 1000);
 }
 
-export function formatCountdown(hoursLeft: number): string {
+export function formatCountdown(hoursLeft: number, countdown: Messages['countdown']): string {
   if (hoursLeft <= 0) {
-    return 'หมดเวลาแล้ว';
+    return countdown.expired;
   }
   const totalMinutes = Math.floor(hoursLeft * 60);
   const days = Math.floor(totalMinutes / (60 * 24));
   const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
   const minutes = totalMinutes % 60;
   if (days > 0) {
-    return `เหลือ ${days} วัน ${hours} ชม.`;
+    return formatTemplate(countdown.remainingDaysHours, { days, hours });
   }
   if (hours > 0) {
-    return `เหลือ ${hours} ชม. ${minutes} นาที`;
+    return formatTemplate(countdown.remainingHoursMinutes, { hours, minutes });
   }
-  return `เหลือ ${minutes} นาที`;
+  return formatTemplate(countdown.remainingMinutes, { minutes });
 }
