@@ -174,6 +174,17 @@ JWT เก็บ `sub`, `role`, `can_sell`, `can_buy`, `is_admin` (อายุ 
 | การจอง | `/lots/:id` → `/lots/:id/confirm` → `/lots/:id/success`; คำสั่งซื้อ `/orders/:id` |
 | `available_as` | response ที่ไม่ใช่เจ้าของล็อต: `['buy']` / `['donate']` / `['buy','donate']` ตามสถานะปัจจุบัน; ห้ามคืน `sale_mode` ดิบ; `sell_then_donate` ก่อนเปิดบริจาค = เหมือนขาย (`['buy']` เท่านั้น) |
 | พื้นที่รับของ | ยังไม่มีตำบล/อำเภอใน `plots` — แสดง `plot_name` + ระยะทาง; พิกัดเฉพาะเจ้าของออเดอร์/เจ้าของล็อต |
-| OTP ผู้ขาย | ยืนยันรับด้วย OTP+น้ำหนักจริงยังเป็น driver `stops/confirm` — UI ผู้ขายเป็น stub จน 6.4 |
+| OTP ผู้ขาย | เดโม: `POST /api/orders/:id/seller-confirm` (OTP+น้ำหนัก → delivered+impact); flow เต็ม 6.4 ยังจะขยายภายหลัง |
 | ปุ่ม UI | `paddingHorizontal ≥ 20`, `minWidth ≥ 160`; หน้าว่าง/ชวน login/สำเร็จ ใช้ `CtaStack` ให้ปุ่มกว้างเท่ากันเรียงแนวตั้ง; ข้อความปุ่มมี `textAlign: center` + padding กันชนขอบ |
 | ตกแต่งภาพ | เลื่อนไปขั้น **6.12** (หลัง 6.10) |
+
+## D023 — Demo-prep: แดชบอร์ด Soft-delete และยืนยันรับที่ฟาร์ม
+
+| รายการ | ค่า |
+|---|---|
+| Soft-delete | `harvest_lots.deleted_at` + `lot_delete_logs.snapshot_json`; ลบได้เมื่อสถานะ `open`/`partially_reserved` และไม่มีออเดอร์ที่ `status <> 'cancelled'` |
+| รายการของฉัน / ตลาด | ซ่อนล็อตที่ `deleted_at IS NOT NULL` จาก `/lots/mine` และตลาด; impact ที่ส่งมอบแล้วคงไว้ |
+| Dashboard | `GET /api/dashboard` — admin เห็นทั้งระบบ; `can_sell` เห็นเฉพาะล็อตของตน; buyer-only ได้ 403 |
+| Seller confirm | `POST /api/orders/:id/seller-confirm` — OTP + น้ำหนัก; ออเดอร์ `reserved` → `delivered` โดยไม่ผ่าน batch (เดโมรับที่ฟาร์ม); ไม่มีคอลัมน์ `weight_flag` บน orders จึงใช้น้ำหนักเข้า `impact_logs` อย่างเดียว |
+| seed:demo | เติมประวัติ ~14 วัน (marker `photo_url = 'seed:demo'`); รันซ้ำแล้วลบแถว marker ก่อน; ต้อง `migrate`+`seed` ก่อน; ล็อตเปิดจาก seed ปกติยังอยู่สำหรับเดโมสด |
+| Listen | API ฟังที่ `0.0.0.0` เพื่อให้มือถือในเครือข่ายเดียวกันเรียกได้ |

@@ -1070,6 +1070,35 @@ function MyLots({
                     <SecondaryButton label="แก้ไข" onPress={() => onEdit(lot)} />
                   </View>
                 ) : null}
+                {canEdit && (lot.bookings === undefined || lot.bookings.length === 0) ? (
+                  <View style={styles.editBtn}>
+                    <SecondaryButton
+                      label="ลบ/ปิดล็อต"
+                      onPress={() => {
+                        Alert.alert('ลบหรือปิดล็อตนี้?', 'ล็อตจะถูกซ่อนจากตลาด (เก็บประวัติไว้) — ยืนยันหรือไม่?', [
+                          { text: 'ยกเลิก', style: 'cancel' },
+                          {
+                            text: 'ลบล็อต',
+                            style: 'destructive',
+                            onPress: () => {
+                              void (async () => {
+                                try {
+                                  await api.deleteLot(lot.id);
+                                  reload();
+                                } catch (err) {
+                                  Alert.alert(
+                                    'ลบไม่สำเร็จ',
+                                    err instanceof ApiError ? err.message : 'เกิดข้อผิดพลาด',
+                                  );
+                                }
+                              })();
+                            },
+                          },
+                        ]);
+                      }}
+                    />
+                  </View>
+                ) : null}
               </Card>
             );
           })}

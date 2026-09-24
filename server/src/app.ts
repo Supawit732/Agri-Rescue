@@ -5,6 +5,7 @@ import { authRouter } from './routes/auth';
 import { batchesRouter } from './routes/batches';
 import { donorsRouter } from './routes/donors';
 import { cropsRouter } from './routes/crops';
+import { dashboardRouter } from './routes/dashboard';
 import { geoRouter } from './routes/geo';
 import { impactRouter } from './routes/impact';
 import { lotsRouter } from './routes/lots';
@@ -39,6 +40,7 @@ export function createApp(): Express {
   app.use('/api/donors', donorsRouter);
   app.use('/api/geo', geoRouter);
   app.use('/api/crops', cropsRouter);
+  app.use('/api/dashboard', dashboardRouter);
   app.use('/api/plots', plotsRouter);
   app.use('/api/lots', lotsRouter);
   app.use('/api/market', marketRouter);

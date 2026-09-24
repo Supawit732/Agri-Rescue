@@ -62,6 +62,7 @@ npm run build  # คอมไพล์ไปที่ dist/
 npm run dev    # รัน API แบบ watch
 npm run migrate
 npm run seed
+npm run seed:demo   # ประวัติ 14 วันสำหรับแดชบอร์ด (ดู docs/DEVICE_DEMO.md)
 npm run seed:reset
 npm run ai:smoke -- <path-รูป> <crop_id>   # เรียก vision API จริงเพื่อทดสอบ
 ```
@@ -140,3 +141,10 @@ npx expo start
 ```
 
 สแกน QR ด้วย Expo Go บนเครื่องที่อยู่เครือข่ายเดียวกับเครื่องที่รันคำสั่งนี้
+
+ตรวจว่าแอป bundle ได้ก่อน push (จับ dependency ที่ขาด เช่น `expo-linear-gradient`):
+
+```bash
+cd mobile
+npm run build   # expo export --platform web และ ios
+```

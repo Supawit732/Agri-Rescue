@@ -161,4 +161,47 @@ describe('orders', () => {
     ]);
     expect(rows.map((row) => row.status)).toEqual(['open', 'open']);
   });
+
+  it('lets the seller confirm delivery with OTP and creates impact', async () => {
+    const farmer = await registerUser(app, { role: 'farmer' });
+    const buyer = await registerUser(app, { role: 'buyer', buyer_type: 'shop' });
+    const cropId = await insertCrop('มะเขือเทศ', 6, 30);
+    const plotId = await insertPlot(farmer.user.id, 13.66, 100.61);
+    const lotId = await insertLot({
+      plotId,
+      cropId,
+      expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+      weightKg: 10,
+    });
+    const booked = await request(app)
+      .post('/api/orders')
+      .set(bearer(buyer.token))
+      .send({ lot_id: lotId, donation: false, quantity_kg: 10 });
+    expect(booked.status).toBe(201);
+    const orderId = booked.body.order.id as number;
+    const otp = booked.body.order.drop_otp as string;
+
+    const wrong = await request(app)
+      .post(`/api/orders/${orderId}/seller-confirm`)
+      .set(bearer(farmer.token))
+      .send({ otp: '0000', weight_kg: 10 });
+    expect(wrong.status).toBe(400);
+    expect(wrong.body.error.code).toBe('OTP_MISMATCH');
+
+    const ok = await request(app)
+      .post(`/api/orders/${orderId}/seller-confirm`)
+      .set(bearer(farmer.token))
+      .send({ otp, weight_kg: 9.5 });
+    expect(ok.status).toBe(200);
+    expect(ok.body.order.status).toBe('delivered');
+    expect(ok.body.order.weight_kg).toBe(9.5);
+    expect(ok.body.lot_status).toBe('delivered');
+
+    const [impact] = await pool.query<RowDataPacket[]>(
+      'SELECT kg_saved, co2e_kg FROM impact_logs WHERE order_id = ?',
+      [orderId],
+    );
+    expect(Number(impact[0]?.kg_saved)).toBe(9.5);
+    expect(Number(impact[0]?.co2e_kg)).toBeCloseTo(9.5 * 2.5, 5);
+  });
 });

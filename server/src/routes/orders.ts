@@ -3,6 +3,8 @@ import { randomInt } from 'crypto';
 import type { ResultSetHeader, RowDataPacket } from 'mysql2';
 import { z } from 'zod';
 import { pool } from '../db/pool';
+import { CO2E_PER_KG } from '../db/seedData';
+import { round2 } from '../delivery/depot';
 import { haversineKm } from '../domain/geo';
 import type { LotStatus } from '../domain/lotStateMachine';
 import type { ProduceGrade } from '../domain/pricing';
@@ -15,13 +17,14 @@ import {
 import { lotAcceptsDonation, lotPricePerKg } from '../domain/sellerPricing';
 import {
   assertMayRequestDonation,
+  createDonationProofForOrder,
   loadDonorProfile,
   usedDonationKgThisWeek,
 } from '../donors/donationService';
 import { asyncHandler } from '../http/asyncHandler';
 import { HttpError } from '../http/errors';
 import { requireAuth, requireCapability } from '../middleware/auth';
-import { sumReservedQuantityKg, syncLotBookableStatus } from '../orders/lotInventoryService';
+import { finalizeLotIfComplete, sumReservedQuantityKg, syncLotBookableStatus } from '../orders/lotInventoryService';
 
 export const ordersRouter = Router();
 
@@ -107,7 +110,7 @@ ordersRouter.post(
          FROM harvest_lots h
          JOIN crops c ON c.id = h.crop_id
          JOIN plots p ON p.id = h.plot_id
-         WHERE h.id = ?
+         WHERE h.id = ? AND h.deleted_at IS NULL
          FOR UPDATE`,
         [body.lot_id],
       );
@@ -262,11 +265,6 @@ ordersRouter.get(
   }),
 );
 
-/**
- * Seller delivery OTP+weight: not implemented here (Phase 6.4).
- * Existing flow is driver-only via POST /api/stops/:id/confirm (confirmStop).
- * Farmer UI for 6.1f should stub OTP entry until that flow exists for sellers.
- */
 ordersRouter.get(
   '/:id',
   requireCapability('buy', 'sell'),
@@ -331,8 +329,93 @@ ordersRouter.get(
         distribution_at:
           row.distribution_at === null ? null : new Date(row.distribution_at).toISOString(),
         created_at: new Date(row.created_at).toISOString(),
+        viewer: isSeller ? 'seller' : 'buyer',
       },
     });
+  }),
+);
+
+/**
+ * Direct farm pickup: seller confirms delivery with OTP + weighed kg (skips batch/driver).
+ * orders table has no weight_flag column — flag is only on route_stops; impact uses weight_kg.
+ */
+ordersRouter.post(
+  '/:id/seller-confirm',
+  requireCapability('sell'),
+  asyncHandler(async (req, res) => {
+    const orderId = z.coerce.number().int().positive().parse(req.params.id);
+    const body = z
+      .object({
+        otp: z.string().length(4, 'รหัสยืนยันต้องเป็นตัวเลข 4 หลัก'),
+        weight_kg: z.number().positive('กรุณากรอกน้ำหนักที่ชั่งได้'),
+      })
+      .parse(req.body);
+    if (!/^\d{4}$/.test(body.otp)) {
+      throw new HttpError(400, 'VALIDATION', 'รหัสยืนยันต้องเป็นตัวเลข 4 หลัก', {
+        otp: 'รหัสยืนยันต้องเป็นตัวเลข 4 หลัก',
+      });
+    }
+    const sellerId = req.auth?.id ?? 0;
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [rows] = await connection.query<
+        (OrderRow & { farmer_id: number; is_donation: number })[]
+      >(
+        `SELECT o.id, o.lot_id, o.buyer_id, o.quantity_kg, o.agreed_price_per_kg, o.is_donation,
+                o.status, o.batch_id, o.drop_otp, p.farmer_id
+         FROM orders o
+         JOIN harvest_lots h ON h.id = o.lot_id
+         JOIN plots p ON p.id = h.plot_id
+         WHERE o.id = ?
+         FOR UPDATE`,
+        [orderId],
+      );
+      const order = rows[0];
+      if (order === undefined) {
+        throw new HttpError(404, 'NOT_FOUND', 'ไม่พบคำสั่งซื้อ');
+      }
+      if (Number(order.farmer_id) !== sellerId) {
+        throw new HttpError(403, 'FORBIDDEN', 'ยืนยันได้เฉพาะเจ้าของล็อต');
+      }
+      if (order.status !== 'reserved') {
+        throw new HttpError(409, 'CONFLICT', 'ยืนยันได้เฉพาะออเดอร์ที่จองไว้');
+      }
+      if (order.drop_otp !== body.otp) {
+        throw new HttpError(400, 'OTP_MISMATCH', 'รหัสยืนยันไม่ถูกต้อง', {
+          otp: 'รหัสยืนยันไม่ถูกต้อง',
+        });
+      }
+      const kgSaved = body.weight_kg;
+      const co2e = round2(kgSaved * CO2E_PER_KG);
+      await connection.query('UPDATE orders SET status = ? WHERE id = ?', ['delivered', order.id]);
+      await connection.query(
+        'INSERT INTO impact_logs (order_id, kg_saved, co2e_kg) VALUES (?, ?, ?)',
+        [order.id, kgSaved, co2e],
+      );
+      if (Number(order.is_donation) === 1) {
+        await createDonationProofForOrder(connection, Number(order.id));
+      }
+      const lotStatus = await finalizeLotIfComplete(connection, Number(order.lot_id));
+      await connection.commit();
+      res.json({
+        order: {
+          id: Number(order.id),
+          lot_id: Number(order.lot_id),
+          quantity_kg: Number(order.quantity_kg),
+          agreed_price_per_kg: Number(order.agreed_price_per_kg),
+          is_donation: Number(order.is_donation) === 1,
+          status: 'delivered',
+          weight_kg: kgSaved,
+        },
+        lot_status: lotStatus,
+      });
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
   }),
 );
 
