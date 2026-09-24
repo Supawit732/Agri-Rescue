@@ -47,7 +47,7 @@ export async function seed(): Promise<void> {
       if (cropId === undefined) {
         throw new Error(`Unknown crop ${farmer.lot.cropKey}`);
       }
-      // Relative to "now" so open demo lots are never pre-expired (market empty).
+      // Relative to now so demo open lots are never pre-expired.
       const createdAt = new Date();
       const expiresAt = new Date(createdAt.getTime() + farmer.lot.hoursLeft * 60 * 60 * 1000);
       await upsertLot(connection, {
@@ -247,7 +247,7 @@ async function upsertLot(
   );
   const row = existing[0];
   if (row !== undefined) {
-    // Keep demo market visible: refresh open lots whose expires_at is already past.
+    // Refresh open lots whose expires_at is already past (demo market empty).
     if (String(row.status) === 'open' && new Date(row.expires_at as Date).getTime() <= Date.now()) {
       await connection.query(
         `UPDATE harvest_lots SET status = 'open', expires_at = ?, created_at = UTC_TIMESTAMP() WHERE id = ?`,

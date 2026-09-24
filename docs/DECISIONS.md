@@ -267,10 +267,21 @@ JWT เก็บ `sub`, `role`, `can_sell`, `can_buy`, `is_admin` (อายุ 
 |---|---|
 | Safe area | หน้าตลาดใช้ `Screen skipTopSafeArea` + `AppHeader` `paddingTop = insets.top + 4` — ไม่ซ้อน inset |
 | พื้นหลัง header | `C.bg` ตรงกับหน้าจอ |
-| Guest | ไม่มีปุ่ม Log in บน header; เหลือแถบชวน login แนวตั้ง (ปุ่ม `block` ขนาดปกติ) |
+| Guest | ไม่มีปุ่ม Log in บน header; เหลือแถบชวน login แถวเดียว (ปุ่มขนาดปกติ) |
 | Badge ตัวกรอง | นับเฉพาะ category / ราคา / เวลาที่เหลือ / **รัศมีที่เปลี่ยนจากค่าเริ่มต้น**; **ไม่นับ sort**; 0 = ซ่อนตัวเลข |
 | Placeholder | `ค้นหาพืช หรือชื่อร้าน` / `Search crops or shops` |
 | Location denied | ไม่บังคับ LocationPicker; แสดงล็อตทั้งหมดเรียง `urgent` (เวลาที่เหลือ) |
 | seed | ล็อต `open` คำนวณ `expires_at` จาก **now + hoursLeft**; ถ้ามีอยู่แล้วแต่หมดอายุจะ refresh; แปลงอยู่รัศมี demo 13.63–13.67 / 100.60–100.63 |
 | seed:demo | live lot `openExpires = now + 3 วัน` ที่แปลงลุงสมชาย |
+
+## D030 — Pre-demo audit: ซ่อนปุ่มที่ยังไม่มีฟีเจอร์
+
+| รายการ | ค่า |
+|---|---|
+| เหตุผล | ห้ามโชว์ปุ่มที่กดแล้วไม่เกิดอะไรตอนเดโม |
+| ซ่อน | รูปโปรไฟล์เปลี่ยนรูป (ไม่มี upload), การ์ดตำแหน่งรับของในโปรไฟล์ (PATCH ไม่บันทึก lat/lng), ปุ่มแนบรูปใน contact-us (ยังไม่มี picker), ข้อความ “ลืมรหัสผ่าน?” (ไม่มี flow) |
+| เมนู | «แดชบอร์ด» แสดงเฉพาะ `can_sell` หรือ `is_admin`; «ร้านของฉัน» ไป `/shops/:id` |
+| ตลาด | ไม่ให้สิทธิ์ตำแหน่ง → ไม่บังคับ LocationPicker, เรียง urgent |
+| seed | `expires_at = now + hoursLeft`; refresh ล็อต open ที่หมดอายุ |
+| DEMO_SCRIPT | อัปเดตเป็น 4 แท็บ + เมนูโปรไฟล์ (ไม่มีแท็บบัญชี) |
 

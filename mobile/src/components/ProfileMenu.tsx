@@ -41,14 +41,18 @@ export function ProfileMenu({
         key: 'shop',
         icon: 'shopping-bag',
         label: t.shell.myShop,
-        onPress: () => go('/profile'),
+        onPress: () => go(`/shops/${String(user.id)}`),
       },
-      {
+    );
+    if (user.can_sell || user.is_admin) {
+      items.push({
         key: 'dashboard',
         icon: 'bar-chart-2',
         label: t.shell.dashboard,
         onPress: () => go('/dashboard'),
-      },
+      });
+    }
+    items.push(
       {
         key: 'followed',
         icon: 'users',

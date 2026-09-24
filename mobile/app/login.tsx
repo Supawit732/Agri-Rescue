@@ -159,7 +159,6 @@ export default function LoginScreen(): React.ReactElement {
                 {showPassword ? t.login.hidePassword : t.login.showPassword}
               </Text>
             </Pressable>
-            <Text style={styles.muted}>{t.login.forgotPassword}</Text>
           </View>
           {formError !== null ? (
             <Text style={styles.error}>{formError}</Text>
