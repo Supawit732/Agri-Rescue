@@ -21,6 +21,8 @@ const TRANSITIONS: ReadonlyArray<readonly [LotStatus, LotStatus]> = [
   ['fully_reserved', 'delivered'],
   ['open', 'expired'],
   ['partially_reserved', 'expired'],
+  ['open', 'cancelled'],
+  ['partially_reserved', 'cancelled'],
 ];
 
 export class InvalidLotTransitionError extends Error {

@@ -62,6 +62,7 @@ npm run build  # คอมไพล์ไปที่ dist/
 npm run dev    # รัน API แบบ watch
 npm run migrate
 npm run seed
+npm run seed:demo   # ประวัติ 14 วันสำหรับแดชบอร์ด (ดู docs/DEVICE_DEMO.md)
 npm run seed:reset
 npm run ai:smoke -- <path-รูป> <crop_id>   # เรียก vision API จริงเพื่อทดสอบ
 ```

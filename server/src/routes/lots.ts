@@ -5,6 +5,7 @@ import { assessRipenessFromPhoto, loadVisionConfig } from '../ai/vision';
 import { pool } from '../db/pool';
 import { haversineKm } from '../domain/geo';
 import { remainingLotKg, validateLotWeightPatch } from '../domain/lotInventory';
+import { assertLotTransition, type LotStatus } from '../domain/lotStateMachine';
 import type { ProduceGrade } from '../domain/pricing';
 import {
   PRICING_CONFIG,
@@ -112,6 +113,7 @@ interface OwnedLotRow extends RowDataPacket {
   predicted_shelf_hours: number;
   expires_at: Date;
   status: string;
+  deleted_at: Date | null;
   farmer_id: number;
   base_shelf_days: number;
   plot_lat: number;
@@ -565,6 +567,67 @@ lotsRouter.patch(
   }),
 );
 
+lotsRouter.delete(
+  '/:id',
+  asyncHandler(async (req, res) => {
+    const lotId = z.coerce.number().int().positive().parse(req.params.id);
+    const farmerId = req.auth?.id ?? 0;
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const lot = await findOwnedLotForUpdate(connection, lotId);
+      if (Number(lot.farmer_id) !== farmerId) {
+        throw new HttpError(403, 'FORBIDDEN', 'ลบได้เฉพาะล็อตของตนเอง');
+      }
+      if (lot.deleted_at !== null && lot.deleted_at !== undefined) {
+        throw new HttpError(409, 'CONFLICT', 'ล็อตนี้ถูกลบแล้ว');
+      }
+      if (lot.status !== 'open' && lot.status !== 'partially_reserved') {
+        throw new HttpError(409, 'CONFLICT', 'ลบได้เฉพาะล็อตที่ยังเปิดขาย');
+      }
+      const [activeOrders] = await connection.query<RowDataPacket[]>(
+        `SELECT COUNT(*) AS total FROM orders WHERE lot_id = ? AND status <> 'cancelled'`,
+        [lotId],
+      );
+      if (Number(activeOrders[0]?.total ?? 0) > 0) {
+        throw new HttpError(409, 'HAS_ORDERS', 'ลบไม่ได้เพราะมีคำสั่งซื้อแล้ว');
+      }
+      assertLotTransition(lot.status as LotStatus, 'cancelled');
+      const snapshot = {
+        id: Number(lot.id),
+        plot_id: Number(lot.plot_id),
+        crop_id: Number(lot.crop_id),
+        weight_kg: Number(lot.weight_kg),
+        grade: lot.grade,
+        ripeness: Number(lot.ripeness),
+        sale_mode: lot.sale_mode,
+        status: lot.status,
+        start_price_per_kg:
+          lot.start_price_per_kg === null ? null : Number(lot.start_price_per_kg),
+        floor_price_per_kg:
+          lot.floor_price_per_kg === null ? null : Number(lot.floor_price_per_kg),
+        expires_at: new Date(lot.expires_at).toISOString(),
+      };
+      await connection.query(
+        `UPDATE harvest_lots SET status = 'cancelled', deleted_at = UTC_TIMESTAMP() WHERE id = ?`,
+        [lotId],
+      );
+      await connection.query(
+        `INSERT INTO lot_delete_logs (lot_id, farmer_id, reason, snapshot_json)
+         VALUES (?, ?, ?, ?)`,
+        [lotId, farmerId, 'seller_soft_delete', JSON.stringify(snapshot)],
+      );
+      await connection.commit();
+      res.json({ ok: true });
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }),
+);
+
 function resolveCreatePrices(input: {
   saleMode: 'sell' | 'donate' | 'sell_then_donate';
   grade: ProduceGrade;
@@ -624,6 +687,7 @@ async function nearbySameCropMedianPrice(input: {
      JOIN crops c ON c.id = h.crop_id
      JOIN plots p ON p.id = h.plot_id
      WHERE h.crop_id = ? AND h.status IN ('open', 'partially_reserved') AND h.expires_at > UTC_TIMESTAMP()
+       AND h.deleted_at IS NULL
        AND h.sale_mode <> 'donate'
        AND h.start_price_per_kg IS NOT NULL AND h.floor_price_per_kg IS NOT NULL`,
     [input.cropId],
@@ -704,7 +768,7 @@ async function findOwnedLotForUpdate(
             h.grade, h.ripeness, h.photo_url,
             h.allow_donation, h.donation_audience, h.start_price_per_kg, h.floor_price_per_kg,
             h.sale_mode, h.donation_opened, h.market_price_snapshot, h.market_price_is_estimate,
-            h.market_price_as_of, h.predicted_shelf_hours, h.expires_at, h.status,
+            h.market_price_as_of, h.predicted_shelf_hours, h.expires_at, h.status, h.deleted_at,
             p.farmer_id, p.lat AS plot_lat, p.lng AS plot_lng, c.base_shelf_days
      FROM harvest_lots h
      JOIN plots p ON p.id = h.plot_id
@@ -756,7 +820,7 @@ async function listMine(farmerId: number): Promise<object[]> {
      FROM harvest_lots h
      JOIN plots p ON p.id = h.plot_id
      JOIN crops c ON c.id = h.crop_id
-     WHERE p.farmer_id = ?
+     WHERE p.farmer_id = ? AND h.deleted_at IS NULL
      ORDER BY h.id`,
     [farmerId],
   );

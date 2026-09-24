@@ -75,6 +75,7 @@ function AuthGate(): React.ReactElement {
       <Stack.Screen name="farmer" />
       <Stack.Screen name="buyer" />
       <Stack.Screen name="profile" />
+      <Stack.Screen name="dashboard" />
       <Stack.Screen name="admin" />
       <Stack.Screen name="donor-apply" />
       <Stack.Screen name="terms/donor" />

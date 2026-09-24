@@ -147,6 +147,7 @@ marketRouter.get(
     const [rows] = await pool.query<MarketRow[]>(
       `${MARKET_LOT_SELECT}
        WHERE h.status IN ('open', 'partially_reserved') AND h.expires_at > UTC_TIMESTAMP()
+         AND h.deleted_at IS NULL
        ORDER BY h.expires_at ASC, h.id ASC`,
     );
     const now = Date.now();
@@ -178,7 +179,8 @@ marketRouter.get(
       .parse(req.query);
     const [rows] = await pool.query<MarketRow[]>(
       `${MARKET_LOT_SELECT}
-       WHERE h.id = ? AND h.status IN ('open', 'partially_reserved') AND h.expires_at > UTC_TIMESTAMP()`,
+       WHERE h.id = ? AND h.status IN ('open', 'partially_reserved') AND h.expires_at > UTC_TIMESTAMP()
+         AND h.deleted_at IS NULL`,
       [lotId],
     );
     const row = rows[0];

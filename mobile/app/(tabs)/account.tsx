@@ -106,6 +106,11 @@ export default function AccountTab(): React.ReactElement {
 
         <SectionTitle>บัญชี</SectionTitle>
         <Card>
+          {(user.can_sell || user.is_admin) ? (
+            <View style={styles.gap}>
+              <PrimaryButton label="แดชบอร์ด" onPress={() => router.push('/dashboard')} />
+            </View>
+          ) : null}
           <PrimaryButton label="โปรไฟล์" onPress={() => router.push('/profile')} />
           {!user.can_sell ? (
             <View style={styles.gap}>

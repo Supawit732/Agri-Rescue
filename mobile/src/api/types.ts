@@ -363,6 +363,7 @@ export interface Order {
   lng?: number | null;
   expires_at?: string;
   distance_km?: number | null;
+  viewer?: 'buyer' | 'seller';
 }
 
 export interface Driver {
@@ -406,4 +407,21 @@ export interface ImpactSummary {
   farmer_income: number;
   donated_kg: number;
   lot_count: number;
+}
+
+export interface DashboardPayload {
+  scope: 'admin' | 'seller';
+  cards: {
+    kg_saved: number;
+    co2e_kg: number;
+    farmer_income: number;
+    donated_kg: number;
+    order_count: number;
+  };
+  charts: {
+    daily_kg: { date: string; kg: number }[];
+    by_crop: { crop_name_th: string; kg: number }[];
+    orders_by_status: { status: string; count: number }[];
+    ai_accuracy: { total: number; matched: number; accuracy: number | null };
+  };
 }
