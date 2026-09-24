@@ -16,6 +16,15 @@ import {
 } from '../domain/lotInventory';
 import { lotAcceptsDonation, lotPricePerKg } from '../domain/sellerPricing';
 import {
+  listPickupSlots,
+  naiveHomeAndBackKm,
+  orderRouteRespectingSlots,
+  parsePickupDateParam,
+  routeWithReturnKm,
+  validatePickupSlot,
+} from '../domain/pickupSlots';
+import { defaultRouteSolver, type RoutableStop } from '../domain/routing';
+import {
   assertMayRequestDonation,
   createDonationProofForOrder,
   loadDonorProfile,
@@ -36,6 +45,8 @@ const createSchema = z.object({
   quantity_kg: z.number().positive('กรุณาระบุจำนวนกิโลกรัม'),
   distribution_place: z.string().trim().min(1).max(512).optional(),
   distribution_at: z.string().datetime().optional(),
+  pickup_slot_start: z.string().datetime().optional(),
+  pickup_slot_end: z.string().datetime().optional(),
 });
 
 interface LotLock extends RowDataPacket {
@@ -69,7 +80,16 @@ interface OrderRow extends RowDataPacket {
   drop_otp: string;
   distribution_place: string | null;
   distribution_at: Date | null;
+  pickup_slot_start: Date | null;
+  pickup_slot_end: Date | null;
   created_at: Date;
+}
+
+function isoOrNull(value: Date | string | null | undefined): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  return new Date(value).toISOString();
 }
 
 interface OrderDetailRow extends OrderRow {
@@ -96,6 +116,249 @@ interface OrderDetailRow extends OrderRow {
 }
 
 ordersRouter.use(requireAuth);
+
+/** Available pickup windows for a lot (today/tomorrow Bangkok × fixed slots). */
+ordersRouter.get(
+  '/pickup-slots',
+  requireCapability('buy'),
+  asyncHandler(async (req, res) => {
+    const lotId = z.coerce.number().int().positive().parse(req.query.lot_id);
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT h.expires_at, p.farmer_id
+       FROM harvest_lots h
+       JOIN plots p ON p.id = h.plot_id
+       WHERE h.id = ? AND h.deleted_at IS NULL`,
+      [lotId],
+    );
+    const lot = rows[0];
+    if (lot === undefined) {
+      throw new HttpError(404, 'NOT_FOUND', 'ไม่พบล็อต');
+    }
+    if (Number(lot.farmer_id) === (req.auth?.id ?? 0)) {
+      throw new HttpError(403, 'FORBIDDEN', 'จองล็อตของตัวเองไม่ได้');
+    }
+    res.json({ slots: listPickupSlots(new Date(lot.expires_at)) });
+  }),
+);
+
+/** Buyer day route: reserved self-pickup orders whose slot starts on the Bangkok day. */
+ordersRouter.get(
+  '/route',
+  requireCapability('buy'),
+  asyncHandler(async (req, res) => {
+    const dateStr = typeof req.query.date === 'string' ? req.query.date : '';
+    let dayStart: Date;
+    try {
+      dayStart = parsePickupDateParam(dateStr);
+    } catch {
+      throw new HttpError(400, 'VALIDATION', 'รูปแบบวันที่ต้องเป็น YYYY-MM-DD');
+    }
+    const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+    const buyerId = req.auth?.id ?? 0;
+    const [userRows] = await pool.query<RowDataPacket[]>(
+      'SELECT lat, lng FROM users WHERE id = ?',
+      [buyerId],
+    );
+    const buyer = userRows[0];
+    if (buyer === undefined || buyer.lat === null || buyer.lng === null) {
+      throw new HttpError(409, 'LOCATION_REQUIRED', 'กรุณาตั้งตำแหน่งผู้ซื้อที่โปรไฟล์ก่อนดูเส้นทาง');
+    }
+    const depot = { lat: Number(buyer.lat), lng: Number(buyer.lng) };
+
+    const [rows] = await pool.query<
+      RowDataPacket[] & {
+        id: number;
+        quantity_kg: number;
+        is_donation: number;
+        status: string;
+        pickup_slot_start: Date | null;
+        pickup_slot_end: Date | null;
+        crop_name_th: string;
+        crop_name_en: string | null;
+        plot_name: string;
+        plot_lat: number;
+        plot_lng: number;
+        shop_name: string | null;
+        location_label: string | null;
+        drop_otp: string;
+      }
+    >(
+      `SELECT o.id, o.quantity_kg, o.is_donation, o.status,
+              o.pickup_slot_start, o.pickup_slot_end, o.drop_otp,
+              c.name_th AS crop_name_th, c.name_en AS crop_name_en,
+              p.name AS plot_name, p.lat AS plot_lat, p.lng AS plot_lng,
+              s.name AS shop_name,
+              CASE
+                WHEN p.subdistrict_th IS NOT NULL AND p.district_th IS NOT NULL
+                  THEN CONCAT(p.subdistrict_th, ' · ', p.district_th)
+                WHEN p.subdistrict_th IS NOT NULL THEN p.subdistrict_th
+                ELSE NULL
+              END AS location_label
+       FROM orders o
+       JOIN harvest_lots h ON h.id = o.lot_id
+       JOIN crops c ON c.id = h.crop_id
+       JOIN plots p ON p.id = h.plot_id
+       LEFT JOIN shops s ON s.user_id = p.farmer_id
+       WHERE o.buyer_id = ?
+         AND o.status = 'reserved'
+         AND o.pickup_slot_start IS NOT NULL
+         AND o.pickup_slot_start >= ?
+         AND o.pickup_slot_start < ?
+       ORDER BY o.pickup_slot_start, o.id`,
+      [buyerId, dayStart, dayEnd],
+    );
+
+    type StopInfo = {
+      id: string;
+      kind: 'pickup';
+      buyerId: string;
+      lat: number;
+      lng: number;
+      slotStart: Date;
+      slotEnd: Date;
+      orderId: number;
+      quantityKg: number;
+      isDonation: boolean;
+      items: Array<{ crop_name_th: string; crop_name_en: string | null; quantity_kg: number }>;
+      plotName: string;
+      shopName: string;
+      locationLabel: string;
+      dropOtp: string;
+      legKm: number;
+    };
+
+    const byPlot = new Map<
+      string,
+      {
+        lat: number;
+        lng: number;
+        slotStart: Date;
+        slotEnd: Date;
+        plotName: string;
+        shopName: string;
+        locationLabel: string;
+        dropOtp: string;
+        orders: Array<{
+          orderId: number;
+          quantityKg: number;
+          isDonation: boolean;
+          crop_name_th: string;
+          crop_name_en: string | null;
+        }>;
+      }
+    >();
+
+    for (const row of rows) {
+      const plotKey = `${String(row.plot_lat)},${String(row.plot_lng)}`;
+      const slotStart = new Date(row.pickup_slot_start as Date);
+      const slotEnd = new Date(row.pickup_slot_end as Date);
+      const existing = byPlot.get(plotKey);
+      const item = {
+        orderId: Number(row.id),
+        quantityKg: Number(row.quantity_kg),
+        isDonation: Number(row.is_donation) === 1,
+        crop_name_th: row.crop_name_th,
+        crop_name_en: row.crop_name_en,
+      };
+      if (existing === undefined) {
+        byPlot.set(plotKey, {
+          lat: Number(row.plot_lat),
+          lng: Number(row.plot_lng),
+          slotStart,
+          slotEnd,
+          plotName: row.plot_name,
+          shopName: row.shop_name ?? row.plot_name,
+          locationLabel: row.location_label ?? row.plot_name,
+          dropOtp: row.drop_otp,
+          orders: [item],
+        });
+      } else {
+        // Same plot: keep earliest slot for the stop header; still list all orders.
+        if (slotStart.getTime() < existing.slotStart.getTime()) {
+          existing.slotStart = slotStart;
+          existing.slotEnd = slotEnd;
+        }
+        existing.orders.push(item);
+      }
+    }
+
+    const stops: Array<
+      RoutableStop & {
+        slotStart: Date;
+        payload: Omit<StopInfo, 'id' | 'kind' | 'buyerId' | 'lat' | 'lng' | 'legKm'>;
+      }
+    > = [];
+    let plotIndex = 0;
+    for (const value of byPlot.values()) {
+      plotIndex += 1;
+      stops.push({
+        id: `plot-${String(plotIndex)}`,
+        kind: 'pickup',
+        buyerId: String(buyerId),
+        lat: value.lat,
+        lng: value.lng,
+        slotStart: value.slotStart,
+        payload: {
+          slotStart: value.slotStart,
+          slotEnd: value.slotEnd,
+          orderId: value.orders[0]?.orderId ?? 0,
+          quantityKg: value.orders.reduce((sum, o) => sum + o.quantityKg, 0),
+          isDonation: value.orders.every((o) => o.isDonation),
+          items: value.orders.map((o) => ({
+            crop_name_th: o.crop_name_th,
+            crop_name_en: o.crop_name_en,
+            quantity_kg: o.quantityKg,
+          })),
+          plotName: value.plotName,
+          shopName: value.shopName,
+          locationLabel: value.locationLabel,
+          dropOtp: value.dropOtp,
+        },
+      });
+    }
+
+    const solved = orderRouteRespectingSlots(
+      depot,
+      stops,
+      (d, s) => defaultRouteSolver.solve(d, s).map((item) => item.id),
+    );
+
+    let prev = depot;
+    const view = solved.route.map((stop) => {
+      const legKm = haversineKm(prev, stop);
+      prev = stop;
+      return {
+        order_id: stop.payload.orderId,
+        plot_name: stop.payload.plotName,
+        shop_name: stop.payload.shopName,
+        location_label: stop.payload.locationLabel,
+        lat: stop.lat,
+        lng: stop.lng,
+        pickup_slot_start: stop.payload.slotStart.toISOString(),
+        pickup_slot_end: stop.payload.slotEnd.toISOString(),
+        items: stop.payload.items,
+        quantity_kg: stop.payload.quantityKg,
+        is_donation: stop.payload.isDonation,
+        drop_otp: stop.payload.dropOtp,
+        leg_km: Math.round(legKm * 100) / 100,
+      };
+    });
+
+    const routeKm = Math.round(routeWithReturnKm(depot, view) * 100) / 100;
+    const naiveKm = Math.round(naiveHomeAndBackKm(depot, view) * 100) / 100;
+
+    res.json({
+      date: dateStr,
+      depot,
+      ordered_by: solved.orderedBy,
+      stops: view,
+      route_km: routeKm,
+      naive_km: naiveKm,
+      savings_km: Math.round((naiveKm - routeKm) * 100) / 100,
+      total_items: view.length,
+    });
+  }),
+);
 
 ordersRouter.post(
   '/',
@@ -161,6 +424,8 @@ ordersRouter.post(
       let agreedPrice = 0;
       let distributionPlace: string | null = null;
       let distributionAt: Date | null = null;
+      let pickupStart: Date | null = null;
+      let pickupEnd: Date | null = null;
       if (donation) {
         const profile = await loadDonorProfile(connection, buyerId);
         if (profile === null) {
@@ -169,6 +434,22 @@ ordersRouter.post(
         const usedKg = await usedDonationKgThisWeek(connection, buyerId);
         distributionPlace = body.distribution_place ?? null;
         distributionAt = body.distribution_at !== undefined ? new Date(body.distribution_at) : null;
+        // Donations may still set a self-pickup window when provided.
+        if (body.pickup_slot_start !== undefined && body.pickup_slot_end !== undefined) {
+          pickupStart = new Date(body.pickup_slot_start);
+          pickupEnd = new Date(body.pickup_slot_end);
+          const slotCheck = validatePickupSlot({
+            slotStart: pickupStart,
+            slotEnd: pickupEnd,
+            expiresAt: new Date(lot.expires_at),
+          });
+          if (!slotCheck.ok) {
+            const message = slotCheck.message ?? 'ช่วงเวลาไม่ถูกต้อง';
+            throw new HttpError(400, slotCheck.code ?? 'PICKUP_SLOT_INVALID', message, {
+              pickup_slot_start: message,
+            });
+          }
+        }
         assertMayRequestDonation({
           profile,
           audience: lot.donation_audience,
@@ -185,6 +466,24 @@ ordersRouter.post(
         if (lot.start_price_per_kg === null || lot.floor_price_per_kg === null) {
           throw new HttpError(409, 'CONFLICT', 'ล็อตนี้ยังไม่มีราคาขาย');
         }
+        if (body.pickup_slot_start === undefined || body.pickup_slot_end === undefined) {
+          throw new HttpError(400, 'PICKUP_SLOT_REQUIRED', 'กรุณาเลือกช่วงเวลามารับของ', {
+            pickup_slot_start: 'กรุณาเลือกช่วงเวลามารับของ',
+          });
+        }
+        pickupStart = new Date(body.pickup_slot_start);
+        pickupEnd = new Date(body.pickup_slot_end);
+        const slotCheck = validatePickupSlot({
+          slotStart: pickupStart,
+          slotEnd: pickupEnd,
+          expiresAt: new Date(lot.expires_at),
+        });
+        if (!slotCheck.ok) {
+          const message = slotCheck.message ?? 'ช่วงเวลาไม่ถูกต้อง';
+          throw new HttpError(400, slotCheck.code ?? 'PICKUP_SLOT_INVALID', message, {
+            pickup_slot_start: message,
+          });
+        }
         const hoursLeft = (new Date(lot.expires_at).getTime() - Date.now()) / (60 * 60 * 1000);
         agreedPrice = lotPricePerKg({
           startPricePerKg: Number(lot.start_price_per_kg),
@@ -196,8 +495,8 @@ ordersRouter.post(
       const dropOtp = String(randomInt(0, 10000)).padStart(4, '0');
       const [result] = await connection.query<ResultSetHeader>(
         `INSERT INTO orders
-           (lot_id, buyer_id, quantity_kg, agreed_price_per_kg, is_donation, status, batch_id, drop_otp, distribution_place, distribution_at)
-         VALUES (?, ?, ?, ?, ?, 'reserved', NULL, ?, ?, ?)`,
+           (lot_id, buyer_id, quantity_kg, agreed_price_per_kg, is_donation, status, batch_id, drop_otp, distribution_place, distribution_at, pickup_slot_start, pickup_slot_end)
+         VALUES (?, ?, ?, ?, ?, 'reserved', NULL, ?, ?, ?, ?, ?)`,
         [
           lot.id,
           buyerId,
@@ -207,6 +506,8 @@ ordersRouter.post(
           dropOtp,
           distributionPlace,
           distributionAt,
+          pickupStart,
+          pickupEnd,
         ],
       );
       const lotStatus = await syncLotBookableStatus(connection, lot.id, weightKg, lot.status);
@@ -223,6 +524,8 @@ ordersRouter.post(
           drop_otp: dropOtp,
           distribution_place: distributionPlace,
           distribution_at: distributionAt?.toISOString() ?? null,
+          pickup_slot_start: pickupStart?.toISOString() ?? null,
+          pickup_slot_end: pickupEnd?.toISOString() ?? null,
         },
         lot_status: lotStatus,
         remaining_kg: remainingLotKg(weightKg, reservedSum + body.quantity_kg),
@@ -237,6 +540,8 @@ ordersRouter.post(
             order_id: result.insertId,
             lot_id: lot.id,
             is_donation: donation,
+            pickup_slot_start: pickupStart?.toISOString() ?? null,
+            pickup_slot_end: pickupEnd?.toISOString() ?? null,
           },
           `/orders/${result.insertId}`,
         );
@@ -258,7 +563,8 @@ ordersRouter.get(
   asyncHandler(async (req, res) => {
     const [rows] = await pool.query<(OrderRow & { crop_name_th: string; crop_name_en: string | null })[]>(
       `SELECT o.id, o.lot_id, o.buyer_id, o.quantity_kg, o.agreed_price_per_kg, o.is_donation, o.status,
-              o.batch_id, o.drop_otp, o.distribution_place, o.distribution_at, o.created_at,
+              o.batch_id, o.drop_otp, o.distribution_place, o.distribution_at,
+              o.pickup_slot_start, o.pickup_slot_end, o.created_at,
               c.name_th AS crop_name_th, c.name_en AS crop_name_en
        FROM orders o
        JOIN harvest_lots h ON h.id = o.lot_id
@@ -287,6 +593,8 @@ ordersRouter.get(
           distribution_place: row.distribution_place,
           distribution_at:
             row.distribution_at === null ? null : new Date(row.distribution_at).toISOString(),
+          pickup_slot_start: isoOrNull(row.pickup_slot_start),
+          pickup_slot_end: isoOrNull(row.pickup_slot_end),
           created_at: new Date(row.created_at).toISOString(),
         };
       }),
@@ -302,7 +610,8 @@ ordersRouter.get(
     const userId = req.auth?.id ?? 0;
     const [rows] = await pool.query<OrderDetailRow[]>(
       `SELECT o.id, o.lot_id, o.buyer_id, o.quantity_kg, o.agreed_price_per_kg, o.is_donation, o.status,
-              o.batch_id, o.drop_otp, o.distribution_place, o.distribution_at, o.created_at,
+              o.batch_id, o.drop_otp, o.distribution_place, o.distribution_at,
+              o.pickup_slot_start, o.pickup_slot_end, o.created_at,
               c.name_th AS crop_name_th, c.name_en AS crop_name_en, h.grade, h.ripeness, h.photo_url, h.expires_at,
               p.name AS plot_name, p.lat AS plot_lat, p.lng AS plot_lng, p.farmer_id,
               p.subdistrict_th AS plot_subdistrict_th, p.district_th AS plot_district_th,
@@ -370,6 +679,8 @@ ordersRouter.get(
         distribution_place: row.distribution_place,
         distribution_at:
           row.distribution_at === null ? null : new Date(row.distribution_at).toISOString(),
+        pickup_slot_start: isoOrNull(row.pickup_slot_start),
+        pickup_slot_end: isoOrNull(row.pickup_slot_end),
         created_at: new Date(row.created_at).toISOString(),
         viewer: isSeller ? 'seller' : 'buyer',
         contact: booked

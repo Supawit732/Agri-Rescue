@@ -4,14 +4,14 @@ import { pool } from '../../src/db/pool';
 import { CO2E_PER_KG } from '../../src/db/seedData';
 import { round2 } from '../../src/delivery/depot';
 import { respectsPrecedence, type RoutableStop } from '../../src/domain/routing';
-import {
-  bearer,
+import { bearer,
   insertCrop,
   insertLot,
   insertPlot,
   loginStaff,
   registerUser,
   testApp,
+  pickAvailablePickupSlot,
 } from '../helpers';
 
 interface StopBody {
@@ -68,7 +68,7 @@ describe('batches and delivery', () => {
     const plot = await insertPlot(farmer.user.id, 13.66, 100.63, 'แปลงลิสต์');
     const lot = await insertLot({ plotId: plot, cropId, expiresAt: later, weightKg: 15 });
     const buyer = await registerUser(app, { role: 'buyer', buyer_type: 'shop', name: 'ผู้ซื้อลิสต์', lat: 13.66, lng: 100.63 });
-    expect((await request(app).post('/api/orders').set(bearer(buyer.token)).send({ lot_id: lot, donation: false, quantity_kg: 15 })).status).toBe(201);
+    expect((await request(app).post('/api/orders').set(bearer(buyer.token)).send({ lot_id: lot, donation: false, quantity_kg: 15, ...pickAvailablePickupSlot() })).status).toBe(201);
 
     const coordinator = await loginStaff(app, 'coordinator', 'ผู้ประสานลิสต์');
     const driver = await loginStaff(app, 'driver', 'คนขับลิสต์');
@@ -117,7 +117,7 @@ describe('batches and delivery', () => {
     const paidOrder = await request(app)
       .post('/api/orders')
       .set(bearer(shop.token))
-      .send({ lot_id: paidLot, donation: false, quantity_kg: 80 });
+      .send({ lot_id: paidLot, donation: false, quantity_kg: 80, ...pickAvailablePickupSlot() });
     const giftOrder = await request(app)
       .post('/api/orders')
       .set(bearer(charity.token))
@@ -268,8 +268,8 @@ describe('batches and delivery', () => {
     const lotB = await insertLot({ plotId: plotB, cropId, expiresAt: later, weightKg: 12 });
     const buyerA = await registerUser(app, { role: 'buyer', buyer_type: 'vendor', lat: 13.66, lng: 100.63 });
     const buyerB = await registerUser(app, { role: 'buyer', buyer_type: 'shop', lat: 13.67, lng: 100.64 });
-    expect((await request(app).post('/api/orders').set(bearer(buyerA.token)).send({ lot_id: lotA, donation: false, quantity_kg: 10 })).status).toBe(201);
-    expect((await request(app).post('/api/orders').set(bearer(buyerB.token)).send({ lot_id: lotB, donation: false, quantity_kg: 12 })).status).toBe(201);
+    expect((await request(app).post('/api/orders').set(bearer(buyerA.token)).send({ lot_id: lotA, donation: false, quantity_kg: 10, ...pickAvailablePickupSlot() })).status).toBe(201);
+    expect((await request(app).post('/api/orders').set(bearer(buyerB.token)).send({ lot_id: lotB, donation: false, quantity_kg: 12, ...pickAvailablePickupSlot() })).status).toBe(201);
     const first = await loginStaff(app, 'coordinator', 'ผู้ประสานหนึ่ง');
     const second = await loginStaff(app, 'coordinator', 'ผู้ประสานสอง');
     const driver = await loginStaff(app, 'driver', 'คนขับพร้อมกัน');
@@ -310,11 +310,11 @@ describe('batches and delivery', () => {
     const orderA = await request(app)
       .post('/api/orders')
       .set(bearer(shop.token))
-      .send({ lot_id: lotA, donation: false, quantity_kg: 30 });
+      .send({ lot_id: lotA, donation: false, quantity_kg: 30, ...pickAvailablePickupSlot() });
     const orderB = await request(app)
       .post('/api/orders')
       .set(bearer(shop.token))
-      .send({ lot_id: lotB, donation: false, quantity_kg: 20 });
+      .send({ lot_id: lotB, donation: false, quantity_kg: 20, ...pickAvailablePickupSlot() });
     expect(orderA.status).toBe(201);
     expect(orderB.status).toBe(201);
 

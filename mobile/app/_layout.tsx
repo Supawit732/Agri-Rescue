@@ -122,6 +122,7 @@ function AuthGate(): React.ReactElement {
       <Stack.Screen name="lots/[id]/confirm" />
       <Stack.Screen name="lots/[id]/success" />
       <Stack.Screen name="orders/[id]" />
+      <Stack.Screen name="route" />
       <Stack.Screen name="sell/success" />
       <Stack.Screen name="driver" />
       <Stack.Screen name="coordinator" />

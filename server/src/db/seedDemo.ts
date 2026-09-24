@@ -9,8 +9,15 @@ import { pool } from './pool';
 import { CO2E_PER_KG, crops, farmers, buyers } from './seedData';
 import { seed } from './seed';
 import { round2 } from '../delivery/depot';
+import { listPickupSlots } from '../domain/pickupSlots';
 
 const DEMO_MARKER = 'seed:demo';
+
+function toMysqlDate(iso: string | null | undefined): string | null {
+  if (iso == null) return null;
+  return new Date(iso).toISOString().slice(0, 19).replace('T', ' ');
+}
+
 
 async function clearPreviousDemo(connection: PoolConnection): Promise<void> {
   const [lots] = await connection.query<RowDataPacket[]>(
@@ -195,9 +202,14 @@ export async function seedDemo(options?: { skipBaseSeed?: boolean }): Promise<vo
     );
     await connection.query(
       `INSERT INTO orders
-         (lot_id, buyer_id, quantity_kg, agreed_price_per_kg, is_donation, status, batch_id, drop_otp)
-       VALUES (?, ?, 10, 28, 0, 'reserved', NULL, '4321')`,
-      [openLotId, buyerIds[0]],
+         (lot_id, buyer_id, quantity_kg, agreed_price_per_kg, is_donation, status, batch_id, drop_otp, pickup_slot_start, pickup_slot_end)
+       VALUES (?, ?, 10, 28, 0, 'reserved', NULL, '4321', ?, ?)`,
+      [
+        openLotId,
+        buyerIds[0],
+        toMysqlDate(listPickupSlots(openExpires).find((s) => s.available)?.start_at),
+        toMysqlDate(listPickupSlots(openExpires).find((s) => s.available)?.end_at),
+      ],
     );
     await connection.query(
       `INSERT INTO orders
@@ -205,6 +217,52 @@ export async function seedDemo(options?: { skipBaseSeed?: boolean }): Promise<vo
        VALUES (?, ?, 5, 28, 0, 'cancelled', NULL, '9999')`,
       [openLotId, buyerIds[1]],
     );
+
+    // Same-day multi-stop route demo for buyers[0] (0800000011): 4 farmers, 4 slots today/tomorrow
+    const routeSlots = listPickupSlots(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)).filter(
+      (s) => s.available,
+    );
+    const morningSlots = routeSlots.filter((s) => s.day === 'today').slice(0, 4);
+    const fallbackSlots = routeSlots.slice(0, 4);
+    const slotsForRoute = morningSlots.length >= 4 ? morningSlots : fallbackSlots;
+    const routeCrops = [crops[0], crops[1] ?? crops[0], crops[2] ?? crops[0], crops[3] ?? crops[0]];
+    const routePrices = [28, 35, 18, 42];
+    for (let i = 0; i < 4; i += 1) {
+      const farmer = farmers[i % farmers.length]!;
+      const farmerId = farmerIds.get(farmer.phone)!;
+      const plotId = plotByFarmer.get(farmerId)!;
+      if (plotId === undefined) {
+        continue;
+      }
+      const crop = routeCrops[i]!;
+      const cropId = cropIds.get(crop.key)!;
+      const price = routePrices[i] ?? 30;
+      const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      const [lotResult] = await connection.query<ResultSetHeader>(
+        `INSERT INTO harvest_lots (
+           plot_id, crop_id, weight_kg, grade, ripeness, photo_url, allow_donation, donation_audience,
+           start_price_per_kg, floor_price_per_kg, sale_mode, donation_opened,
+           market_price_snapshot, market_price_is_estimate,
+           predicted_shelf_hours, expires_at, status, created_at
+         ) VALUES (?, ?, 40, 'normal', 2, ?, 0, 'verified_org_only', ?, ?, 'sell', 0, ?, 1, 72, ?, 'partially_reserved', UTC_TIMESTAMP())`,
+        [plotId, cropId, DEMO_MARKER, price, Math.round(price * 0.3 * 100) / 100, crop.marketPricePerKg, expires],
+      );
+      const lotId = lotResult.insertId;
+      const slot = slotsForRoute[i];
+      await connection.query(
+        `INSERT INTO orders
+           (lot_id, buyer_id, quantity_kg, agreed_price_per_kg, is_donation, status, batch_id, drop_otp, pickup_slot_start, pickup_slot_end)
+         VALUES (?, ?, 8, ?, 0, 'reserved', NULL, ?, ?, ?)`,
+        [
+          lotId,
+          buyerIds[0],
+          price,
+          String(2000 + i),
+          toMysqlDate(slot?.start_at),
+          toMysqlDate(slot?.end_at),
+        ],
+      );
+    }
 
     await connection.commit();
   } catch (error) {

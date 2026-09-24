@@ -8,6 +8,7 @@ import { ProfileMenu } from '../../src/components/ProfileMenu';
 import { useAuth } from '../../src/context/AuthContext';
 import { useApiData } from '../../src/hooks/useApiData';
 import { formatRelativeTime, formatTemplate, useI18n } from '../../src/i18n';
+import { formatIsoSlotShort } from '../../src/components/PickupSlotPicker';
 import { C, fonts, radius } from '../../src/theme';
 
 type FilterKey = NotificationFilter;
@@ -28,9 +29,6 @@ function paramsOf(n: AppNotification): Record<string, string | number> {
   return out;
 }
 
-function messageFor(n: AppNotification, template: string): string {
-  return formatTemplate(template, paramsOf(n));
-}
 
 function isToday(iso: string): boolean {
   const d = new Date(iso);
@@ -109,13 +107,25 @@ export default function NotificationsTab(): React.ReactElement {
 
   const titleAndBody = (n: AppNotification): { title: string; body: string } => {
     const titleKey = n.title_key as keyof typeof t.notif;
-    const template = (t.notif as Record<string, string>)[titleKey.replace('notif.', '')] ?? titleKey;
     // title_key stored as notif.shop_new_lot — catalog uses t.notif.shop_new_lot
     const key = n.title_key.startsWith('notif.') ? n.title_key.slice('notif.'.length) : n.title_key;
-    const bodyTemplate =
-      (t.notif as Record<string, string | undefined>)[key] ??
-      (t.notif as Record<string, string | undefined>)[titleKey] ??
-      key;
+    const startIso =
+      typeof n.params.pickup_slot_start === 'string' ? n.params.pickup_slot_start : null;
+    const endIso = typeof n.params.pickup_slot_end === 'string' ? n.params.pickup_slot_end : null;
+    const withSlot =
+      key === 'lot_booked' && startIso !== null && endIso !== null
+        ? (t.notif.lot_bookedWithSlot as string)
+        : ((t.notif as Record<string, string | undefined>)[key] ??
+          (t.notif as Record<string, string | undefined>)[titleKey] ??
+          key);
+    const extra: Record<string, string | number> = {};
+    if (withSlot.includes('{pickup_slot}') && startIso !== null && endIso !== null) {
+      extra.pickup_slot = formatIsoSlotShort(startIso, endIso, {
+        today: t.confirmBooking.today,
+        tomorrow: t.confirmBooking.tomorrow,
+      });
+    }
+    const bodyTemplate = withSlot;
     const category =
       n.type === 'shop_new_lot'
         ? t.notifications.catShop
@@ -124,7 +134,10 @@ export default function NotificationsTab(): React.ReactElement {
           : n.type === 'donor_review' || n.type === 'donor_proof_due'
             ? t.notifications.catDonor
             : t.notifications.catOther;
-    return { title: category, body: messageFor(n, bodyTemplate) };
+    return {
+      title: category,
+      body: formatTemplate(bodyTemplate, { ...paramsOf(n), ...extra }),
+    };
   };
 
   const iconFor = (type: string): { icon: keyof typeof Feather.glyphMap; fg: string; bg: string } => {

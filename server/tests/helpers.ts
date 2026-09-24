@@ -4,6 +4,7 @@ import type { Express } from 'express';
 import type { ResultSetHeader, RowDataPacket } from 'mysql2';
 import { pool } from '../src/db/pool';
 import { createApp } from '../src/app';
+import { listPickupSlots } from '../src/domain/pickupSlots';
 import type { UserRole } from '../src/types/express';
 
 export interface PublicUser {
@@ -190,4 +191,15 @@ export async function insertLot(input: {
     ],
   );
   return result.insertId;
+}
+
+/** First available self-pickup window for a lot expiring ~5 days out. */
+export function pickAvailablePickupSlot(
+  expiresAt: Date = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+): { pickup_slot_start: string; pickup_slot_end: string } {
+  const slot = listPickupSlots(expiresAt).find((s) => s.available);
+  if (slot === undefined) {
+    throw new Error('No available pickup slot in tests');
+  }
+  return { pickup_slot_start: slot.start_at, pickup_slot_end: slot.end_at };
 }

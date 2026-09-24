@@ -398,11 +398,55 @@ export interface Order {
   distance_km?: number | null;
   viewer?: 'buyer' | 'seller';
   location_label?: string | null;
+  pickup_slot_start?: string | null;
+  pickup_slot_end?: string | null;
   contact?: {
     name: string;
     phone: string;
     line_id: string | null;
   } | null;
+}
+
+export interface PickupSlotOption {
+  key: string;
+  day: 'today' | 'tomorrow';
+  start_at: string;
+  end_at: string;
+  available: boolean;
+  reason_code: 'ok' | 'started' | 'past' | 'too_close_to_expiry';
+}
+
+export interface RouteStopItem {
+  crop_name_th: string;
+  crop_name_en: string | null;
+  quantity_kg: number;
+}
+
+export interface RouteStopView {
+  order_id: number;
+  plot_name: string;
+  shop_name: string;
+  location_label: string | null;
+  lat: number;
+  lng: number;
+  pickup_slot_start: string;
+  pickup_slot_end: string;
+  items: RouteStopItem[];
+  quantity_kg: number;
+  is_donation: boolean;
+  drop_otp: string;
+  leg_km: number;
+}
+
+export interface BuyerRoute {
+  date: string;
+  depot: { lat: number; lng: number };
+  ordered_by: 'distance' | 'pickup_slot';
+  stops: RouteStopView[];
+  route_km: number;
+  naive_km: number;
+  savings_km: number;
+  total_items: number;
 }
 
 export interface Driver {

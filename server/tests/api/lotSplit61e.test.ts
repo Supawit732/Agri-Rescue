@@ -1,7 +1,7 @@
 import request from 'supertest';
 import type { RowDataPacket } from 'mysql2';
 import { pool } from '../../src/db/pool';
-import { bearer, insertCrop, insertLot, insertPlot, loginStaff, registerUser, testApp } from '../helpers';
+import { bearer, insertCrop, insertLot, insertPlot, loginStaff, registerUser, testApp, pickAvailablePickupSlot } from '../helpers';
 
 describe('lot split 6.1e', () => {
   const app = testApp();
@@ -40,11 +40,11 @@ describe('lot split 6.1e', () => {
       request(app)
         .post('/api/orders')
         .set(bearer(first.token))
-        .send({ lot_id: lotId, donation: false, quantity_kg: weightKg }),
+        .send({ lot_id: lotId, donation: false, quantity_kg: weightKg, ...pickAvailablePickupSlot() }),
       request(app)
         .post('/api/orders')
         .set(bearer(second.token))
-        .send({ lot_id: lotId, donation: false, quantity_kg: weightKg }),
+        .send({ lot_id: lotId, donation: false, quantity_kg: weightKg, ...pickAvailablePickupSlot() }),
     ]);
     const statuses = [left.status, right.status].sort((a, b) => a - b);
     expect(statuses).toEqual([201, 409]);
@@ -60,7 +60,7 @@ describe('lot split 6.1e', () => {
     const belowMin = await request(app)
       .post('/api/orders')
       .set(bearer(buyer.token))
-      .send({ lot_id: minLot.lotId, donation: false, quantity_kg: 2 });
+      .send({ lot_id: minLot.lotId, donation: false, quantity_kg: 2, ...pickAvailablePickupSlot() });
     expect(belowMin.status).toBe(400);
     expect(belowMin.body.error.fields?.quantity_kg ?? belowMin.body.error.message).toBeTruthy();
 
@@ -68,7 +68,7 @@ describe('lot split 6.1e', () => {
     const badStep = await request(app)
       .post('/api/orders')
       .set(bearer(buyer.token))
-      .send({ lot_id: stepLot.lotId, donation: false, quantity_kg: 3 });
+      .send({ lot_id: stepLot.lotId, donation: false, quantity_kg: 3, ...pickAvailablePickupSlot() });
     expect(badStep.status).toBe(400);
     expect(String(badStep.body.error.message)).toContain('พหุคูณ');
 
@@ -76,21 +76,21 @@ describe('lot split 6.1e', () => {
     const partial = await request(app)
       .post('/api/orders')
       .set(bearer(buyer.token))
-      .send({ lot_id: whole.lotId, donation: false, quantity_kg: 4 });
+      .send({ lot_id: whole.lotId, donation: false, quantity_kg: 4, ...pickAvailablePickupSlot() });
     expect(partial.status).toBe(400);
     expect(String(partial.body.error.message)).toContain('ยกล็อต');
 
     const okWhole = await request(app)
       .post('/api/orders')
       .set(bearer(buyer.token))
-      .send({ lot_id: whole.lotId, donation: false, quantity_kg: 8 });
+      .send({ lot_id: whole.lotId, donation: false, quantity_kg: 8, ...pickAvailablePickupSlot() });
     expect(okWhole.status).toBe(201);
 
     const rem = await setupLot({ weightKg: 5, minOrderKg: 2, orderStepKg: 1 });
     const firstPart = await request(app)
       .post('/api/orders')
       .set(bearer(buyer.token))
-      .send({ lot_id: rem.lotId, donation: false, quantity_kg: 4 });
+      .send({ lot_id: rem.lotId, donation: false, quantity_kg: 4, ...pickAvailablePickupSlot() });
     expect(firstPart.status).toBe(201);
     expect(firstPart.body.lot_status).toBe('partially_reserved');
     expect(firstPart.body.remaining_kg).toBe(1);
@@ -98,14 +98,14 @@ describe('lot split 6.1e', () => {
     const badTail = await request(app)
       .post('/api/orders')
       .set(bearer(buyer.token))
-      .send({ lot_id: rem.lotId, donation: false, quantity_kg: 0.5 });
+      .send({ lot_id: rem.lotId, donation: false, quantity_kg: 0.5, ...pickAvailablePickupSlot() });
     expect(badTail.status).toBe(400);
 
     const other = await registerUser(app, { role: 'buyer', buyer_type: 'vendor', name: 'เศษท้าย' });
     const takeTail = await request(app)
       .post('/api/orders')
       .set(bearer(other.token))
-      .send({ lot_id: rem.lotId, donation: false, quantity_kg: 1 });
+      .send({ lot_id: rem.lotId, donation: false, quantity_kg: 1, ...pickAvailablePickupSlot() });
     expect(takeTail.status).toBe(201);
     expect(takeTail.body.lot_status).toBe('fully_reserved');
     expect(takeTail.body.remaining_kg).toBe(0);
@@ -117,7 +117,7 @@ describe('lot split 6.1e', () => {
     const booked = await request(app)
       .post('/api/orders')
       .set(bearer(buyer.token))
-      .send({ lot_id: lotId, donation: false, quantity_kg: 4 });
+      .send({ lot_id: lotId, donation: false, quantity_kg: 4, ...pickAvailablePickupSlot() });
     expect(booked.status).toBe(201);
     expect(booked.body.lot_status).toBe('partially_reserved');
     expect(booked.body.remaining_kg).toBe(6);
@@ -138,7 +138,7 @@ describe('lot split 6.1e', () => {
     const booked = await request(app)
       .post('/api/orders')
       .set(bearer(buyer.token))
-      .send({ lot_id: lotId, donation: false, quantity_kg: 8 });
+      .send({ lot_id: lotId, donation: false, quantity_kg: 8, ...pickAvailablePickupSlot() });
     expect(booked.status).toBe(201);
 
     const tooLow = await request(app)
@@ -158,7 +158,7 @@ describe('lot split 6.1e', () => {
     const paid = await request(app)
       .post('/api/orders')
       .set(bearer(shop.token))
-      .send({ lot_id: lotId, donation: false, quantity_kg: 6 });
+      .send({ lot_id: lotId, donation: false, quantity_kg: 6, ...pickAvailablePickupSlot() });
     expect(paid.status).toBe(201);
     expect(paid.body.remaining_kg).toBe(4);
 

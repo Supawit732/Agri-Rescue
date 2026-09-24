@@ -10,6 +10,7 @@ import {
   DataState,
   EmptyState,
   LoginPrompt,
+  PrimaryButton,
   Screen,
   SecondaryButton,
 } from '../components/ui';
@@ -17,6 +18,7 @@ import { useAuth } from '../context/AuthContext';
 import { useApiData } from '../hooks/useApiData';
 import { formatCountdown, hoursLeftFrom, useNow } from '../hooks/useNow';
 import { formatTemplate, useI18n } from '../i18n';
+import { formatIsoSlotShort } from '../components/PickupSlotPicker';
 import { C } from '../theme';
 
 function statusTone(status: string): { fg: string; bg: string } {
@@ -105,6 +107,13 @@ function OrdersList(): React.ReactElement {
 
   return (
     <Screen>
+      <View style={styles.routeBar}>
+        <PrimaryButton
+          label={t.orders.openRoute}
+          block
+          onPress={() => router.push('/route')}
+        />
+      </View>
       <DataState
         loading={loading}
         error={error}
@@ -147,6 +156,15 @@ function OrdersList(): React.ReactElement {
                       {formatTemplate(t.orders.orderMeta, { id: order.id })}
                       {hours !== null ? ` · ${formatCountdown(hours, t.countdown)}` : ''}
                     </Text>
+                    {order.pickup_slot_start != null && order.pickup_slot_end != null ? (
+                      <Text style={styles.slot}>
+                        {t.orders.pickupSlot}:{' '}
+                        {formatIsoSlotShort(order.pickup_slot_start, order.pickup_slot_end, {
+                          today: t.route.today,
+                          tomorrow: t.route.tomorrow,
+                        })}
+                      </Text>
+                    ) : null}
                     <Text style={styles.cardLine}>
                       {order.is_donation
                         ? t.orders.donationNoCharge
@@ -178,8 +196,10 @@ function OrdersList(): React.ReactElement {
 
 const styles = StyleSheet.create({
   banner: { color: C.chili, marginBottom: 10, fontWeight: '600' },
+  routeBar: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   cardTitle: { fontSize: 16, fontWeight: '700', color: C.ink, flex: 1, marginRight: 8 },
   meta: { color: C.mute, fontSize: 12, marginBottom: 4 },
+  slot: { color: C.leafDeep, fontSize: 13, fontWeight: '600', marginBottom: 4 },
   cardLine: { color: C.ink, marginBottom: 4 },
 });
