@@ -63,7 +63,7 @@ export default function MarketScreen(): React.ReactElement {
   const { t } = useI18n();
 
   return (
-    <Screen fullWidth>
+    <Screen fullWidth skipTopSafeArea>
       <AppHeader />
       {user === null ? (
         <View style={styles.guestBanner}>
@@ -143,8 +143,9 @@ function MarketCatalog(): React.ReactElement {
           return;
         }
         if (permission.status !== 'granted') {
+          // No location → show all lots by remaining time (not empty / not force picker).
           setLocationTried(true);
-          setShowPicker(true);
+          setFilters((f) => ({ ...f, sort: 'urgent' }));
           return;
         }
         const position = await Location.getCurrentPositionAsync({
@@ -160,7 +161,7 @@ function MarketCatalog(): React.ReactElement {
         setFilters((f) => ({ ...f, sort: 'near' }));
       } catch {
         if (active) {
-          setShowPicker(true);
+          setFilters((f) => ({ ...f, sort: 'urgent' }));
         }
       } finally {
         if (active) {
@@ -491,7 +492,8 @@ const styles = StyleSheet.create({
     gap: 10,
     marginHorizontal: 16,
     marginBottom: 8,
-    padding: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     backgroundColor: C.leafSoft,
     borderRadius: radius.card,
   },

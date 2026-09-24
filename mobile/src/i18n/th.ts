@@ -106,7 +106,7 @@ const th: Messages = {
     changeLocation: 'เปลี่ยนตำแหน่ง',
     selectLocation: 'เลือกตำแหน่ง',
     locationForDistance: 'ตำแหน่งสำหรับคำนวณระยะ',
-    searchCrop: 'ค้นหาพืชหรือชื่อร้าน',
+    searchCrop: 'ค้นหาพืช หรือชื่อร้าน',
     allCrops: 'ทั้งหมด',
     plotFallback: 'พื้นที่แปลง',
     nearYouCount: 'ล็อตใกล้คุณ {count}',
