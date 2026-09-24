@@ -116,7 +116,7 @@ interface Api {
     crop_id?: number;
     sort?: 'near' | 'urgent' | 'cheap';
   }) => Promise<MarketLot[]>;
-  getPublicLot: (id: number, lat?: number, lng?: number) => Promise<MarketLot>;
+  getPublicMarketLot: (id: number, lat?: number, lng?: number) => Promise<MarketLot>;
   createOrder: (
     lotId: number,
     donation: boolean,
@@ -364,7 +364,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
           token,
         }).then((r) => r.lots);
       },
-      getPublicLot: (id, lat, lng) => {
+      getPublicMarketLot: (id, lat, lng) => {
         const params = new URLSearchParams();
         if (lat !== undefined) {
           params.set('lat', String(lat));

@@ -10,14 +10,16 @@ import {
   type TextInputProps,
   type LayoutChangeEvent,
 } from 'react-native';
+import { useI18n } from '../i18n';
 import { C } from '../theme';
 import { Chip } from './ui';
 
 export type FieldErrors = Record<string, string>;
 
 export function ErrorIcon(): React.ReactElement {
+  const { t } = useI18n();
   return (
-    <View style={styles.errorIcon} accessibilityLabel="ผิดพลาด">
+    <View style={styles.errorIcon} accessibilityLabel={t.form.errorA11y}>
       <Text style={styles.errorIconText}>!</Text>
     </View>
   );
@@ -156,6 +158,7 @@ export function FileField({
   onRemove: (id: string) => void;
   fieldRef?: (name: string, y: number) => void;
 }): React.ReactElement {
+  const { t } = useI18n();
   const hasError = error !== null && error !== undefined && error !== '';
   return (
     <View
@@ -170,12 +173,12 @@ export function FileField({
             {file.name}
           </Text>
           <Pressable accessibilityRole="button" onPress={() => onRemove(file.id)}>
-            <Text style={styles.remove}>ลบ</Text>
+            <Text style={styles.remove}>{t.form.removeFile}</Text>
           </Pressable>
         </View>
       ))}
       <Pressable accessibilityRole="button" onPress={onAdd} style={styles.addFile}>
-        <Text style={styles.addFileText}>+ แนบไฟล์</Text>
+        <Text style={styles.addFileText}>{t.form.attachFile}</Text>
       </Pressable>
       <FieldErrorText message={error} />
     </View>
@@ -190,6 +193,7 @@ export function useFieldErrors(initial: FieldErrors = {}): {
   applyServerFields: (fields: Record<string, string> | undefined) => void;
   firstErrorName: () => string | null;
 } {
+  const { translateFieldError } = useI18n();
   const [errors, setErrors] = useState<FieldErrors>(initial);
   const setFieldError = useCallback((name: string, message: string | null) => {
     setErrors((prev) => {
@@ -205,12 +209,19 @@ export function useFieldErrors(initial: FieldErrors = {}): {
   const clearField = useCallback((name: string) => {
     setFieldError(name, null);
   }, [setFieldError]);
-  const applyServerFields = useCallback((fields: Record<string, string> | undefined) => {
-    if (fields === undefined) {
-      return;
-    }
-    setErrors((prev) => ({ ...prev, ...fields }));
-  }, []);
+  const applyServerFields = useCallback(
+    (fields: Record<string, string> | undefined) => {
+      if (fields === undefined) {
+        return;
+      }
+      const translated: FieldErrors = {};
+      for (const [key, value] of Object.entries(fields)) {
+        translated[key] = translateFieldError(value);
+      }
+      setErrors((prev) => ({ ...prev, ...translated }));
+    },
+    [translateFieldError],
+  );
   const firstErrorName = useCallback(() => {
     const keys = Object.keys(errors);
     return keys[0] ?? null;

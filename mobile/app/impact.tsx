@@ -3,31 +3,45 @@ import { StyleSheet, Text, View } from 'react-native';
 import { BigStat, Body, Card, DataState, Screen, StackHeader } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
 import { useApiData } from '../src/hooks/useApiData';
+import { useI18n } from '../src/i18n';
 import { C } from '../src/theme';
 
 export default function ImpactScreen(): React.ReactElement {
   const { api } = useAuth();
+  const { t, formatNumber } = useI18n();
   const router = useRouter();
   const { data, loading, error, reload } = useApiData(() => api.getImpact(), []);
 
   return (
     <Screen>
-      <StackHeader title="ผลลัพธ์ที่ช่วยได้" onBack={() => router.replace('/(tabs)/account')} />
+      <StackHeader title={t.impact.title} onBack={() => router.replace('/(tabs)/account')} />
       <DataState loading={loading} error={error} data={data} onRetry={reload}>
         {(summary) => (
           <Body>
             <Card style={styles.hero}>
-              <Text style={styles.heroValue}>{summary.kg_saved}</Text>
-              <Text style={styles.heroUnit}>กิโลกรัมที่ช่วยไม่ให้เสียทิ้ง</Text>
+              <Text style={styles.heroValue}>{formatNumber(summary.kg_saved)}</Text>
+              <Text style={styles.heroUnit}>{t.impact.kgSaved}</Text>
             </Card>
             <Card>
               <View style={styles.grid}>
-                <BigStat value={String(summary.co2e_kg)} unit="kg" label="CO₂e ที่ลดได้" />
-                <BigStat value={String(summary.farmer_income)} unit="บาท" label="รายได้เกษตรกร" />
+                <BigStat
+                  value={formatNumber(summary.co2e_kg)}
+                  unit={t.impact.unitKg}
+                  label={t.impact.co2e}
+                />
+                <BigStat
+                  value={formatNumber(summary.farmer_income)}
+                  unit={t.impact.unitBaht}
+                  label={t.impact.farmerIncome}
+                />
               </View>
               <View style={styles.grid}>
-                <BigStat value={String(summary.donated_kg)} unit="kg" label="บริจาค" />
-                <BigStat value={String(summary.lot_count)} label="ล็อตที่ส่งมอบ" />
+                <BigStat
+                  value={formatNumber(summary.donated_kg)}
+                  unit={t.impact.unitKg}
+                  label={t.impact.donated}
+                />
+                <BigStat value={formatNumber(summary.lot_count)} label={t.impact.lotsDelivered} />
               </View>
             </Card>
           </Body>

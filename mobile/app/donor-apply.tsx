@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { ApiError } from '../src/api/client';
-import type { ApplicationKind, DocCategory, OrgStatus, OrgType, RecipientGroup } from '../src/api/types';
+import type { ApplicationKind, DocCategory, OrgStatus, OrgType } from '../src/api/types';
 import { LocationPicker, type LatLng } from '../src/components/LocationPicker';
 import {
   ChipGroup,
@@ -21,9 +21,10 @@ import {
   labelRecipientGroups,
   labelReviewAction,
   OPEN_ORG_STATUSES,
-  ORG_TYPE_TH,
-  RECIPIENT_GROUP_TH,
+  orgTypeOptions,
+  recipientGroupOptions,
 } from '../src/donorLabels';
+import { formatTemplate, useI18n, type Messages } from '../src/i18n';
 import { C } from '../src/theme';
 
 type LocalDoc = {
@@ -35,15 +36,8 @@ type LocalDoc = {
   existingId?: number;
 };
 
-const ORG_TYPES: { key: OrgType; label: string }[] = (
-  Object.entries(ORG_TYPE_TH) as [OrgType, string][]
-).map(([key, label]) => ({ key, label }));
-
-const RECIPIENT_OPTS: { key: RecipientGroup; label: string }[] = (
-  Object.entries(RECIPIENT_GROUP_TH) as [RecipientGroup, string][]
-).map(([key, label]) => ({ key, label }));
-
 function ProgressBar({ step, total }: { step: number; total: number }): React.ReactElement {
+  const { t } = useI18n();
   const pct = Math.round(((step + 1) / total) * 100);
   return (
     <View style={styles.progressWrap}>
@@ -51,7 +45,7 @@ function ProgressBar({ step, total }: { step: number; total: number }): React.Re
         <View style={[styles.progressFill, { width: `${pct}%` }]} />
       </View>
       <Text style={styles.progressLabel}>
-        ขั้นที่ {step + 1} / {total}
+        {formatTemplate(t.donorApply.stepProgress, { step: step + 1, total })}
       </Text>
     </View>
   );
@@ -65,6 +59,7 @@ function StatusBanner({
   onWithdraw,
   onSwitchIndividual,
   busy,
+  t,
 }: {
   orgStatus: OrgStatus;
   applicationKind: ApplicationKind | null;
@@ -73,6 +68,7 @@ function StatusBanner({
   onWithdraw: () => void;
   onSwitchIndividual: () => void;
   busy: boolean;
+  t: Messages;
 }): React.ReactElement | null {
   if (!OPEN_ORG_STATUSES.has(orgStatus) && orgStatus !== 'rejected') {
     return null;
@@ -80,24 +76,35 @@ function StatusBanner({
   return (
     <View style={styles.statusBanner}>
       <Text style={styles.statusTitle}>
-        คำขอ{labelApplicationKind(applicationKind)} · สถานะ {labelOrgStatus(orgStatus)}
+        {formatTemplate(t.donorApply.requestStatus, {
+          kind: labelApplicationKind(applicationKind, t),
+          status: labelOrgStatus(orgStatus, t),
+        })}
       </Text>
-      {adminMessages.map((msg, index) => (
-        <Text key={`${msg.action}-${index}`} style={styles.statusAdmin}>
-          ข้อความจากผู้ดูแล ({labelReviewAction(msg.action)}
-          {msg.application_kind !== undefined && msg.application_kind !== null
-            ? ` · คำขอ${labelApplicationKind(msg.application_kind)}`
-            : ''}
-          ): {msg.reason ?? '—'}
-        </Text>
-      ))}
+      {adminMessages.map((msg, index) => {
+        const kindSuffix =
+          msg.application_kind !== undefined && msg.application_kind !== null
+            ? formatTemplate(t.donorApply.adminMessageKindSuffix, {
+                kind: labelApplicationKind(msg.application_kind, t),
+              })
+            : '';
+        return (
+          <Text key={`${msg.action}-${index}`} style={styles.statusAdmin}>
+            {formatTemplate(t.donorApply.adminMessage, {
+              action: labelReviewAction(msg.action, t),
+              kindSuffix,
+              reason: msg.reason ?? t.common.dash,
+            })}
+          </Text>
+        );
+      })}
       {OPEN_ORG_STATUSES.has(orgStatus) ? (
         <View style={styles.statusActions}>
-          <PrimaryButton label="ส่งเอกสารเพิ่ม/แก้ไข" onPress={onEditDocs} disabled={busy} />
+          <PrimaryButton label={t.donorApply.uploadMoreDocs} onPress={onEditDocs} disabled={busy} />
           {applicationKind === 'organization' ? (
-            <SecondaryButton label="เปลี่ยนเป็นบุคคล" onPress={onSwitchIndividual} disabled={busy} />
+            <SecondaryButton label={t.donorApply.switchIndividual} onPress={onSwitchIndividual} disabled={busy} />
           ) : null}
-          <SecondaryButton label="ถอนคำขอ" onPress={onWithdraw} disabled={busy} />
+          <SecondaryButton label={t.donorApply.withdraw} onPress={onWithdraw} disabled={busy} />
         </View>
       ) : null}
     </View>
@@ -106,7 +113,10 @@ function StatusBanner({
 
 export default function DonorApplyScreen(): React.ReactElement {
   const { user, api, refreshUser } = useAuth();
+  const { t } = useI18n();
   const router = useRouter();
+  const orgTypes = useMemo(() => orgTypeOptions(t), [t]);
+  const recipientOpts = useMemo(() => recipientGroupOptions(t), [t]);
   const { errors, setErrors, setFieldError, clearField, applyServerFields, firstErrorName } = useFieldErrors();
   const { scrollRef, registerY, scrollToField } = useFieldScroll();
 
@@ -157,17 +167,23 @@ export default function DonorApplyScreen(): React.ReactElement {
       return errors[name] ?? null;
     }
     if (requested.has(name)) {
-      return 'ผู้ดูแลขอให้แก้ไขช่องนี้';
+      return t.donorApply.adminRequestedFix;
     }
     return null;
   };
 
   const steps =
     kind === null
-      ? ['เลือกประเภท']
+      ? [t.donorApply.stepPickKind]
       : kind === 'individual'
-        ? ['ข้อมูลติดต่อ', 'พื้นที่และผู้รับ', 'สรุปและยอมรับ']
-        : ['องค์กร', 'ผู้ติดต่อ', 'ผู้รับประโยชน์', 'เอกสาร', 'สรุปและยอมรับ'];
+        ? [t.donorApply.stepContact, t.donorApply.stepAreaRecipients, t.donorApply.stepSummary]
+        : [
+            t.donorApply.stepOrg,
+            t.donorApply.stepOrgContact,
+            t.donorApply.stepBeneficiaries,
+            t.donorApply.stepDocuments,
+            t.donorApply.stepSummary,
+          ];
   const totalSteps = steps.length;
 
   useEffect(() => {
@@ -262,7 +278,7 @@ export default function DonorApplyScreen(): React.ReactElement {
   const pickImage = async (category: DocCategory): Promise<void> => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      setFormError('ไม่ได้รับสิทธิ์เข้าถึงรูปภาพ');
+      setFormError(t.donorApply.photoDenied);
       return;
     }
     const picked = await ImagePicker.launchImageLibraryAsync({
@@ -344,7 +360,7 @@ export default function DonorApplyScreen(): React.ReactElement {
         }
         scrollToField(firstErrorName());
       } else {
-        setFormError('บันทึกร่างไม่สำเร็จ');
+        setFormError(t.donorApply.draftFailed);
       }
       return false;
     } finally {
@@ -355,51 +371,51 @@ export default function DonorApplyScreen(): React.ReactElement {
   const validateStep = (): boolean => {
     const next: Record<string, string> = {};
     if (kind === null && step === 0) {
-      next.application_kind = 'กรุณาเลือกประเภท';
+      next.application_kind = t.donorApply.needKind;
     }
     if (kind === 'individual') {
       if (step === 0) {
-        if (contactName.trim() === '') next.contact_name = 'กรุณากรอกชื่อ-นามสกุล';
-        if (!/^\d{9,15}$/.test(contactPhone.trim())) next.contact_phone = 'เบอร์โทรไม่ถูกต้อง';
+        if (contactName.trim() === '') next.contact_name = t.donorApply.needFullName;
+        if (!/^\d{9,15}$/.test(contactPhone.trim())) next.contact_phone = t.donorApply.invalidPhone;
       }
       if (step === 1) {
-        if (coords === null) next.org_lat = 'กรุณาเลือกพื้นที่แจก';
-        if (recipientGroups.length === 0) next.recipient_groups = 'เลือกอย่างน้อยหนึ่งกลุ่ม';
-        if (purposeTh.trim() === '') next.purpose_th = 'กรุณาระบุวัตถุประสงค์';
+        if (coords === null) next.org_lat = t.donorApply.needDistributeArea;
+        if (recipientGroups.length === 0) next.recipient_groups = t.donorApply.needOneGroup;
+        if (purposeTh.trim() === '') next.purpose_th = t.donorApply.needPurpose;
       }
-      if (step === 2 && !termsAccepted) next.terms_accepted = 'ต้องยอมรับข้อกำหนด';
+      if (step === 2 && !termsAccepted) next.terms_accepted = t.donorApply.needTerms;
     }
     if (kind === 'organization') {
       if (step === 0) {
-        if (orgName.trim() === '') next.org_name = 'กรุณากรอกชื่อองค์กร';
-        if (orgType === null) next.org_type = 'กรุณาเลือกประเภท';
-        if (registered === null) next.registered = 'กรุณาระบุ';
-        if (registeredAddress.trim() === '') next.registered_address = 'กรุณากรอกที่อยู่';
-        if (coords === null) next.org_lat = 'กรุณาเลือกที่ตั้งจริง';
+        if (orgName.trim() === '') next.org_name = t.donorApply.needOrgName;
+        if (orgType === null) next.org_type = t.donorApply.needOrgType;
+        if (registered === null) next.registered = t.donorApply.needRegistered;
+        if (registeredAddress.trim() === '') next.registered_address = t.donorApply.needAddress;
+        if (coords === null) next.org_lat = t.donorApply.needRealLocation;
       }
       if (step === 1) {
-        if (contactName.trim() === '') next.contact_name = 'กรุณากรอกชื่อ';
-        if (contactTitle.trim() === '') next.contact_title = 'กรุณากรอกตำแหน่ง';
-        if (!/^\d{9,15}$/.test(contactPhone.trim())) next.contact_phone = 'เบอร์โทรไม่ถูกต้อง';
+        if (contactName.trim() === '') next.contact_name = t.donorApply.needContactName;
+        if (contactTitle.trim() === '') next.contact_title = t.donorApply.needTitle;
+        if (!/^\d{9,15}$/.test(contactPhone.trim())) next.contact_phone = t.donorApply.invalidPhone;
       }
       if (step === 2) {
         if (beneficiaryCount.trim() === '' || Number(beneficiaryCount) <= 0) {
-          next.beneficiary_count = 'กรุณาระบุจำนวน';
+          next.beneficiary_count = t.donorApply.needBeneficiaryCount;
         }
-        if (recipientGroups.length === 0) next.recipient_groups = 'เลือกอย่างน้อยหนึ่งกลุ่ม';
-        if (distributionMode === null) next.distribution_mode = 'กรุณาเลือกรูปแบบ';
+        if (recipientGroups.length === 0) next.recipient_groups = t.donorApply.needOneGroup;
+        if (distributionMode === null) next.distribution_mode = t.donorApply.needDistributionMode;
         if (distributionMode === 'redistribute') {
-          if (redistributePlace.trim() === '') next.redistribute_place = 'กรุณาระบุสถานที่แจก';
-          if (redistributeFrequency.trim() === '') next.redistribute_frequency = 'กรุณาระบุความถี่';
+          if (redistributePlace.trim() === '') next.redistribute_place = t.donorApply.needRedistributePlace;
+          if (redistributeFrequency.trim() === '') next.redistribute_frequency = t.donorApply.needRedistributeFrequency;
         }
       }
       if (step === 3) {
         const certs = docs.filter((d) => d.doc_category === 'registration_cert' || d.doc_category === 'community_cert');
         const photos = docs.filter((d) => d.doc_category === 'site_photo');
-        if (certs.length < 1) next.documents = 'ต้องมีหนังสือรับรองอย่างน้อย 1 ไฟล์';
-        else if (photos.length < 1 || photos.length > 3) next.documents = 'ต้องมีรูปสถานที่ 1–3 รูป';
+        if (certs.length < 1) next.documents = t.donorApply.needCertFile;
+        else if (photos.length < 1 || photos.length > 3) next.documents = t.donorApply.needSitePhotos;
       }
-      if (step === 4 && !termsAccepted) next.terms_accepted = 'ต้องยอมรับข้อกำหนด';
+      if (step === 4 && !termsAccepted) next.terms_accepted = t.donorApply.needTerms;
     }
     setErrors(next);
     const first = Object.keys(next)[0] ?? null;
@@ -438,10 +454,10 @@ export default function DonorApplyScreen(): React.ReactElement {
   };
 
   const confirmWithdraw = (): void => {
-    Alert.alert('ถอนคำขอ', 'ยืนยันถอนคำขอที่เปิดอยู่? หลังถอนแล้วสมัครแบบอื่นได้', [
-      { text: 'ยกเลิก', style: 'cancel' },
+    Alert.alert(t.donorApply.withdrawTitle, t.donorApply.withdrawBody, [
+      { text: t.common.cancel, style: 'cancel' },
       {
-        text: 'ถอนคำขอ',
+        text: t.donorApply.withdraw,
         style: 'destructive',
         onPress: () => {
           void (async () => {
@@ -456,7 +472,7 @@ export default function DonorApplyScreen(): React.ReactElement {
               setHydrated(false);
               await refreshUser();
             } catch (err) {
-              setFormError(err instanceof ApiError ? err.message : 'ถอนคำขอไม่สำเร็จ');
+              setFormError(err instanceof ApiError ? err.message : t.donorApply.withdrawFailed);
             } finally {
               setBusy(false);
             }
@@ -472,13 +488,10 @@ export default function DonorApplyScreen(): React.ReactElement {
       user?.application_kind === 'organization' &&
       next === 'individual'
     ) {
-      Alert.alert(
-        'เปลี่ยนเป็นบุคคล',
-        'จะถอนคำขอองค์กรปัจจุบันแล้วทำต่อเป็นบุคคลในคำขอเดิม ยืนยันหรือไม่?',
-        [
-          { text: 'ยกเลิก', style: 'cancel' },
+      Alert.alert(t.donorApply.switchTitle, t.donorApply.switchBody, [
+          { text: t.common.cancel, style: 'cancel' },
           {
-            text: 'ยืนยัน',
+            text: t.common.confirm,
             onPress: () => {
               void (async () => {
                 setBusy(true);
@@ -492,15 +505,14 @@ export default function DonorApplyScreen(): React.ReactElement {
                   clearField('application_kind');
                   await refreshUser();
                 } catch (err) {
-                  setFormError(err instanceof ApiError ? err.message : 'เปลี่ยนประเภทไม่สำเร็จ');
+                  setFormError(err instanceof ApiError ? err.message : t.donorApply.switchFailed);
                 } finally {
                   setBusy(false);
                 }
               })();
             },
           },
-        ],
-      );
+        ]);
       return;
     }
     setKind(next);
@@ -513,7 +525,7 @@ export default function DonorApplyScreen(): React.ReactElement {
       return;
     }
     if (kind === null || termsVersion === null) {
-      setFormError('โหลดข้อกำหนดไม่สำเร็จ กรุณาลองใหม่');
+      setFormError(t.donorApply.termsLoadFailed);
       return;
     }
     setBusy(true);
@@ -574,7 +586,7 @@ export default function DonorApplyScreen(): React.ReactElement {
         const first = err.fields !== undefined ? Object.keys(err.fields)[0] ?? null : null;
         scrollToField(first);
       } else {
-        setFormError('ส่งคำขอไม่สำเร็จ');
+        setFormError(t.donorApply.submitFailed);
       }
     } finally {
       setBusy(false);
@@ -585,7 +597,7 @@ export default function DonorApplyScreen(): React.ReactElement {
     return (
       <Screen>
         <Body>
-          <Text style={styles.muted}>กรุณาเข้าสู่ระบบ</Text>
+          <Text style={styles.muted}>{t.donorApply.pleaseLogin}</Text>
         </Body>
       </Screen>
     );
@@ -593,7 +605,7 @@ export default function DonorApplyScreen(): React.ReactElement {
 
   return (
     <Screen>
-      <StackHeader title="สมัครรับบริจาค" onBack={() => router.replace('/(tabs)/account')} />
+      <StackHeader title={t.donorApply.title} onBack={() => router.replace('/(tabs)/account')} />
       <Body scrollRef={scrollRef}>
         <ProgressBar step={step} total={totalSteps} />
         {user !== null ? (
@@ -612,16 +624,17 @@ export default function DonorApplyScreen(): React.ReactElement {
             onWithdraw={confirmWithdraw}
             onSwitchIndividual={() => selectKind('individual')}
             busy={busy}
+            t={t}
           />
         ) : null}
 
         {kind === null && !hasOpenApplication ? (
           <ChipGroup
-            label="ประเภทผู้รับบริจาค"
+            label={t.donorApply.kindLabel}
             name="application_kind"
             options={[
-              { key: 'individual', label: 'บุคคล (จิตอาสา)' },
-              { key: 'organization', label: 'องค์กร' },
+              { key: 'individual', label: t.donorApply.kindIndividual },
+              { key: 'organization', label: t.donorApply.kindOrganization },
             ]}
             value={null}
             onChange={(v) => {
@@ -633,31 +646,31 @@ export default function DonorApplyScreen(): React.ReactElement {
         ) : null}
 
         {kind === null && hasOpenApplication ? (
-          <Text style={styles.muted}>กำลังเปิดคำขอเดิม — ใช้แถบสถานะด้านบนเพื่อแก้ไขหรือถอน</Text>
+          <Text style={styles.muted}>{t.donorApply.openingExisting}</Text>
         ) : null}
 
         {kind === 'individual' && step === 0 ? (
           <>
             <FormField
-              label="ชื่อ-นามสกุล"
+              label={t.donorApply.fullName}
               name="contact_name"
               value={contactName}
-              onChangeText={(t) => {
-                setContactName(t);
+              onChangeText={(text) => {
+                setContactName(text);
                 clearField('contact_name');
               }}
               error={fieldErr('contact_name')}
               fieldRef={registerY}
               onBlurField={() => {
-                if (contactName.trim() === '') setFieldError('contact_name', 'กรุณากรอกชื่อ-นามสกุล');
+                if (contactName.trim() === '') setFieldError('contact_name', t.donorApply.needFullName);
               }}
             />
             <FormField
-              label="เบอร์โทร"
+              label={t.donorApply.phone}
               name="contact_phone"
               value={contactPhone}
-              onChangeText={(t) => {
-                setContactPhone(t);
+              onChangeText={(text) => {
+                setContactPhone(text);
                 clearField('contact_phone');
               }}
               keyboardType="phone-pad"
@@ -665,7 +678,7 @@ export default function DonorApplyScreen(): React.ReactElement {
               fieldRef={registerY}
             />
             <FormField
-              label="อีเมล (ไม่บังคับ)"
+              label={t.donorApply.emailOptional}
               name="contact_email"
               value={contactEmail}
               onChangeText={setContactEmail}
@@ -680,13 +693,13 @@ export default function DonorApplyScreen(): React.ReactElement {
         {kind === 'individual' && step === 1 ? (
           <>
             <View onLayout={(e) => registerY('org_lat', e.nativeEvent.layout.y)}>
-              <LocationPicker value={coords} onChange={setCoords} label="พื้นที่ที่จะแจก" />
+              <LocationPicker value={coords} onChange={setCoords} label={t.donorApply.distributeArea} />
               {fieldErr('org_lat') ? <Text style={styles.fieldError}>{fieldErr('org_lat')}</Text> : null}
             </View>
             <ChipGroup
-              label="กลุ่มผู้รับ"
+              label={t.donorApply.recipientGroups}
               name="recipient_groups"
-              options={RECIPIENT_OPTS}
+              options={recipientOpts}
               value={recipientGroups}
               multi
               onChange={(v) => {
@@ -697,11 +710,11 @@ export default function DonorApplyScreen(): React.ReactElement {
               fieldRef={registerY}
             />
             <FormField
-              label="วัตถุประสงค์สั้น ๆ"
+              label={t.donorApply.purposeShort}
               name="purpose_th"
               value={purposeTh}
-              onChangeText={(t) => {
-                setPurposeTh(t);
+              onChangeText={(text) => {
+                setPurposeTh(text);
                 clearField('purpose_th');
               }}
               error={fieldErr('purpose_th')}
@@ -713,20 +726,20 @@ export default function DonorApplyScreen(): React.ReactElement {
         {kind === 'organization' && step === 0 ? (
           <>
             <FormField
-              label="ชื่อองค์กรตามเอกสาร"
+              label={t.donorApply.orgName}
               name="org_name"
               value={orgName}
-              onChangeText={(t) => {
-                setOrgName(t);
+              onChangeText={(text) => {
+                setOrgName(text);
                 clearField('org_name');
               }}
               error={fieldErr('org_name')}
               fieldRef={registerY}
             />
             <ChipGroup
-              label="ประเภทองค์กร"
+              label={t.donorApply.orgType}
               name="org_type"
-              options={ORG_TYPES}
+              options={orgTypes}
               value={orgType}
               onChange={(v) => {
                 setOrgType(v as OrgType);
@@ -736,11 +749,11 @@ export default function DonorApplyScreen(): React.ReactElement {
               fieldRef={registerY}
             />
             <ChipGroup
-              label="จดทะเบียนหรือไม่"
+              label={t.donorApply.registeredLabel}
               name="registered"
               options={[
-                { key: 'yes', label: 'จดทะเบียน' },
-                { key: 'no', label: 'ยังไม่จด' },
+                { key: 'yes', label: t.donorApply.registeredYes },
+                { key: 'no', label: t.donorApply.registeredNo },
               ]}
               value={registered === null ? null : registered ? 'yes' : 'no'}
               onChange={(v) => {
@@ -751,7 +764,7 @@ export default function DonorApplyScreen(): React.ReactElement {
               fieldRef={registerY}
             />
             <FormField
-              label="เลขทะเบียน (ถ้ามี)"
+              label={t.donorApply.registrationNumber}
               name="registration_number"
               value={registrationNumber}
               onChangeText={setRegistrationNumber}
@@ -759,18 +772,18 @@ export default function DonorApplyScreen(): React.ReactElement {
               fieldRef={registerY}
             />
             <FormField
-              label="ที่อยู่ตามทะเบียน"
+              label={t.donorApply.registeredAddress}
               name="registered_address"
               value={registeredAddress}
-              onChangeText={(t) => {
-                setRegisteredAddress(t);
+              onChangeText={(text) => {
+                setRegisteredAddress(text);
                 clearField('registered_address');
               }}
               error={fieldErr('registered_address')}
               fieldRef={registerY}
             />
             <View onLayout={(e) => registerY('org_lat', e.nativeEvent.layout.y)}>
-              <LocationPicker value={coords} onChange={setCoords} label="ที่ตั้งจริง" />
+              <LocationPicker value={coords} onChange={setCoords} label={t.donorApply.realLocation} />
               {fieldErr('org_lat') ? <Text style={styles.fieldError}>{fieldErr('org_lat')}</Text> : null}
             </View>
           </>
@@ -779,33 +792,33 @@ export default function DonorApplyScreen(): React.ReactElement {
         {kind === 'organization' && step === 1 ? (
           <>
             <FormField
-              label="ชื่อผู้ติดต่อ"
+              label={t.donorApply.contactName}
               name="contact_name"
               value={contactName}
-              onChangeText={(t) => {
-                setContactName(t);
+              onChangeText={(text) => {
+                setContactName(text);
                 clearField('contact_name');
               }}
               error={fieldErr('contact_name')}
               fieldRef={registerY}
             />
             <FormField
-              label="ตำแหน่ง"
+              label={t.donorApply.contactTitle}
               name="contact_title"
               value={contactTitle}
-              onChangeText={(t) => {
-                setContactTitle(t);
+              onChangeText={(text) => {
+                setContactTitle(text);
                 clearField('contact_title');
               }}
               error={fieldErr('contact_title')}
               fieldRef={registerY}
             />
             <FormField
-              label="เบอร์โทร"
+              label={t.donorApply.phone}
               name="contact_phone"
               value={contactPhone}
-              onChangeText={(t) => {
-                setContactPhone(t);
+              onChangeText={(text) => {
+                setContactPhone(text);
                 clearField('contact_phone');
               }}
               keyboardType="phone-pad"
@@ -813,7 +826,7 @@ export default function DonorApplyScreen(): React.ReactElement {
               fieldRef={registerY}
             />
             <FormField
-              label="อีเมล"
+              label={t.donorApply.email}
               name="contact_email"
               value={contactEmail}
               onChangeText={setContactEmail}
@@ -828,11 +841,11 @@ export default function DonorApplyScreen(): React.ReactElement {
         {kind === 'organization' && step === 2 ? (
           <>
             <FormField
-              label="จำนวนผู้รับประโยชน์"
+              label={t.donorApply.beneficiaryCount}
               name="beneficiary_count"
               value={beneficiaryCount}
-              onChangeText={(t) => {
-                setBeneficiaryCount(t);
+              onChangeText={(text) => {
+                setBeneficiaryCount(text);
                 clearField('beneficiary_count');
               }}
               keyboardType="number-pad"
@@ -840,9 +853,9 @@ export default function DonorApplyScreen(): React.ReactElement {
               fieldRef={registerY}
             />
             <ChipGroup
-              label="กลุ่มผู้รับ"
+              label={t.donorApply.recipientGroups}
               name="recipient_groups"
-              options={RECIPIENT_OPTS}
+              options={recipientOpts}
               value={recipientGroups}
               multi
               onChange={(v) => {
@@ -853,11 +866,11 @@ export default function DonorApplyScreen(): React.ReactElement {
               fieldRef={registerY}
             />
             <ChipGroup
-              label="รูปแบบ"
+              label={t.donorApply.distributionMode}
               name="distribution_mode"
               options={[
-                { key: 'self_use', label: 'ใช้เอง' },
-                { key: 'redistribute', label: 'แจกจ่ายต่อ' },
+                { key: 'self_use', label: t.donorApply.modeSelfUse },
+                { key: 'redistribute', label: t.donorApply.modeRedistribute },
               ]}
               value={distributionMode}
               onChange={(v) => {
@@ -870,22 +883,22 @@ export default function DonorApplyScreen(): React.ReactElement {
             {distributionMode === 'redistribute' ? (
               <>
                 <FormField
-                  label="สถานที่แจกประจำ"
+                  label={t.donorApply.redistributePlace}
                   name="redistribute_place"
                   value={redistributePlace}
-                  onChangeText={(t) => {
-                    setRedistributePlace(t);
+                  onChangeText={(text) => {
+                    setRedistributePlace(text);
                     clearField('redistribute_place');
                   }}
                   error={fieldErr('redistribute_place')}
                   fieldRef={registerY}
                 />
                 <FormField
-                  label="ความถี่"
+                  label={t.donorApply.redistributeFrequency}
                   name="redistribute_frequency"
                   value={redistributeFrequency}
-                  onChangeText={(t) => {
-                    setRedistributeFrequency(t);
+                  onChangeText={(text) => {
+                    setRedistributeFrequency(text);
                     clearField('redistribute_frequency');
                   }}
                   error={fieldErr('redistribute_frequency')}
@@ -899,9 +912,9 @@ export default function DonorApplyScreen(): React.ReactElement {
         {kind === 'organization' && step === 3 ? (
           <>
             <FileField
-              label="หนังสือรับรองจดทะเบียน"
+              label={t.donorApply.certRegistration}
               name="documents"
-              hint="PDF หรือรูป"
+              hint={t.donorApply.certHint}
               files={docs.filter((d) => d.doc_category === 'registration_cert').map((d) => ({ id: d.id, name: d.name }))}
               onAdd={() => void pickImage('registration_cert')}
               onRemove={(id) => setDocs((prev) => prev.filter((d) => d.id !== id))}
@@ -909,16 +922,16 @@ export default function DonorApplyScreen(): React.ReactElement {
               fieldRef={registerY}
             />
             <FileField
-              label="หนังสือรับรองจากชุมชน/อบต."
+              label={t.donorApply.certCommunity}
               name="documents_community"
-              hint="ใช้แทนหรือร่วมกับหนังสือจดทะเบียน"
+              hint={t.donorApply.certCommunityHint}
               files={docs.filter((d) => d.doc_category === 'community_cert').map((d) => ({ id: d.id, name: d.name }))}
               onAdd={() => void pickImage('community_cert')}
               onRemove={(id) => setDocs((prev) => prev.filter((d) => d.id !== id))}
               error={null}
             />
             <FileField
-              label="รูปสถานที่ (1–3 รูป)"
+              label={t.donorApply.sitePhotos}
               name="documents_photos"
               files={docs.filter((d) => d.doc_category === 'site_photo').map((d) => ({ id: d.id, name: d.name }))}
               onAdd={() => void pickImage('site_photo')}
@@ -927,7 +940,7 @@ export default function DonorApplyScreen(): React.ReactElement {
               fieldRef={registerY}
             />
             <FileField
-              label="เอกสารอื่น (ไม่บังคับ)"
+              label={t.donorApply.otherDocs}
               name="documents_other"
               files={docs.filter((d) => d.doc_category === 'other').map((d) => ({ id: d.id, name: d.name }))}
               onAdd={() => void pickImage('other')}
@@ -939,17 +952,31 @@ export default function DonorApplyScreen(): React.ReactElement {
 
         {((kind === 'individual' && step === 2) || (kind === 'organization' && step === 4)) ? (
           <View>
-            <Text style={styles.summaryTitle}>สรุปก่อนส่ง</Text>
-            <Text style={styles.summaryLine}>ประเภท: {labelApplicationKind(kind)}</Text>
-            <Text style={styles.summaryLine}>ชื่อ: {contactName}</Text>
-            <Text style={styles.summaryLine}>เบอร์: {contactPhone}</Text>
+            <Text style={styles.summaryTitle}>{t.donorApply.summaryTitle}</Text>
+            <Text style={styles.summaryLine}>
+              {formatTemplate(t.donorApply.summaryKind, { kind: labelApplicationKind(kind, t) })}
+            </Text>
+            <Text style={styles.summaryLine}>
+              {formatTemplate(t.donorApply.summaryName, { name: contactName })}
+            </Text>
+            <Text style={styles.summaryLine}>
+              {formatTemplate(t.donorApply.summaryPhone, { phone: contactPhone })}
+            </Text>
             {kind === 'organization' ? (
               <>
-                <Text style={styles.summaryLine}>องค์กร: {orgName}</Text>
-                <Text style={styles.summaryLine}>ประเภทองค์กร: {labelOrgType(orgType)}</Text>
+                <Text style={styles.summaryLine}>
+                  {formatTemplate(t.donorApply.summaryOrg, { name: orgName })}
+                </Text>
+                <Text style={styles.summaryLine}>
+                  {formatTemplate(t.donorApply.summaryOrgType, { type: labelOrgType(orgType, t) })}
+                </Text>
               </>
             ) : null}
-            <Text style={styles.summaryLine}>กลุ่มผู้รับ: {labelRecipientGroups(recipientGroups)}</Text>
+            <Text style={styles.summaryLine}>
+              {formatTemplate(t.donorApply.summaryGroups, {
+                groups: labelRecipientGroups(recipientGroups, t),
+              })}
+            </Text>
             <Pressable
               style={styles.termsRow}
               onPress={() => {
@@ -961,9 +988,9 @@ export default function DonorApplyScreen(): React.ReactElement {
             >
               <View style={[styles.checkbox, termsAccepted ? styles.checkboxOn : null]} />
               <Text style={styles.termsText}>
-                ข้าพเจ้ายอมรับ{' '}
+                {t.donorApply.termsAcceptPrefix}
                 <Text style={styles.link} onPress={() => router.push('/terms/donor')}>
-                  ข้อกำหนดและนโยบายผู้รับบริจาค
+                  {t.donorApply.termsAcceptLink}
                 </Text>
               </Text>
             </Pressable>
@@ -978,7 +1005,7 @@ export default function DonorApplyScreen(): React.ReactElement {
             <Text style={styles.formError}>{formError}</Text>
             {conflictExistingId !== null ? (
               <PrimaryButton
-                label="ไปที่คำขอเดิม"
+                label={t.donorApply.goExisting}
                 onPress={() => {
                   setConflictExistingId(null);
                   setFormError(null);
@@ -994,13 +1021,13 @@ export default function DonorApplyScreen(): React.ReactElement {
         ) : null}
 
         <View style={styles.actions}>
-          <SecondaryButton label="ย้อนกลับ" onPress={goBack} />
+          <SecondaryButton label={t.donorApply.goBack} onPress={goBack} />
           {kind !== null && step < totalSteps - 1 ? (
-            <PrimaryButton label="ถัดไป (บันทึกร่าง)" onPress={() => void goNext()} loading={busy} />
+            <PrimaryButton label={t.donorApply.nextSaveDraft} onPress={() => void goNext()} loading={busy} />
           ) : null}
           {kind !== null && step === totalSteps - 1 ? (
             <PrimaryButton
-              label={user?.org_status === 'needs_more_info' ? 'ส่งตรวจอีกครั้ง' : 'ส่งคำขอ'}
+              label={user?.org_status === 'needs_more_info' ? t.donorApply.resubmit : t.donorApply.submit}
               onPress={() => void submit()}
               loading={busy}
             />

@@ -1,22 +1,18 @@
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
 import { DonorIntroModal, type DonorIntroChoice } from '../components/DonorIntroModal';
 import { ApiError } from '../src/api/client';
 import { LocationPicker, type LatLng } from '../src/components/LocationPicker';
 import { Body, Chip, Field, PrimaryButton, Screen, SectionTitle } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
+import { useI18n } from '../src/i18n';
 import { C } from '../src/theme';
 import type { BuyerType } from '../src/api/types';
 
-const buyerTypes: { key: BuyerType; label: string }[] = [
-  { key: 'vendor', label: 'รถเร่' },
-  { key: 'shop', label: 'ร้านค้า' },
-  { key: 'charity', label: 'รับบริจาค' },
-];
-
 export default function RegisterScreen(): React.ReactElement {
   const { register } = useAuth();
+  const { t } = useI18n();
   const router = useRouter();
   const [canSell, setCanSell] = useState(true);
   const [canBuy, setCanBuy] = useState(false);
@@ -30,6 +26,15 @@ export default function RegisterScreen(): React.ReactElement {
   const [submitting, setSubmitting] = useState(false);
   const [introVisible, setIntroVisible] = useState(false);
   const [donorIntent, setDonorIntent] = useState<'now' | 'later' | null>(null);
+
+  const buyerTypes = useMemo(
+    () =>
+      (Object.entries(t.buyerType) as [BuyerType, string][]).map(([key, label]) => ({
+        key,
+        label,
+      })),
+    [t.buyerType],
+  );
 
   const canSubmit =
     name.trim().length > 0 &&
@@ -62,11 +67,11 @@ export default function RegisterScreen(): React.ReactElement {
 
   const onSubmit = async (): Promise<void> => {
     if (coords === null) {
-      setError('กรุณาเลือกตำแหน่งก่อนสมัคร');
+      setError(t.register.needLocation);
       return;
     }
     if (!canSell && !canBuy) {
-      setError('เลือกอย่างน้อยหนึ่งบทบาท: ขาย หรือ ซื้อ');
+      setError(t.register.needRole);
       return;
     }
     setError(null);
@@ -87,7 +92,7 @@ export default function RegisterScreen(): React.ReactElement {
         router.replace('/donor-apply');
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'สมัครสมาชิกไม่สำเร็จ');
+      setError(err instanceof ApiError ? err.message : t.register.failed);
     } finally {
       setSubmitting(false);
     }
@@ -98,16 +103,16 @@ export default function RegisterScreen(): React.ReactElement {
       <DonorIntroModal visible={introVisible} onChoice={onIntroChoice} />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <Body>
-          <Text style={styles.brand}>สมัครสมาชิก</Text>
-          <SectionTitle>บทบาท</SectionTitle>
+          <Text style={styles.brand}>{t.register.title}</Text>
+          <SectionTitle>{t.register.roleSection}</SectionTitle>
           <View style={styles.row}>
-            <Chip label="ขาย" selected={canSell} onPress={() => setCanSell((v) => !v)} />
-            <Chip label="ซื้อ" selected={canBuy} onPress={() => setCanBuy((v) => !v)} />
+            <Chip label={t.register.roleSell} selected={canSell} onPress={() => setCanSell((v) => !v)} />
+            <Chip label={t.register.roleBuy} selected={canBuy} onPress={() => setCanBuy((v) => !v)} />
           </View>
-          <Text style={styles.hint}>เลือกได้ทั้งคู่ แล้วสลับโหมดในแอปได้ภายหลัง</Text>
+          <Text style={styles.hint}>{t.register.roleHint}</Text>
           {canBuy ? (
             <>
-              <SectionTitle>ประเภทผู้ซื้อ</SectionTitle>
+              <SectionTitle>{t.register.buyerTypeSection}</SectionTitle>
               <View style={styles.row}>
                 {buyerTypes.map((entry) => (
                   <Chip
@@ -120,36 +125,44 @@ export default function RegisterScreen(): React.ReactElement {
               </View>
               {buyerType === 'charity' ? (
                 <Text style={styles.hint}>
-                  {donorIntent === 'later'
-                    ? 'จะบันทึกเป็นร่าง — กรอกคำขอรับบริจาคทีหลังจากโปรไฟล์'
-                    : 'หลังสมัครจะไปกรอกคำขอรับบริจาค'}
+                  {donorIntent === 'later' ? t.register.charityDraftHint : t.register.charityContinueHint}
                 </Text>
               ) : null}
             </>
           ) : null}
-          <Field label="ชื่อ" value={name} onChangeText={setName} placeholder="ชื่อ-สกุล" />
           <Field
-            label="เบอร์โทร"
+            label={t.register.name}
+            value={name}
+            onChangeText={setName}
+            placeholder={t.register.namePlaceholder}
+          />
+          <Field
+            label={t.register.phone}
             value={phone}
             onChangeText={setPhone}
             keyboardType="phone-pad"
-            placeholder="เช่น 0899999999"
+            placeholder={t.register.phonePlaceholder}
           />
-          <Field label="รหัสผ่าน (อย่างน้อย 8 ตัว)" value={password} onChangeText={setPassword} secureTextEntry />
+          <Field label={t.register.password} value={password} onChangeText={setPassword} secureTextEntry />
           <Field
-            label="LINE ID (ไม่บังคับ)"
+            label={t.register.lineOptional}
             value={lineId}
             onChangeText={setLineId}
-            placeholder="เช่น agrirescue"
+            placeholder={t.register.linePlaceholder}
             autoCapitalize="none"
           />
-          <LocationPicker value={coords} onChange={setCoords} label="ตำแหน่ง" />
+          <LocationPicker value={coords} onChange={setCoords} label={t.register.location} />
           {error !== null ? <Text style={styles.error}>{error}</Text> : null}
-          <PrimaryButton label="สมัครสมาชิก" onPress={onSubmit} loading={submitting} disabled={!canSubmit} />
+          <PrimaryButton
+            label={t.register.submit}
+            onPress={onSubmit}
+            loading={submitting}
+            disabled={!canSubmit}
+          />
           <View style={styles.footer}>
-            <Text style={styles.footerText}>มีบัญชีแล้ว? </Text>
+            <Text style={styles.footerText}>{t.register.haveAccount}</Text>
             <Text style={styles.link} onPress={() => router.push('/login')}>
-              เข้าสู่ระบบ
+              {t.common.login}
             </Text>
           </View>
         </Body>

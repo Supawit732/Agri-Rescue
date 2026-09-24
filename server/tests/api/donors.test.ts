@@ -239,7 +239,9 @@ describe('donors 6.1b', () => {
       ripeness: 2,
       confidence: 0.9,
       defects: [],
+      defects_en: [],
       note_th: 'ok',
+      note_en: 'ok',
       low_confidence: false,
       model: 'test',
     });

@@ -13,7 +13,7 @@ describe('public market', () => {
 
   it('returns 200 without auth and omits private fields', async () => {
     const farmer = await registerUser(app, { role: 'farmer', name: 'ลุงลับ' });
-    const cropId = await insertCrop('มะม่วงสาธารณะ', 5, 40);
+    const cropId = await insertCrop('มะม่วงสาธารณะ', 5, 40, 'Public Mango');
     const plotId = await insertPlot(farmer.user.id, 13.662, 100.611, 'แปลงชุมชน');
     const lotId = await insertLot({
       plotId,
@@ -26,6 +26,7 @@ describe('public market', () => {
     const lot = response.body.lots.find((row: { id: number }) => row.id === lotId);
     expect(lot).toBeDefined();
     expect(lot.crop_name_th).toBe('มะม่วงสาธารณะ');
+    expect(lot.crop_name_en).toBe('Public Mango');
     expect(lot.plot_name).toBe('แปลงชุมชน');
     expect(lot.available_as).toEqual(['buy']);
     expect(lot.distance_km).toBeNull();
@@ -154,5 +155,10 @@ describe('public market', () => {
     expect(lot.available_as).toEqual(['buy', 'donate']);
     expect(JSON.stringify(lot)).not.toContain('sell_then_donate');
     expect(JSON.stringify(lot)).not.toContain('sale_mode');
+  });
+
+  it('returns 404 for missing public lot', async () => {
+    const missing = await request(app).get('/api/public/lots/999999');
+    expect(missing.status).toBe(404);
   });
 });

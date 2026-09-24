@@ -3,6 +3,7 @@ import * as SecureStore from 'expo-secure-store';
 
 const TOKEN_KEY = 'agri_rescue_token';
 const MODE_KEY = 'agri_rescue_app_mode';
+const LOCALE_KEY = 'agri_rescue_locale';
 
 async function setItem(key: string, value: string): Promise<void> {
   if (Platform.OS === 'web') {
@@ -58,4 +59,13 @@ export async function loadAppMode(): Promise<'sell' | 'buy' | null> {
 
 export async function clearAppMode(): Promise<void> {
   await removeItem(MODE_KEY);
+}
+
+export async function saveLocale(locale: 'th' | 'en'): Promise<void> {
+  await setItem(LOCALE_KEY, locale);
+}
+
+export async function loadLocale(): Promise<'th' | 'en' | null> {
+  const value = await getItem(LOCALE_KEY);
+  return value === 'th' || value === 'en' ? value : null;
 }

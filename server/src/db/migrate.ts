@@ -34,6 +34,12 @@ export async function migrate(): Promise<void> {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
 
+    // Feature branch briefly numbered lot_photos as 014 before main shipped
+    // 014_crop_name_en; remap so 015_lot_photos is treated as already applied.
+    await connection.query(
+      `UPDATE schema_migrations SET id = '015_lot_photos.sql' WHERE id = '014_lot_photos.sql'`,
+    );
+
     const dir = path.join(__dirname, 'migrations');
     const files = fs
       .readdirSync(dir)

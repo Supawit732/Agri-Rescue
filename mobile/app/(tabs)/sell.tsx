@@ -3,11 +3,13 @@ import { StyleSheet, Text, View } from 'react-native';
 import { ApiError } from '../../src/api/client';
 import { LoginPrompt, PrimaryButton, CtaStack, Screen } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
+import { useI18n } from '../../src/i18n';
 import { C } from '../../src/theme';
 import SellScreen from '../../src/screens/SellScreen';
 
 export default function SellTab(): React.ReactElement {
   const { user, api, refreshUser } = useAuth();
+  const { t, translateError } = useI18n();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -15,8 +17,8 @@ export default function SellTab(): React.ReactElement {
     return (
       <Screen>
         <LoginPrompt
-          title="ลงขายผลผลิต"
-          message="เข้าสู่ระบบแล้วเปิดการขายเพื่อลงล็อตใกล้หมดอายุ"
+          title={t.sell.loginTitle}
+          message={t.sell.loginMessage}
           returnTo="/(tabs)/sell"
         />
       </Screen>
@@ -31,7 +33,11 @@ export default function SellTab(): React.ReactElement {
         await api.updateProfile({ can_sell: true });
         await refreshUser();
       } catch (err) {
-        setError(err instanceof ApiError ? err.message : 'เปิดการขายไม่สำเร็จ');
+        setError(
+          err instanceof ApiError
+            ? translateError(err.code, err.message)
+            : t.account.updateFailed,
+        );
       } finally {
         setBusy(false);
       }
@@ -39,13 +45,16 @@ export default function SellTab(): React.ReactElement {
     return (
       <Screen>
         <View style={styles.box}>
-          <Text style={styles.title}>เปิดการขาย</Text>
-          <Text style={styles.body}>
-            ลงล็อตผลผลิตที่ใกล้หมดอายุ ตั้งราคาเริ่มต้นและราคาต่ำสุด หรือเปิดรับบริจาคได้จากที่นี่
-          </Text>
+          <Text style={styles.title}>{t.account.enableSell}</Text>
+          <Text style={styles.body}>{t.sell.enableHint}</Text>
           {error !== null ? <Text style={styles.error}>{error}</Text> : null}
           <CtaStack>
-            <PrimaryButton label="เปิดการขาย" block onPress={() => void enableSell()} loading={busy} />
+            <PrimaryButton
+              label={t.account.enableSell}
+              block
+              onPress={() => void enableSell()}
+              loading={busy}
+            />
           </CtaStack>
         </View>
       </Screen>

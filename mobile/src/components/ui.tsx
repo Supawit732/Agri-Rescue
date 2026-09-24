@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useI18n } from '../i18n';
 import { C } from '../theme';
 
 export function Screen({
@@ -35,6 +36,7 @@ export function StackHeader({
   title: string;
   onBack?: () => void;
 }): React.ReactElement {
+  const { t } = useI18n();
   const router = useRouter();
   const goBack = (): void => {
     if (onBack !== undefined) {
@@ -50,7 +52,7 @@ export function StackHeader({
   return (
     <View style={styles.stackHeader}>
       <Pressable accessibilityRole="button" onPress={goBack} style={styles.backBtn} hitSlop={8}>
-        <Text style={styles.backBtnText}>‹ กลับ</Text>
+        <Text style={styles.backBtnText}>‹ {t.common.back}</Text>
       </Pressable>
       <Text style={styles.stackTitle} numberOfLines={1}>
         {title}
@@ -93,6 +95,7 @@ export function LoginPrompt({
   returnTo: string;
   primaryLabel?: string;
 }): React.ReactElement {
+  const { t } = useI18n();
   const router = useRouter();
   return (
     <View style={styles.centerState}>
@@ -100,13 +103,17 @@ export function LoginPrompt({
       <Text style={styles.stateText}>{message}</Text>
       <CtaStack>
         <PrimaryButton
-          label={primaryLabel ?? 'เข้าสู่ระบบ'}
+          label={primaryLabel ?? t.loginPrompt.login}
           block
           onPress={() =>
             router.push({ pathname: '/login', params: { returnTo } })
           }
         />
-        <SecondaryButton label="สมัครสมาชิก" block onPress={() => router.push('/register')} />
+        <SecondaryButton
+          label={t.loginPrompt.register}
+          block
+          onPress={() => router.push('/register')}
+        />
       </CtaStack>
     </View>
   );
@@ -150,6 +157,7 @@ export function TopBar({
   onModeChange?: (mode: 'sell' | 'buy') => void;
   showModeToggle?: boolean;
 }): React.ReactElement {
+  const { t } = useI18n();
   return (
     <View style={styles.topBar}>
       <View style={styles.topLeft}>
@@ -163,14 +171,18 @@ export function TopBar({
               onPress={() => onModeChange('sell')}
               style={[styles.modeChip, mode === 'sell' ? styles.modeChipOn : null]}
             >
-              <Text style={[styles.modeChipText, mode === 'sell' ? styles.modeChipTextOn : null]}>โหมดขาย</Text>
+              <Text style={[styles.modeChipText, mode === 'sell' ? styles.modeChipTextOn : null]}>
+                {t.chrome.sellMode}
+              </Text>
             </Pressable>
             <Pressable
               accessibilityRole="button"
               onPress={() => onModeChange('buy')}
               style={[styles.modeChip, mode === 'buy' ? styles.modeChipOn : null]}
             >
-              <Text style={[styles.modeChipText, mode === 'buy' ? styles.modeChipTextOn : null]}>โหมดซื้อ</Text>
+              <Text style={[styles.modeChipText, mode === 'buy' ? styles.modeChipTextOn : null]}>
+                {t.chrome.buyMode}
+              </Text>
             </Pressable>
           </View>
         ) : null}
@@ -178,17 +190,17 @@ export function TopBar({
       <View style={styles.topActions}>
         {onProfile !== undefined ? (
           <Pressable accessibilityRole="button" onPress={onProfile} style={styles.topLink}>
-            <Text style={styles.topLinkText}>โปรไฟล์</Text>
+            <Text style={styles.topLinkText}>{t.account.profile}</Text>
           </Pressable>
         ) : null}
         {onImpact !== undefined ? (
           <Pressable accessibilityRole="button" onPress={onImpact} style={styles.topLink}>
-            <Text style={styles.topLinkText}>ผลลัพธ์</Text>
+            <Text style={styles.topLinkText}>{t.account.impact}</Text>
           </Pressable>
         ) : null}
         {onLogout !== undefined ? (
           <Pressable accessibilityRole="button" onPress={onLogout} style={styles.topLink}>
-            <Text style={styles.topLinkText}>ออกจากระบบ</Text>
+            <Text style={styles.topLinkText}>{t.common.logout}</Text>
           </Pressable>
         ) : null}
       </View>
@@ -222,7 +234,9 @@ export function Chip({
       onPress={onPress}
       style={[styles.chip, selected ? { backgroundColor: active, borderColor: active } : null]}
     >
-      <Text style={[styles.chipText, selected ? { color: C.white } : null]}>{label}</Text>
+      <Text style={[styles.chipText, selected ? { color: C.white } : null]} numberOfLines={2}>
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -398,11 +412,12 @@ export function DataState<T>({
   emptyText,
   children,
 }: DataStateProps<T>): React.ReactElement {
+  const { t } = useI18n();
   if (loading && data === null) {
     return (
       <View style={styles.centerState}>
         <ActivityIndicator size="large" color={C.leaf} />
-        <Text style={styles.stateText}>กำลังโหลด…</Text>
+        <Text style={styles.stateText}>{t.common.loading}</Text>
       </View>
     );
   }
@@ -411,7 +426,7 @@ export function DataState<T>({
       <View style={styles.centerState}>
         <Text style={styles.errorText}>{error}</Text>
         <CtaStack>
-          <PrimaryButton label="ลองใหม่" block onPress={onRetry} />
+          <PrimaryButton label={t.common.retry} block onPress={onRetry} />
         </CtaStack>
       </View>
     );
@@ -426,9 +441,9 @@ export function DataState<T>({
   if (isEmpty !== undefined && isEmpty(data)) {
     return (
       <View style={styles.centerState}>
-        <Text style={styles.stateText}>{emptyText ?? 'ยังไม่มีข้อมูล'}</Text>
+        <Text style={styles.stateText}>{emptyText ?? t.empty.noData}</Text>
         <CtaStack>
-          <SecondaryButton label="รีเฟรช" block onPress={onRetry} />
+          <SecondaryButton label={t.empty.refresh} block onPress={onRetry} />
         </CtaStack>
       </View>
     );
@@ -526,8 +541,10 @@ const styles = StyleSheet.create({
     backgroundColor: C.white,
     marginRight: 8,
     marginBottom: 8,
+    maxWidth: '100%',
+    flexShrink: 1,
   },
-  chipText: { color: C.ink, fontWeight: '600', fontSize: 14 },
+  chipText: { color: C.ink, fontWeight: '600', fontSize: 14, flexShrink: 1 },
   segmented: {
     flexDirection: 'row',
     backgroundColor: C.leafSoft,

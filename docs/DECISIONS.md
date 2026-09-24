@@ -189,14 +189,28 @@ JWT เก็บ `sub`, `role`, `can_sell`, `can_buy`, `is_admin` (อายุ 
 | seed:demo | เติมประวัติ ~14 วัน (marker `photo_url = 'seed:demo'`); รันซ้ำแล้วลบแถว marker ก่อน; ต้อง `migrate`+`seed` ก่อน; ล็อตเปิดจาก seed ปกติยังอยู่สำหรับเดโมสด |
 | Listen | API ฟังที่ `0.0.0.0` เพื่อให้มือถือในเครือข่ายเดียวกันเรียกได้ |
 
-## D024 — Phase 6.2 ตลาดสาธารณะ
+## D024 — Phase 6.2 ตลาดสาธารณะ + รูปล็อต
 
 | รายการ | ค่า |
 |---|---|
-| Rate limit | `GET /api/public/*` 60 ครั้ง/นาที/IP ด้วย in-memory `Map` (process-local; รีสตาร์ทแล้วรีเซ็ต) — ไม่ใช้ Redis ในขั้นนี้ |
-| ระยะทาง | ปัดเป็นขั้น 0.5 กม. (`Math.round(km * 2) / 2`); ไม่มี lat/lng ของผู้ดู → `distance_km = null` แล้วยังคืนรายการ (เรียง urgent/cheap ได้; `sort=near` ถอยเป็น urgent) |
-| พื้นที่แปลง | ยังไม่มีตำบล/อำเภอ — คืน `plot_name` แทน (ต่อจาก D022); **ห้าม** คืน lat/lng ของแปลงใน public API |
-| รูปล็อต | ตาราง `lot_photos` (migration `014_lot_photos`) + ไฟล์ใน `server/uploads/` เสิร์ฟที่ `/uploads/...`; รูปจาก `POST /api/lots/assess-photo` (subject_match) บันทึกอัตโนมัติแล้วส่ง `photo_url` กลับ; ตอนสร้าง/แก้ล็อตถ้ามี `photo_url` จะ insert `lot_photos` และคง `harvest_lots.photo_url` เป็นรูปหลัก |
+| Endpoints | `GET /api/public/market`, `GET /api/public/lots/:id` — ไม่ต้อง token (Bearer เสริมได้) |
+| Rate limit | `GET /api/public/*` 60 ครั้ง/นาที/IP ด้วย in-memory store (process-local; รีสตาร์ทแล้วรีเซ็ต) |
+| ระยะทาง | ปัดเป็นขั้น 0.5 กม. (`Math.round(km * 2) / 2`); มี lat/lng → กรองรัศมี; ไม่มี → `distance_km = null` (เรียง urgent/cheap ได้; `sort=near` ถอยเป็น urgent) |
+| พื้นที่แปลง | คืน `plot_name` / `area_th`; **ห้าม** คืน lat/lng ของแปลงใน public API |
+| ชื่ออังกฤษ | จาก `crops.name_en` (migration `014_crop_name_en`; ดู D025) |
+| รูปล็อต | ตาราง `lot_photos` (migration `015_lot_photos`) + ไฟล์ใน `server/uploads/` เสิร์ฟที่ `/uploads/...`; รูปจาก `POST /api/lots/assess-photo` (subject_match) บันทึกอัตโนมัติแล้วส่ง `photo_url` กลับ; ตอนสร้าง/แก้ล็อตถ้ามี `photo_url` จะ insert `lot_photos` และคง `harvest_lots.photo_url` เป็นรูปหลัก |
 | ขนาดรูป | ฝั่งแอปย่อด้วย `expo-image-manipulator` (ขอบยาว ≤1024, jpeg compress 0.8); เซิร์ฟเวอร์บังคับ ≤ 1MB หลัง decode (jpeg/webp/png) |
 | `available_as` | เหมือนตลาดล็อกอิน (D022); ไม่คืน `sale_mode` / `donation_opened` / ชื่อผู้ขาย / ติดต่อ |
 | Bearer เสริม | ถ้ามี token จะเติม `donation_audience`, `can_request_donation`, `reason` สำหรับสิทธิ์รับบริจาค — ไม่เปิดเผยแผน `sell_then_donate` |
+| แอป | guest ใช้ `/api/public/*`; login แล้วใช้ `/api/market/*` ตามเดิม |
+
+## D025 — สองภาษา TH/EN (แอป)
+
+| รายการ | ค่า |
+|---|---|
+| กลไก | `I18nProvider` + `mobile/src/i18n/{th,en}.ts`; เก็บ locale ใน SecureStore/localStorage (`agri_rescue_locale`) |
+| สลับภาษา | แท็บบัญชี (รวมตอนยังไม่ login) — ชิป ไทย / English |
+| ครอบคลุม | แคตตาล็อก `Messages` + ผูกทุกหน้าจอหลัก; helper `formatNumber/Date/cropName/translateError/translateFieldError`; server message → code map; `scripts/check-no-thai-ui.mjs` + key-parity test |
+| ความสุกตอนลงล็อต | สร้างล็อตใหม่ไม่เลือกความสุกล่วงหน้า; ปุ่มลงประกาศ disabled จนกว่ามีค่า; กล่องประเมินชวนถ่ายรูป/เลือก; แสดงที่มาความสุก + พยากรณ์อากาศ; แก้ล็อตใช้ค่าเดิม |
+| `crops.name_en` | migration `014_crop_name_en.sql`; seed 5 พืชมี `nameEn`; API คืน `name_en` / `crop_name_en` จาก DB (crops, market, public market, my lots, orders, dashboard `by_crop`) |
+| AI assess-photo | `defects` + `note_th` (ไทย) คู่กับ `defects_en` + `note_en` (อังกฤษ) ในสคีมา/prompt/response |

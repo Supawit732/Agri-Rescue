@@ -28,11 +28,13 @@ import { formatCountdown, hoursLeftFrom, useNow } from '../hooks/useNow';
 import {
   availableAsOf,
   donationEligibility,
+  donationEligibilityLabels,
   marketSaleBadge,
   minOrderOf,
   remainingOf,
   splitAllowedOf,
 } from '../lot/helpers';
+import { formatTemplate, useI18n } from '../i18n';
 import { C, urgency } from '../theme';
 
 type SortKey = 'near' | 'urgent' | 'cheap';
@@ -51,16 +53,26 @@ function photoUri(lot: MarketLot): string | null {
 export default function MarketScreen(): React.ReactElement {
   const { user } = useAuth();
   const router = useRouter();
+  const { t } = useI18n();
 
   return (
     <Screen>
+      {user === null ? (
+        <View style={styles.guestBanner}>
+          <Text style={styles.guestText}>{t.market.guestBanner}</Text>
+          <PrimaryButton
+            label={t.common.login}
+            onPress={() =>
+              router.push({ pathname: '/login', params: { returnTo: '/(tabs)' } })
+            }
+          />
+        </View>
+      ) : null}
       {user !== null && !user.can_buy ? (
         <View style={styles.enableBuyBanner}>
-          <Text style={styles.enableBuyText}>
-            ยังไม่ได้เปิดการซื้อ — ดูตลาดได้ แต่จองไม่ได้จนกว่าจะเปิดสิทธิ์ที่บัญชี
-          </Text>
+          <Text style={styles.enableBuyText}>{t.market.enableBuyBrowse}</Text>
           <Pressable onPress={() => router.push('/(tabs)/account')}>
-            <Text style={styles.enableBuyLink}>ไปที่บัญชี</Text>
+            <Text style={styles.enableBuyLink}>{t.market.goAccount}</Text>
           </Pressable>
         </View>
       ) : null}
@@ -71,6 +83,7 @@ export default function MarketScreen(): React.ReactElement {
 
 function MarketCatalog(): React.ReactElement {
   const { api, user } = useAuth();
+  const { t, formatNumber, cropName } = useI18n();
   const router = useRouter();
   const now = useNow();
   const { width } = useWindowDimensions();
@@ -158,11 +171,17 @@ function MarketCatalog(): React.ReactElement {
   const { data, loading, error, reload } = useApiData(fetchMarket, [coords?.lat, coords?.lng, cropId, sort]);
 
   const filteredCrops = useMemo(() => {
-    const q = cropQuery.trim();
+    const q = cropQuery.trim().toLowerCase();
     if (q === '') {
       return crops.slice(0, 12);
     }
-    return crops.filter((c) => c.name_th.includes(q)).slice(0, 12);
+    return crops
+      .filter((c) => {
+        const th = c.name_th.toLowerCase();
+        const en = (c.name_en ?? '').toLowerCase();
+        return th.includes(q) || en.includes(q);
+      })
+      .slice(0, 12);
   }, [crops, cropQuery]);
 
   const goLot = (lot: MarketLot, intent: 'buy' | 'donate'): void => {
@@ -181,23 +200,26 @@ function MarketCatalog(): React.ReactElement {
     });
   };
 
+  const sortLabel =
+    sort === 'near' ? t.market.sortNear : sort === 'cheap' ? t.market.sortCheap : t.market.sortUrgent;
+
   const cardWidth = `${100 / columns - 1.5}%` as `${number}%`;
 
   return (
     <Body>
-      <Text style={styles.heading}>ตลาดด่วน</Text>
+      <Text style={styles.heading}>{t.market.title}</Text>
       <Text style={styles.sub}>
         {coords !== null
-          ? `ระยะจากตำแหน่งที่เลือก · เรียง${sort === 'near' ? 'ใกล้สุด' : sort === 'cheap' ? 'ถูกสุด' : 'ด่วนสุด'}`
-          : 'ยังไม่มีตำแหน่ง — แสดงทั้งหมดเรียงตามเวลาที่เหลือ'}
+          ? formatTemplate(t.market.subWithLocation, { sort: sortLabel })
+          : t.market.subNoLocation}
       </Text>
 
       <View style={styles.sortRow}>
         {(
           [
-            { key: 'urgent' as const, label: 'ด่วนสุด' },
-            { key: 'near' as const, label: 'ใกล้สุด' },
-            { key: 'cheap' as const, label: 'ถูกสุด' },
+            { key: 'urgent' as const, label: t.market.sortUrgent },
+            { key: 'near' as const, label: t.market.sortNear },
+            { key: 'cheap' as const, label: t.market.sortCheap },
           ] as const
         ).map((opt) => (
           <Pressable
@@ -214,7 +236,9 @@ function MarketCatalog(): React.ReactElement {
           </Pressable>
         ))}
         <Pressable style={styles.chip} onPress={() => setShowPicker((v) => !v)}>
-          <Text style={styles.chipText}>{coords !== null ? 'เปลี่ยนตำแหน่ง' : 'เลือกตำแหน่ง'}</Text>
+          <Text style={styles.chipText}>
+            {coords !== null ? t.market.changeLocation : t.market.selectLocation}
+          </Text>
         </Pressable>
       </View>
 
@@ -229,14 +253,14 @@ function MarketCatalog(): React.ReactElement {
                 setShowPicker(false);
               }
             }}
-            label="ตำแหน่งสำหรับคำนวณระยะ"
+            label={t.market.locationForDistance}
           />
         </Card>
       ) : null}
 
       <TextInput
         style={styles.search}
-        placeholder="ค้นหาพืช"
+        placeholder={t.market.searchCrop}
         placeholderTextColor={C.mute}
         value={cropQuery}
         onChangeText={setCropQuery}
@@ -246,7 +270,9 @@ function MarketCatalog(): React.ReactElement {
           style={[styles.chip, cropId === null && styles.chipActive]}
           onPress={() => setCropId(null)}
         >
-          <Text style={[styles.chipText, cropId === null && styles.chipTextActive]}>ทั้งหมด</Text>
+          <Text style={[styles.chipText, cropId === null && styles.chipTextActive]}>
+            {t.market.allCrops}
+          </Text>
         </Pressable>
         {filteredCrops.map((crop) => (
           <Pressable
@@ -255,7 +281,7 @@ function MarketCatalog(): React.ReactElement {
             onPress={() => setCropId(crop.id)}
           >
             <Text style={[styles.chipText, cropId === crop.id && styles.chipTextActive]}>
-              {crop.name_th}
+              {cropName(crop)}
             </Text>
           </Pressable>
         ))}
@@ -267,7 +293,7 @@ function MarketCatalog(): React.ReactElement {
         data={data}
         onRetry={reload}
         isEmpty={(lots) => lots.length === 0}
-        emptyText="ยังไม่มีล็อตในตอนนี้"
+        emptyText={t.market.empty}
       >
         {(lots) => (
           <View style={styles.grid}>
@@ -275,17 +301,22 @@ function MarketCatalog(): React.ReactElement {
               const hours = hoursLeftFrom(lot.expires_at, now);
               const tone = urgency(hours);
               const remaining = remainingOf(lot);
-              const elig = donationEligibility(user, lot, remaining);
+              const elig = donationEligibility(user, lot, remaining, donationEligibilityLabels(t));
               const available = availableAsOf(lot);
               const canBuy =
                 available.includes('buy') && lot.price_per_kg !== null && remaining > 0;
-              const saleBadge = marketSaleBadge(lot);
+              const saleBadge = marketSaleBadge(lot, {
+                sell: t.market.badgeSell,
+                donate: t.market.badgeDonate,
+                donateOk: t.market.badgeDonateOk,
+              });
               const dist =
                 lot.distance_km !== null && lot.distance_km !== undefined
-                  ? `${lot.distance_km.toFixed(1)} กม.`
+                  ? `${lot.distance_km.toFixed(1)} ${t.market.km}`
                   : null;
               const uri = photoUri(lot);
               const bookingEnabled = user === null || user.can_buy;
+              const title = cropName({ name_th: lot.crop_name_th, name_en: lot.crop_name_en });
               return (
                 <Pressable
                   key={lot.id}
@@ -298,15 +329,15 @@ function MarketCatalog(): React.ReactElement {
                     <Image source={{ uri }} style={styles.photo} resizeMode="cover" />
                   ) : (
                     <View style={[styles.photo, styles.photoPlaceholder]}>
-                      <Text style={styles.photoPlaceholderText}>{lot.crop_name_th}</Text>
+                      <Text style={styles.photoPlaceholderText}>{title}</Text>
                     </View>
                   )}
                   <View style={styles.cardBody}>
                     <View style={styles.cardHeader}>
                       <Text style={styles.cardTitle} numberOfLines={1}>
-                        {lot.crop_name_th}
+                        {title}
                       </Text>
-                      <Badge text={formatCountdown(hours)} fg={tone.fg} bg={tone.bg} />
+                      <Badge text={formatCountdown(hours, t.countdown)} fg={tone.fg} bg={tone.bg} />
                     </View>
                     <View style={styles.badgeRow}>
                       {saleBadge !== null ? (
@@ -318,23 +349,28 @@ function MarketCatalog(): React.ReactElement {
                       ) : null}
                     </View>
                     <Text style={styles.cardLine}>
-                      เหลือ {remaining} / {lot.weight_kg} กก.
-                      {splitAllowedOf(lot) ? ` · ขั้นต่ำ ${minOrderOf(lot)} กก.` : ' · ยกล็อต'}
+                      {t.market.remaining} {formatNumber(remaining)} / {formatNumber(lot.weight_kg)}{' '}
+                      {t.dashboard.unitKg}
+                      {splitAllowedOf(lot)
+                        ? ` · ${t.market.minOrder} ${formatNumber(minOrderOf(lot))} ${t.dashboard.unitKg}`
+                        : ` · ${t.market.wholeLot}`}
                     </Text>
                     <Text style={styles.cardLine}>
-                      {lot.plot_name ?? 'พื้นที่แปลง'}
+                      {lot.plot_name ?? t.market.plotFallback}
                       {dist !== null ? ` · ${dist}` : ''}
                     </Text>
                     {lot.price_per_kg !== null ? (
-                      <Text style={styles.price}>{lot.price_per_kg} บาท/กก.</Text>
+                      <Text style={styles.price}>
+                        {formatNumber(lot.price_per_kg)} {t.dashboard.unitBaht}/{t.dashboard.unitKg}
+                      </Text>
                     ) : (
-                      <Text style={styles.price}>บริจาค</Text>
+                      <Text style={styles.price}>{t.market.badgeDonate}</Text>
                     )}
                     {bookingEnabled ? (
                       <View style={styles.actions}>
                         {canBuy ? (
                           <PrimaryButton
-                            label="จองซื้อ"
+                            label={t.market.bookBuy}
                             block
                             onPress={() => goLot(lot, 'buy')}
                           />
@@ -342,7 +378,7 @@ function MarketCatalog(): React.ReactElement {
                         {(elig.canDonate || (user === null && available.includes('donate'))) &&
                         remaining > 0 ? (
                           <PrimaryButton
-                            label="ขอรับบริจาค"
+                            label={t.market.requestDonation}
                             tone="turmeric"
                             block
                             onPress={() => goLot(lot, 'donate')}
@@ -362,6 +398,14 @@ function MarketCatalog(): React.ReactElement {
 }
 
 const styles = StyleSheet.create({
+  guestBanner: {
+    backgroundColor: C.leafSoft,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+    gap: 8,
+  },
+  guestText: { color: C.ink, fontWeight: '700', fontSize: 15 },
   enableBuyBanner: {
     backgroundColor: C.leafSoft,
     borderRadius: 12,

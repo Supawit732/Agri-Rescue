@@ -72,6 +72,7 @@ interface OrderRow extends RowDataPacket {
 
 interface OrderDetailRow extends OrderRow {
   crop_name_th: string;
+  crop_name_en: string | null;
   grade: ProduceGrade;
   ripeness: number;
   photo_url: string | null;
@@ -229,10 +230,10 @@ ordersRouter.get(
   '/mine',
   requireCapability('buy'),
   asyncHandler(async (req, res) => {
-    const [rows] = await pool.query<(OrderRow & { crop_name_th: string })[]>(
+    const [rows] = await pool.query<(OrderRow & { crop_name_th: string; crop_name_en: string | null })[]>(
       `SELECT o.id, o.lot_id, o.buyer_id, o.quantity_kg, o.agreed_price_per_kg, o.is_donation, o.status,
               o.batch_id, o.drop_otp, o.distribution_place, o.distribution_at, o.created_at,
-              c.name_th AS crop_name_th
+              c.name_th AS crop_name_th, c.name_en AS crop_name_en
        FROM orders o
        JOIN harvest_lots h ON h.id = o.lot_id
        JOIN crops c ON c.id = h.crop_id
@@ -248,6 +249,8 @@ ordersRouter.get(
           id: Number(row.id),
           lot_id: Number(row.lot_id),
           crop_name_th: row.crop_name_th,
+          crop_name_en:
+            row.crop_name_en === null || row.crop_name_en === '' ? null : String(row.crop_name_en),
           quantity_kg: quantityKg,
           agreed_price_per_kg: price,
           total: Math.round(quantityKg * price * 100) / 100,
@@ -274,7 +277,7 @@ ordersRouter.get(
     const [rows] = await pool.query<OrderDetailRow[]>(
       `SELECT o.id, o.lot_id, o.buyer_id, o.quantity_kg, o.agreed_price_per_kg, o.is_donation, o.status,
               o.batch_id, o.drop_otp, o.distribution_place, o.distribution_at, o.created_at,
-              c.name_th AS crop_name_th, h.grade, h.ripeness, h.photo_url, h.expires_at,
+              c.name_th AS crop_name_th, c.name_en AS crop_name_en, h.grade, h.ripeness, h.photo_url, h.expires_at,
               p.name AS plot_name, p.lat AS plot_lat, p.lng AS plot_lng, p.farmer_id,
               bu.lat AS buyer_lat, bu.lng AS buyer_lng
        FROM orders o
@@ -310,6 +313,8 @@ ordersRouter.get(
         id: Number(row.id),
         lot_id: Number(row.lot_id),
         crop_name_th: row.crop_name_th,
+        crop_name_en:
+          row.crop_name_en === null || row.crop_name_en === '' ? null : String(row.crop_name_en),
         grade: row.grade,
         ripeness: Number(row.ripeness),
         photo_url: row.photo_url,

@@ -1,4 +1,5 @@
 import type { MarketLot, User } from '../api/types';
+import type { Messages } from '../i18n/types';
 
 export type AvailableAs = 'buy' | 'donate';
 
@@ -52,49 +53,81 @@ export function availableAsOf(lot: MarketLot): AvailableAs[] {
   return [];
 }
 
-export function marketSaleBadge(lot: MarketLot): { text: string; donate: boolean } | null {
+export function marketSaleBadge(
+  lot: MarketLot,
+  labels: { sell: string; donate: string; donateOk: string },
+): { text: string; donate: boolean } | null {
   const available = availableAsOf(lot);
   if (available.includes('donate') && !available.includes('buy')) {
-    return { text: 'บริจาค', donate: true };
+    return { text: labels.donate, donate: true };
   }
   if (available.includes('donate') && available.includes('buy')) {
-    return { text: 'รับบริจาคได้', donate: true };
+    return { text: labels.donateOk, donate: true };
   }
   if (available.includes('buy')) {
-    return { text: 'ขาย', donate: false };
+    return { text: labels.sell, donate: false };
   }
   return null;
+}
+
+export type DonationEligibilityLabels = Pick<
+  Messages['lot'],
+  | 'orgOnlyBadge'
+  | 'orgOnlyLogin'
+  | 'orgOnlySuspended'
+  | 'orgOnlyPending'
+  | 'orgOnlyNeedsInfo'
+  | 'orgOnlyRejected'
+  | 'orgOnlyNotRegistered'
+  | 'orgOnlyVerifiedRequired'
+  | 'orgOnlyCap'
+> & { donateOk: string };
+
+export function donationEligibilityLabels(t: Messages): DonationEligibilityLabels {
+  return {
+    orgOnlyBadge: t.lot.orgOnlyBadge,
+    orgOnlyLogin: t.lot.orgOnlyLogin,
+    orgOnlySuspended: t.lot.orgOnlySuspended,
+    orgOnlyPending: t.lot.orgOnlyPending,
+    orgOnlyNeedsInfo: t.lot.orgOnlyNeedsInfo,
+    orgOnlyRejected: t.lot.orgOnlyRejected,
+    orgOnlyNotRegistered: t.lot.orgOnlyNotRegistered,
+    orgOnlyVerifiedRequired: t.lot.orgOnlyVerifiedRequired,
+    orgOnlyCap: t.lot.orgOnlyCap,
+    donateOk: t.market.badgeDonateOk,
+  };
 }
 
 export function donationEligibility(
   user: User | null,
   lot: MarketLot,
   quantityKg: number,
+  labels: DonationEligibilityLabels,
 ): { canDonate: boolean; badge: string | null; reason: string | null } {
   const available = availableAsOf(lot);
   if (!available.includes('donate')) {
     return { canDonate: false, badge: null, reason: null };
   }
   if (user === null) {
-    return { canDonate: false, badge: 'บริจาคเฉพาะองค์กร', reason: 'ต้องเข้าสู่ระบบ' };
+    return { canDonate: false, badge: labels.orgOnlyBadge, reason: labels.orgOnlyLogin };
   }
   if (user.donation_suspended) {
-    return { canDonate: false, badge: 'บริจาคเฉพาะองค์กร', reason: 'สิทธิ์รับบริจาคถูกระงับ' };
+    return { canDonate: false, badge: labels.orgOnlyBadge, reason: labels.orgOnlySuspended };
   }
   if (user.org_status === 'pending') {
-    return { canDonate: false, badge: 'บริจาคเฉพาะองค์กร', reason: 'รอการอนุมัติองค์กร' };
+    return { canDonate: false, badge: labels.orgOnlyBadge, reason: labels.orgOnlyPending };
   }
   if (user.org_status === 'needs_more_info') {
-    return { canDonate: false, badge: 'บริจาคเฉพาะองค์กร', reason: 'ต้องส่งเอกสารเพิ่มก่อนขอรับบริจาค' };
+    return { canDonate: false, badge: labels.orgOnlyBadge, reason: labels.orgOnlyNeedsInfo };
   }
   if (user.org_status === 'rejected') {
-    return { canDonate: false, badge: 'บริจาคเฉพาะองค์กร', reason: 'คำขอองค์กรถูกปฏิเสธ' };
+    return { canDonate: false, badge: labels.orgOnlyBadge, reason: labels.orgOnlyRejected };
   }
   if (user.donor_tier === null) {
-    return { canDonate: false, badge: 'บริจาคเฉพาะองค์กร', reason: 'ยังไม่ได้ลงทะเบียนผู้รับบริจาค' };
+    return { canDonate: false, badge: labels.orgOnlyBadge, reason: labels.orgOnlyNotRegistered };
   }
   if (lot.donation_audience === 'verified_org_only' && user.donor_tier !== 'verified_org') {
-    return { canDonate: false, badge: 'บริจาคเฉพาะองค์กร', reason: 'ล็อตนี้เปิดรับเฉพาะองค์กรที่ยืนยันแล้ว' };
+    return { canDonate: false, badge: labels.orgOnlyBadge, reason: labels.orgOnlyVerifiedRequired };
   }
   if (
     user.donation_remaining_kg !== null &&
@@ -103,11 +136,11 @@ export function donationEligibility(
   ) {
     return {
       canDonate: false,
-      badge: 'บริจาคเฉพาะองค์กร',
-      reason: `เกินเพดานสัปดาห์นี้ (คงเหลือ ${user.donation_remaining_kg} กก.)`,
+      badge: labels.orgOnlyBadge,
+      reason: labels.orgOnlyCap,
     };
   }
-  return { canDonate: true, badge: 'รับบริจาคได้', reason: null };
+  return { canDonate: true, badge: labels.donateOk, reason: null };
 }
 
 export function googleMapsUrl(lat: number, lng: number): string {

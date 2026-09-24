@@ -46,6 +46,7 @@ interface PublicMarketRow extends RowDataPacket {
   market_price_snapshot: number | null;
   expires_at: Date;
   crop_name_th: string;
+  crop_name_en: string | null;
   base_shelf_days: number;
   lat: number;
   lng: number;
@@ -56,7 +57,7 @@ const PUBLIC_LOT_SELECT = `SELECT h.id, h.crop_id, h.weight_kg, h.split_allowed,
               h.grade, h.ripeness, h.donation_audience, h.photo_url,
               h.start_price_per_kg, h.floor_price_per_kg, h.sale_mode, h.donation_opened,
               h.market_price_snapshot, h.expires_at,
-              c.name_th AS crop_name_th, c.base_shelf_days,
+              c.name_th AS crop_name_th, c.name_en AS crop_name_en, c.base_shelf_days,
               p.lat, p.lng, p.name AS plot_name,
               COALESCE((
                 SELECT SUM(o.quantity_kg) FROM orders o
@@ -75,6 +76,7 @@ export interface PublicLotView {
   id: number;
   crop_id: number;
   crop_name_th: string;
+  crop_name_en: string | null;
   plot_name: string;
   photos: string[];
   photo_url: string | null;
@@ -187,6 +189,7 @@ function presentPublicLot(
     id: Number(row.id),
     crop_id: Number(row.crop_id),
     crop_name_th: row.crop_name_th,
+    crop_name_en: row.crop_name_en === null || row.crop_name_en === '' ? null : String(row.crop_name_en),
     plot_name: row.plot_name,
     photos: photoList,
     photo_url: photoList[0] ?? row.photo_url,
