@@ -83,6 +83,7 @@ interface Api {
     split_allowed?: boolean;
     min_order_kg?: number;
     order_step_kg?: number;
+    photo_url?: string | null;
     ai_ripeness?: number | null;
     ai_confidence?: number | null;
     ai_model?: string | null;
@@ -108,6 +109,14 @@ interface Api {
   getMyLots: () => Promise<MyLot[]>;
   getMarket: (lat: number, lng: number, radiusKm: number) => Promise<MarketLot[]>;
   getMarketLot: (id: number, lat?: number, lng?: number) => Promise<MarketLot>;
+  getPublicMarket: (query?: {
+    lat?: number;
+    lng?: number;
+    radius_km?: number;
+    crop_id?: number;
+    sort?: 'near' | 'urgent' | 'cheap';
+  }) => Promise<MarketLot[]>;
+  getPublicLot: (id: number, lat?: number, lng?: number) => Promise<MarketLot>;
   createOrder: (
     lotId: number,
     donation: boolean,
@@ -315,7 +324,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
     return {
       getMe: () => authed<{ user: User }>('GET', '/api/auth/me').then((r) => r.user),
       updateProfile,
-      getCrops: () => authed<{ crops: Crop[] }>('GET', '/api/crops').then((r) => r.crops),
+      getCrops: () =>
+        apiRequest<{ crops: Crop[] }>({ method: 'GET', path: '/api/crops', token }).then((r) => r.crops),
       getPlots: () => authed<{ plots: Plot[] }>('GET', '/api/plots/mine').then((r) => r.plots),
       createPlot: (input) => authed<{ plot: Plot }>('POST', '/api/plots', input).then((r) => r.plot),
       estimate: (input) => authed<EstimateResponse>('POST', '/api/lots/estimate', input),
@@ -329,6 +339,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
         const qs =
           lat !== undefined && lng !== undefined ? `?lat=${lat}&lng=${lng}` : '';
         return authed<{ lot: MarketLot }>('GET', `/api/market/lots/${id}${qs}`).then((r) => r.lot);
+      },
+      getPublicMarket: (query = {}) => {
+        const params = new URLSearchParams();
+        if (query.lat !== undefined) {
+          params.set('lat', String(query.lat));
+        }
+        if (query.lng !== undefined) {
+          params.set('lng', String(query.lng));
+        }
+        if (query.radius_km !== undefined) {
+          params.set('radius_km', String(query.radius_km));
+        }
+        if (query.crop_id !== undefined) {
+          params.set('crop_id', String(query.crop_id));
+        }
+        if (query.sort !== undefined) {
+          params.set('sort', query.sort);
+        }
+        const qs = params.toString();
+        return apiRequest<{ lots: MarketLot[] }>({
+          method: 'GET',
+          path: `/api/public/market${qs !== '' ? `?${qs}` : ''}`,
+          token,
+        }).then((r) => r.lots);
+      },
+      getPublicLot: (id, lat, lng) => {
+        const params = new URLSearchParams();
+        if (lat !== undefined) {
+          params.set('lat', String(lat));
+        }
+        if (lng !== undefined) {
+          params.set('lng', String(lng));
+        }
+        const qs = params.toString();
+        return apiRequest<{ lot: MarketLot }>({
+          method: 'GET',
+          path: `/api/public/lots/${id}${qs !== '' ? `?${qs}` : ''}`,
+          token,
+        }).then((r) => r.lot);
       },
       createOrder: (lotId, donation, quantityKg, extras) =>
         authed<{ order: Order }>('POST', '/api/orders', {

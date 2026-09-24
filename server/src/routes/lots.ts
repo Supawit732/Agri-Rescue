@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
+import type { PoolConnection, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import { z } from 'zod';
 import { assessRipenessFromPhoto, loadVisionConfig } from '../ai/vision';
 import { pool } from '../db/pool';
@@ -22,7 +22,13 @@ import { HttpError } from '../http/errors';
 import { requireAuth, requireCapability } from '../middleware/auth';
 import { sumReservedQuantityKg } from '../orders/lotInventoryService';
 import { defaultLotPrices, resolveMarketPrice } from '../pricing/referencePrices';
+import { lotPhotoStoragePath, savePublicLotPhoto } from '../storage/publicUploads';
 import { fetchWeather, WEATHER_BASIS } from '../weather/openMeteo';
+
+async function insertLotPhoto(connection: PoolConnection, lotId: number, photoUrl: string): Promise<void> {
+  const storagePath = lotPhotoStoragePath(photoUrl) ?? photoUrl;
+  await connection.query(`INSERT INTO lot_photos (lot_id, path) VALUES (?, ?)`, [lotId, storagePath]);
+}
 
 export const lotsRouter = Router();
 
@@ -190,6 +196,12 @@ lotsRouter.post(
       normalFeaturesTh: crop.normal_features_th,
       defectExamplesTh: crop.defect_examples_th,
     });
+    // Persist assess photo as a lot photo candidate (linked on create/patch via photo_url).
+    if (result.available === true && result.subject_match === true) {
+      const saved = await savePublicLotPhoto({ base64: body.image_base64, mime: body.mime });
+      res.json({ ...result, photo_url: saved.url });
+      return;
+    }
     res.json(result);
   }),
 );
@@ -296,6 +308,10 @@ lotsRouter.post(
           createdAt,
         ],
       );
+      const photoUrl = body.photo_url ?? null;
+      if (photoUrl !== null && photoUrl !== '') {
+        await insertLotPhoto(connection, lotResult.insertId, photoUrl);
+      }
       await connection.commit();
       const pricePerKg =
         body.sale_mode === 'donate'
@@ -318,7 +334,7 @@ lotsRouter.post(
           remaining_kg: body.weight_kg,
           grade: body.grade,
           ripeness: body.ripeness,
-          photo_url: body.photo_url ?? null,
+          photo_url: photoUrl,
           sale_mode: body.sale_mode,
           allow_donation: allowDonation === 1,
           donation_audience: donationAudience,
@@ -555,6 +571,14 @@ lotsRouter.patch(
            VALUES (?, ?, ?, ?, ?)`,
           [lotId, farmerId, log.field, log.oldValue, log.newValue],
         );
+      }
+      if (
+        body.photo_url !== undefined &&
+        body.photo_url !== null &&
+        body.photo_url !== '' &&
+        body.photo_url !== lot.photo_url
+      ) {
+        await insertLotPhoto(connection, lotId, body.photo_url);
       }
       await connection.commit();
       res.json({ lot: await presentLot(lotId) });

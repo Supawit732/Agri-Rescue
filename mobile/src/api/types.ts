@@ -188,6 +188,7 @@ export type AssessPhotoResponse =
       note_th: string;
       low_confidence: boolean;
       model: string;
+      photo_url?: string;
     }
   | {
       available: true;
@@ -239,8 +240,10 @@ export interface MyLot {
 
 export interface MarketLot {
   id: number;
+  crop_id?: number;
   crop_name_th: string;
-  farmer_name: string;
+  /** Authenticated market may include; public API never returns this. */
+  farmer_name?: string;
   weight_kg: number;
   remaining_kg?: number;
   split_allowed?: boolean;
@@ -252,20 +255,25 @@ export interface MarketLot {
   sale_mode?: SaleMode;
   available_as?: Array<'buy' | 'donate'>;
   donation_opened?: boolean;
-  allow_donation: boolean;
+  allow_donation?: boolean;
   donation_audience?: DonationAudience;
   expires_at: string;
   hours_left: number;
   distance_km: number | null;
   price_per_kg: number | null;
+  market_price_per_kg?: number | null;
   market_price_label?: string | null;
   start_price_per_kg?: number | null;
   floor_price_per_kg?: number | null;
-  lat: number;
-  lng: number;
+  /** Authenticated booking maps only — public API omits. */
+  lat?: number;
+  lng?: number;
   plot_name?: string;
   area_rai?: number;
   photo_url?: string | null;
+  photos?: string[];
+  can_request_donation?: boolean;
+  reason?: string | null;
 }
 
 export interface DitCropRefPrice {

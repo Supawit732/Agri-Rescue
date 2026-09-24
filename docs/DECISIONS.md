@@ -188,3 +188,15 @@ JWT เก็บ `sub`, `role`, `can_sell`, `can_buy`, `is_admin` (อายุ 
 | Seller confirm | `POST /api/orders/:id/seller-confirm` — OTP + น้ำหนัก; ออเดอร์ `reserved` → `delivered` โดยไม่ผ่าน batch (เดโมรับที่ฟาร์ม); ไม่มีคอลัมน์ `weight_flag` บน orders จึงใช้น้ำหนักเข้า `impact_logs` อย่างเดียว |
 | seed:demo | เติมประวัติ ~14 วัน (marker `photo_url = 'seed:demo'`); รันซ้ำแล้วลบแถว marker ก่อน; ต้อง `migrate`+`seed` ก่อน; ล็อตเปิดจาก seed ปกติยังอยู่สำหรับเดโมสด |
 | Listen | API ฟังที่ `0.0.0.0` เพื่อให้มือถือในเครือข่ายเดียวกันเรียกได้ |
+
+## D024 — Phase 6.2 ตลาดสาธารณะ
+
+| รายการ | ค่า |
+|---|---|
+| Rate limit | `GET /api/public/*` 60 ครั้ง/นาที/IP ด้วย in-memory `Map` (process-local; รีสตาร์ทแล้วรีเซ็ต) — ไม่ใช้ Redis ในขั้นนี้ |
+| ระยะทาง | ปัดเป็นขั้น 0.5 กม. (`Math.round(km * 2) / 2`); ไม่มี lat/lng ของผู้ดู → `distance_km = null` แล้วยังคืนรายการ (เรียง urgent/cheap ได้; `sort=near` ถอยเป็น urgent) |
+| พื้นที่แปลง | ยังไม่มีตำบล/อำเภอ — คืน `plot_name` แทน (ต่อจาก D022); **ห้าม** คืน lat/lng ของแปลงใน public API |
+| รูปล็อต | ตาราง `lot_photos` (migration `014_lot_photos`) + ไฟล์ใน `server/uploads/` เสิร์ฟที่ `/uploads/...`; รูปจาก `POST /api/lots/assess-photo` (subject_match) บันทึกอัตโนมัติแล้วส่ง `photo_url` กลับ; ตอนสร้าง/แก้ล็อตถ้ามี `photo_url` จะ insert `lot_photos` และคง `harvest_lots.photo_url` เป็นรูปหลัก |
+| ขนาดรูป | ฝั่งแอปย่อด้วย `expo-image-manipulator` (ขอบยาว ≤1024, jpeg compress 0.8); เซิร์ฟเวอร์บังคับ ≤ 1MB หลัง decode (jpeg/webp/png) |
+| `available_as` | เหมือนตลาดล็อกอิน (D022); ไม่คืน `sale_mode` / `donation_opened` / ชื่อผู้ขาย / ติดต่อ |
+| Bearer เสริม | ถ้ามี token จะเติม `donation_audience`, `can_request_donation`, `reason` สำหรับสิทธิ์รับบริจาค — ไม่เปิดเผยแผน `sell_then_donate` |

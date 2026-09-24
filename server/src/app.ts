@@ -12,7 +12,13 @@ import { lotsRouter } from './routes/lots';
 import { marketRouter } from './routes/market';
 import { ordersRouter } from './routes/orders';
 import { plotsRouter } from './routes/plots';
+import { publicMarketRouter } from './routes/publicMarket';
 import { stopsRouter } from './routes/stops';
+import { ensurePublicUploadsDir, PUBLIC_UPLOADS_DIR } from './storage/publicUploads';
+
+void ensurePublicUploadsDir().catch((err: unknown) => {
+  console.error('Failed to ensure uploads directory', err);
+});
 
 export function createApp(): Express {
   const app = express();
@@ -27,6 +33,7 @@ export function createApp(): Express {
     next();
   });
   app.use(express.json({ limit: '8mb' }));
+  app.use('/uploads', express.static(PUBLIC_UPLOADS_DIR, { fallthrough: true, maxAge: '1d' }));
   if (process.env.NODE_ENV !== 'test') {
     app.use((req, res, next) => {
       const started = Date.now();
@@ -44,6 +51,7 @@ export function createApp(): Express {
   app.use('/api/plots', plotsRouter);
   app.use('/api/lots', lotsRouter);
   app.use('/api/market', marketRouter);
+  app.use('/api/public', publicMarketRouter);
   app.use('/api/orders', ordersRouter);
   app.use('/api/batches', batchesRouter);
   app.use('/api/stops', stopsRouter);

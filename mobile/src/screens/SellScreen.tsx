@@ -632,6 +632,7 @@ function NewLotForm({
           ...priceFields,
           ...splitFields,
           ...(aiResult !== null ? { ai_ripeness: aiResult.ripeness } : {}),
+          ...(aiResult?.photo_url !== undefined ? { photo_url: aiResult.photo_url } : {}),
           ...(loweringRipeness ? { confirm_ripeness_photo: aiResult !== null } : {}),
         });
       } else {
@@ -645,6 +646,7 @@ function NewLotForm({
           donation_audience: audience,
           ...priceFields,
           ...splitFields,
+          photo_url: aiResult?.photo_url ?? null,
           ai_ripeness: aiResult?.ripeness ?? null,
           ai_confidence: aiResult?.confidence ?? null,
           ai_model: aiResult?.model ?? null,

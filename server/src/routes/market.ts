@@ -130,8 +130,9 @@ function presentBuyerLot(
     donation_audience: row.donation_audience,
     expires_at: new Date(row.expires_at).toISOString(),
     hours_left: hoursLeft,
-    distance_km: distanceKm,
+    distance_km: distanceKm === null ? null : Math.round(distanceKm * 10) / 10,
     price_per_kg: pricePerKg,
+    // Plot coords kept for authenticated booking maps (owners/buyers) — public API never returns these.
     lat: plotLat,
     lng: plotLng,
   };
