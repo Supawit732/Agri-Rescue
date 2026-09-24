@@ -83,7 +83,7 @@ export const buyers = [
 
 export const staff = [
   { role: 'driver', name: 'คนขับตัวอย่าง', phone: '0800000004' },
-  { role: 'coordinator', name: 'ผู้ประสานตัวอย่าง', phone: '0800000005' },
+  { role: 'coordinator', name: 'admin', phone: '0800000005' },
 ] as const;
 
 export const farmers = [
