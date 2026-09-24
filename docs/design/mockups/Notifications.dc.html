@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>แจ้งเตือน</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anuphan:wght@500;600;700&amp;family=IBM+Plex+Sans+Thai:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0;background:#F3F5EF;color:#1B241C;font-family:'IBM Plex Sans Thai',system-ui,sans-serif}
+a{color:#1B241C;text-decoration:none}a:hover{color:#1F4A30}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #F3F5EF; font-family: 'IBM Plex Sans Thai', system-ui, sans-serif; color: #1B241C">
+
+<header style="display: flex; align-items: center; justify-content: space-between; padding: 54px 16px 8px 16px">
+<h1 style="margin: 0; font-family: 'Anuphan', sans-serif; font-size: 24px; font-weight: 700">แจ้งเตือน</h1>
+<div style="display: flex; align-items: center; gap: 8px">
+<button type="button" style="height: 36px; padding: 0 8px; border: 0; background: transparent; color: #2E6040; font-family: inherit; font-size: 14px; font-weight: 600">อ่านทั้งหมด</button>
+<a href="ProfileMenu.dc.html" aria-label="เปิดเมนูบัญชี" style="width: 44px; height: 44px; border-radius: 22px; background: #E4EDE2; border: 2px solid #FFFFFF; box-shadow: 0 0 0 1px #C9D5C4; display: flex; align-items: center; justify-content: center; font-family: 'Anuphan', sans-serif; font-weight: 700; font-size: 15px; color: #1F4A30">สช</a>
+</div>
+</header>
+
+<div style="display: flex; gap: 8px; padding: 6px 16px 12px 16px">
+<button type="button" style="height: 36px; padding: 0 16px; border-radius: 18px; border: 0; background: #1F4A30; color: #FFFFFF; font-family: inherit; font-size: 14px; font-weight: 600">ทั้งหมด</button>
+<button type="button" style="height: 36px; padding: 0 16px; border-radius: 18px; border: 1px solid #DCE2D6; background: #FFFFFF; color: #1B241C; font-family: inherit; font-size: 14px">ร้านที่ติดตาม</button>
+<button type="button" style="height: 36px; padding: 0 16px; border-radius: 18px; border: 1px solid #DCE2D6; background: #FFFFFF; color: #1B241C; font-family: inherit; font-size: 14px">คำสั่งซื้อ</button>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 8px; padding: 0 16px">
+<span style="font-size: 13px; font-weight: 600; color: #56615A; padding: 4px 0">วันนี้</span>
+
+<a href="Shop.dc.html" style="display: flex; gap: 12px; background: #FFFFFF; border: 1px solid #C9D5C4; border-radius: 16px; padding: 12px; position: relative">
+<div style="width: 52px; height: 52px; border-radius: 12px; background: #F4E4B0; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: #56615A; font-size: 10px">[รูป]</div>
+<div style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1; min-width: 0">
+<span style="font-size: 12px; font-weight: 600; color: #2E6040">ร้านที่คุณติดตาม</span>
+<span style="font-size: 15px; line-height: 1.4"><strong>สวนลุงสมชาย</strong> ลงขายใหม่: มะม่วงน้ำดอกไม้ 70 กก. ขายได้อีก 20 ชม.</span>
+<span style="font-size: 12px; color: #56615A">5 นาทีที่แล้ว</span>
+</div>
+<span aria-label="ยังไม่อ่าน" style="width: 10px; height: 10px; border-radius: 5px; background: #2E6040; flex-shrink: 0; margin-top: 4px"></span>
+</a>
+
+<div style="display: flex; gap: 12px; background: #FFFFFF; border: 1px solid #C9D5C4; border-radius: 16px; padding: 12px">
+<div style="width: 52px; height: 52px; border-radius: 12px; background: #FBE3E0; color: #A3231B; flex-shrink: 0; display: flex; align-items: center; justify-content: center">
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
+</div>
+<div style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1; min-width: 0">
+<span style="font-size: 12px; font-weight: 600; color: #A3231B">ใกล้คุณ · ด่วน</span>
+<span style="font-size: 15px; line-height: 1.4">ผักบุ้ง 25 กก. ห่าง 3 กม. เหลือเวลาขาย 12 ชม.</span>
+<span style="font-size: 12px; color: #56615A">40 นาทีที่แล้ว</span>
+</div>
+<span aria-label="ยังไม่อ่าน" style="width: 10px; height: 10px; border-radius: 5px; background: #2E6040; flex-shrink: 0; margin-top: 4px"></span>
+</div>
+
+<div style="display: flex; gap: 12px; background: #FFFFFF; border: 1px solid #C9D5C4; border-radius: 16px; padding: 12px">
+<div style="width: 52px; height: 52px; border-radius: 12px; background: #E4EDE2; color: #1F4A30; flex-shrink: 0; display: flex; align-items: center; justify-content: center">
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4 10-10"></path></svg>
+</div>
+<div style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1; min-width: 0">
+<span style="font-size: 12px; font-weight: 600; color: #2E6040">คำสั่งซื้อ</span>
+<span style="font-size: 15px; line-height: 1.4">ผู้ขายยืนยันส่งมอบกล้วยน้ำว้า 10 กก. แล้ว ดูวิธีเก็บรักษา</span>
+<span style="font-size: 12px; color: #56615A">2 ชม.ที่แล้ว</span>
+</div>
+<span aria-label="ยังไม่อ่าน" style="width: 10px; height: 10px; border-radius: 5px; background: #2E6040; flex-shrink: 0; margin-top: 4px"></span>
+</div>
+
+<span style="font-size: 13px; font-weight: 600; color: #56615A; padding: 8px 0 4px 0">เมื่อวาน</span>
+
+<div style="display: flex; gap: 12px; background: #F9FAF7; border: 1px solid #DCE2D6; border-radius: 16px; padding: 12px">
+<div style="width: 52px; height: 52px; border-radius: 12px; background: #FBEFD6; color: #7A4F00; flex-shrink: 0; display: flex; align-items: center; justify-content: center">
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12v9H4v-9"></path><path d="M2 7h20v5H2z"></path><path d="M12 21V7"></path><path d="M12 7c-2-4-6-4-6-1s6 1 6 1 6 2 6-1-4-3-6 1"></path></svg>
+</div>
+<div style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1; min-width: 0">
+<span style="font-size: 12px; font-weight: 600; color: #7A4F00">รับบริจาค</span>
+<span style="font-size: 15px; line-height: 1.4; color: #3C463E">อย่าลืมส่งรูปยืนยันการแจกภายใน 48 ชม.</span>
+<span style="font-size: 12px; color: #56615A">เมื่อวาน 16:20</span>
+</div>
+</div>
+</div>
+
+<nav aria-label="เมนูหลัก" style="position: absolute; left: 0; right: 0; bottom: 0; height: 88px; background: #FFFFFF; border-top: 1px solid #DCE2D6; display: flex; justify-content: space-around; align-items: flex-start; padding-top: 8px; padding-bottom: 34px; box-sizing: border-box">
+<a href="Main.dc.html" style="display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 64px; min-height: 44px; color: #56615A; font-size: 12px">
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1.5-5h15L21 9"></path><path d="M4 9v11h16V9"></path><path d="M3 9h18"></path><path d="M9 20v-6h6v6"></path></svg>
+ตลาด
+</a>
+<button type="button" style="display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 64px; min-height: 44px; border: 0; background: transparent; color: #56615A; font-family: inherit; font-size: 12px; padding: 0">
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v8M8 12h8"></path></svg>
+ขาย
+</button>
+<button type="button" style="display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 64px; min-height: 44px; border: 0; background: transparent; color: #56615A; font-family: inherit; font-size: 12px; padding: 0">
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"></path><path d="M9 8h6M9 12h6"></path></svg>
+คำสั่งซื้อ
+</button>
+<a href="Notifications.dc.html" aria-current="page" style="display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 64px; min-height: 44px; color: #2E6040; font-size: 12px; font-weight: 700">
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg>
+แจ้งเตือน
+</a>
+</nav>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

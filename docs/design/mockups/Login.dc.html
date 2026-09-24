@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>เข้าสู่ระบบ</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anuphan:wght@500;600;700&amp;family=IBM+Plex+Sans+Thai:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0;background:#F3F5EF;color:#1B241C;font-family:'IBM Plex Sans Thai',system-ui,sans-serif}
+a{color:#2E6040;text-decoration:none}a:hover{color:#1F4A30}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #F3F5EF; font-family: 'IBM Plex Sans Thai', system-ui, sans-serif; color: #1B241C; display: flex; flex-direction: column; padding: 54px 24px 40px 24px; box-sizing: border-box">
+
+<div style="display: flex; justify-content: flex-end">
+<div role="group" aria-label="เลือกภาษา" style="display: flex; background: #E4EDE2; border-radius: 10px; padding: 3px">
+<button type="button" aria-pressed="true" style="height: 32px; min-width: 44px; border: 0; border-radius: 8px; background: #FFFFFF; color: #1F4A30; font-family: inherit; font-size: 13px; font-weight: 700">TH</button>
+<button type="button" aria-pressed="false" style="height: 32px; min-width: 44px; border: 0; border-radius: 8px; background: transparent; color: #56615A; font-family: inherit; font-size: 13px; font-weight: 600">EN</button>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; align-items: flex-start; gap: 14px; margin-top: 12px">
+<div style="width: 60px; height: 60px; border-radius: 18px; background: #2E6040; color: #FFFFFF; display: flex; align-items: center; justify-content: center">
+<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19c0-8 6-14 15-14 0 9-6 15-14 15"></path><path d="M5 19c4-4 7-6 10-8"></path></svg>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<h1 style="margin: 0; font-family: 'Anuphan', sans-serif; font-size: 30px; font-weight: 700; line-height: 1.2">ยินดีต้อนรับกลับ</h1>
+<p style="margin: 0; font-size: 15px; color: #56615A; line-height: 1.5">ขายผลผลิตก่อนเสีย ถึงมือคนใกล้บ้าน ภายในรัศมี 15 กม.</p>
+</div>
+</div>
+
+<form style="display: flex; flex-direction: column; gap: 14px; margin-top: 28px">
+<label style="display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600">เบอร์โทร หรืออีเมล
+<input type="text" placeholder="08x-xxx-xxxx หรือ name@email.com" style="height: 52px; border: 1px solid #C9D5C4; border-radius: 14px; padding: 0 16px; background: #FFFFFF; font-family: inherit; font-size: 15px; color: #1B241C">
+</label>
+<label style="display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600">รหัสผ่าน
+<span style="display: flex; align-items: center; height: 52px; border: 1px solid #C9D5C4; border-radius: 14px; padding: 0 6px 0 16px; background: #FFFFFF">
+<input type="password" value="demo1234" style="flex-grow: 1; border: 0; outline: 0; background: transparent; font-family: inherit; font-size: 15px; color: #1B241C; min-width: 0">
+<button type="button" aria-label="แสดงรหัสผ่าน" style="width: 44px; height: 44px; border: 0; background: transparent; color: #56615A; display: flex; align-items: center; justify-content: center">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+</button>
+</span>
+</label>
+<div style="display: flex; justify-content: flex-end">
+<button type="button" style="height: 36px; border: 0; background: transparent; color: #2E6040; font-family: inherit; font-size: 14px; font-weight: 600; padding: 0">ลืมรหัสผ่าน?</button>
+</div>
+<a href="Main.dc.html" style="height: 52px; border-radius: 14px; background: #2E6040; color: #FFFFFF; font-size: 16px; font-weight: 600; display: flex; align-items: center; justify-content: center">เข้าสู่ระบบ</a>
+</form>
+
+<div style="display: flex; align-items: center; gap: 12px; margin: 22px 0; color: #56615A; font-size: 13px">
+<div style="flex-grow: 1; height: 1px; background: #DCE2D6"></div>
+หรือ
+<div style="flex-grow: 1; height: 1px; background: #DCE2D6"></div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<button type="button" style="height: 52px; border-radius: 14px; border: 0; background: #06803A; color: #FFFFFF; font-family: inherit; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 10px">
+<span style="width: 24px; height: 24px; border-radius: 6px; background: #FFFFFF; font-size: 8px; color: #06803A; font-weight: 700; display: flex; align-items: center; justify-content: center">[LINE]</span>
+เข้าสู่ระบบด้วย LINE
+</button>
+</div>
+
+<div style="flex-grow: 1"></div>
+
+<div style="display: flex; flex-direction: column; align-items: center; gap: 10px; font-size: 14px">
+<span style="color: #56615A">ยังไม่มีบัญชี? <a href="Main.dc.html" style="font-weight: 600">สมัครสมาชิก</a></span>
+<a href="Main.dc.html" style="font-weight: 600; min-height: 44px; display: flex; align-items: center">ดูตลาดโดยไม่เข้าสู่ระบบ</a>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

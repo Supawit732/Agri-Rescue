@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>หน้าร้าน</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anuphan:wght@500;600;700&amp;family=IBM+Plex+Sans+Thai:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0;background:#F3F5EF;color:#1B241C;font-family:'IBM Plex Sans Thai',system-ui,sans-serif}
+a{color:#2E6040;text-decoration:none}a:hover{color:#1F4A30}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #F3F5EF; font-family: 'IBM Plex Sans Thai', system-ui, sans-serif; color: #1B241C">
+
+<div style="height: 190px; background: #D7E5D3; position: relative; display: flex; align-items: center; justify-content: center; color: #56615A; font-size: 12px; padding-top: 40px; box-sizing: border-box">
+[รูปปกร้าน]
+<a href="Main.dc.html" aria-label="ย้อนกลับ" style="position: absolute; top: 54px; left: 12px; width: 44px; height: 44px; border-radius: 22px; background: #FFFFFF; color: #1B241C; display: flex; align-items: center; justify-content: center">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 6l-6 6 6 6"></path></svg>
+</a>
+</div>
+
+<div style="padding: 0 16px; margin-top: -36px; position: relative; display: flex; flex-direction: column; gap: 12px">
+<div style="width: 76px; height: 76px; border-radius: 22px; background: #2E6040; border: 4px solid #F3F5EF; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-family: 'Anuphan', sans-serif; font-size: 26px; font-weight: 700">สช</div>
+<div style="display: flex; flex-direction: column; gap: 4px">
+<h1 style="margin: 0; font-family: 'Anuphan', sans-serif; font-size: 24px; font-weight: 700">สวนลุงสมชาย</h1>
+<span style="font-size: 13px; color: #56615A; display: flex; align-items: center; gap: 4px">
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"></path><circle cx="12" cy="10" r="2.5"></circle></svg>
+[ตำบล, อำเภอ] · ห่าง 2.5 กม.
+</span>
+<span style="font-size: 13px; color: #56615A">ขายบ่อย: มะม่วง · กล้วยน้ำว้า · มะนาว</span>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+<div style="background: #FFFFFF; border: 1px solid #DCE2D6; border-radius: 14px; padding: 10px; display: flex; flex-direction: column; gap: 2px">
+<span style="font-family: 'Anuphan', sans-serif; font-size: 20px; font-weight: 700">[24]</span>
+<span style="font-size: 12px; color: #56615A">ส่งมอบสำเร็จ</span>
+</div>
+<div style="background: #FFFFFF; border: 1px solid #DCE2D6; border-radius: 14px; padding: 10px; display: flex; flex-direction: column; gap: 2px">
+<span style="font-family: 'Anuphan', sans-serif; font-size: 20px; font-weight: 700">[138]</span>
+<span style="font-size: 12px; color: #56615A">ผู้ติดตาม</span>
+</div>
+<div style="background: #FFFFFF; border: 1px solid #DCE2D6; border-radius: 14px; padding: 10px; display: flex; flex-direction: column; gap: 2px">
+<span style="font-family: 'Anuphan', sans-serif; font-size: 20px; font-weight: 700">[420 กก.]</span>
+<span style="font-size: 12px; color: #56615A">ช่วยไม่ให้ทิ้ง</span>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 6px">
+<button type="button" style="height: 48px; border-radius: 14px; border: 0; background: #2E6040; color: #FFFFFF; font-family: inherit; font-size: 16px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg>
+ติดตามร้าน
+</button>
+<span style="font-size: 12px; color: #56615A; text-align: center">รับแจ้งเตือนทันทีเมื่อร้านนี้ลงขายล็อตใหม่</span>
+</div>
+
+<div style="display: flex; gap: 4px; background: #E4EDE2; border-radius: 12px; padding: 4px">
+<button type="button" style="flex-grow: 1; height: 40px; border: 0; border-radius: 9px; background: #FFFFFF; color: #1F4A30; font-family: inherit; font-size: 14px; font-weight: 600">กำลังขาย 3</button>
+<button type="button" style="flex-grow: 1; height: 40px; border: 0; border-radius: 9px; background: transparent; color: #56615A; font-family: inherit; font-size: 14px">ขายแล้ว</button>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<sc-for list="{{lots}}" as="item" hint-placeholder-count="3">
+<div style="display: flex; gap: 12px; background: #FFFFFF; border: 1px solid #DCE2D6; border-radius: 16px; padding: 10px">
+<div style="width: 72px; height: 72px; border-radius: 12px; background: {{item.tint}}; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: #56615A; font-size: 10px">[รูป]</div>
+<div style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0">
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 8px">
+<span style="font-family: 'Anuphan', sans-serif; font-size: 16px; font-weight: 600">{{item.crop}}</span>
+<span style="font-size: 12px; font-weight: 600; color: {{item.timeFg}}; background: {{item.timeBg}}; padding: 2px 8px; border-radius: 10px; white-space: nowrap">{{item.time}}</span>
+</div>
+<span style="font-size: 12px; color: #56615A">{{item.meta}} · เหลือ {{item.left}} กก.</span>
+<div style="display: flex; align-items: baseline; gap: 2px">
+<span style="font-size: 18px; font-weight: 700">฿{{item.price}}</span>
+<span style="font-size: 12px; color: #56615A">/กก.</span>
+</div>
+</div>
+</div>
+</sc-for>
+</div>
+</div>
+
+<nav aria-label="เมนูหลัก" style="position: absolute; left: 0; right: 0; bottom: 0; height: 88px; background: #FFFFFF; border-top: 1px solid #DCE2D6; display: flex; justify-content: space-around; align-items: flex-start; padding-top: 8px; padding-bottom: 34px; box-sizing: border-box">
+<a href="Main.dc.html" style="display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 64px; min-height: 44px; color: #2E6040; font-size: 12px; font-weight: 700">
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1.5-5h15L21 9"></path><path d="M4 9v11h16V9"></path><path d="M3 9h18"></path><path d="M9 20v-6h6v6"></path></svg>
+ตลาด
+</a>
+<button type="button" style="display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 64px; min-height: 44px; border: 0; background: transparent; color: #56615A; font-family: inherit; font-size: 12px; padding: 0">
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v8M8 12h8"></path></svg>
+ขาย
+</button>
+<button type="button" style="display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 64px; min-height: 44px; border: 0; background: transparent; color: #56615A; font-family: inherit; font-size: 12px; padding: 0">
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"></path><path d="M9 8h6M9 12h6"></path></svg>
+คำสั่งซื้อ
+</button>
+<a href="Notifications.dc.html" style="display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 64px; min-height: 44px; color: #56615A; font-size: 12px; position: relative">
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg>
+แจ้งเตือน
+<span style="position: absolute; top: -4px; left: 38px; min-width: 18px; height: 18px; padding: 0 4px; box-sizing: border-box; border-radius: 9px; background: #A3231B; color: #FFFFFF; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center">3</span>
+</a>
+</nav>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      lots: [
+        { crop: 'มะม่วงน้ำดอกไม้', meta: 'ตกเกรด · สุกมาก', left: '60/70', price: 21, time: '20 ชม.', timeFg: '#A3231B', timeBg: '#FBE3E0', tint: '#F4E4B0' },
+        { crop: 'กล้วยน้ำว้า', meta: 'ตกเกรด · สุกพอดี', left: '40/40', price: 13, time: '1 วัน 13 ชม.', timeFg: '#7A4F00', timeBg: '#FBEFD6', tint: '#F1E8BE' },
+        { crop: 'มะนาว', meta: 'ปกติ · เบอร์ 2', left: '30/30', price: 28, time: '9 วัน', timeFg: '#1F4A30', timeBg: '#E4EDE2', tint: '#DDEBC4' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
