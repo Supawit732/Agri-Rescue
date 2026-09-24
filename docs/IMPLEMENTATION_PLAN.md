@@ -194,7 +194,7 @@ price = max(5, round(market_price * (0.3 + 0.7 * freshness) * gradeFactor))
 
 ### การ push
 - เปิด draft PR ทันทีหลัง commit แรกของ phase
-- push ทุกครั้งที่ commit และ npm test, lint, build ผ่าน ไม่ต้องรอจบ phase; ถ้างานยังไม่เสร็จแต่ test ผ่าน ให้ commit เป็น "wip(...)" แล้ว push อย่างน้อยทุก ~30 นาทีของการทำงาน
+- push ทุกครั้งที่ commit และ npm test, lint, build ผ่าน ไม่ต้องรอจบ phase; ฝั่ง mobile รัน `npm run build` (`expo export` web+ios) ด้วยเมื่อแก้แอป; ถ้างานยังไม่เสร็จแต่ test ผ่าน ให้ commit เป็น "wip(...)" แล้ว push อย่างน้อยทุก ~30 นาทีของการทำงาน
 - ห้าม push commit ที่ test ไม่ผ่าน, ห้าม force-push, ห้าม push หรือ merge เข้า main เอง
 - ห้าม commit .env, .env.test หรือไฟล์ที่มีรหัสผ่าน
 - ถ้า push ไม่สำเร็จ ให้หยุดแล้วรายงาน error

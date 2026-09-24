@@ -9,8 +9,9 @@
     "expo-font": "~57.0.4",
     "expo-image-manipulator": "~57.0.19",
     "expo-image-picker": "~57.0.19",
+    "expo-linear-gradient": "~57.0.2",
     "expo-linking": "~57.0.10",
-    "expo-location": "~19.0.7",
+    "expo-location": "~57.0.19",
     "expo-router": "~57.0.22",
     "expo-secure-store": "~57.0.4",
     "expo-splash-screen": "~57.0.9",
@@ -24,7 +25,7 @@
     "react-native-reanimated": "4.5.1",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
-    "react-native-svg": "^15.15.5",
+    "react-native-svg": "15.15.4",
     "react-native-web": "~0.21.0",
     "react-native-worklets": "0.10.1"
   },
@@ -36,7 +37,10 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "export:web": "expo export --platform web",
+    "export:ios": "expo export --platform ios",
+    "build": "npm run export:web && npm run export:ios"
   },
   "private": true
 }

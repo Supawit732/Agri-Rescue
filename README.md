@@ -141,3 +141,10 @@ npx expo start
 ```
 
 สแกน QR ด้วย Expo Go บนเครื่องที่อยู่เครือข่ายเดียวกับเครื่องที่รันคำสั่งนี้
+
+ตรวจว่าแอป bundle ได้ก่อน push (จับ dependency ที่ขาด เช่น `expo-linear-gradient`):
+
+```bash
+cd mobile
+npm run build   # expo export --platform web และ ios
+```
