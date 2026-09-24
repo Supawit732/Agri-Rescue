@@ -20,6 +20,7 @@
 | UI PR B (shops/follows/notifications) | เสร็จ | [#26](https://github.com/Supawit732/Agri-Rescue/pull/26) |
 | UI PR C (contact us / support) | เสร็จ | [#27](https://github.com/Supawit732/Agri-Rescue/pull/27) |
 | ปรับหน้าตลาด iPhone Air | กำลังทำ | สาขา `fix/market-iphone-air` |
+| Admin Console | กำลังทำ | [#31](https://github.com/Supawit732/Agri-Rescue/pull/31) |
 | 6.3–6.12 / UI PR D | ยังไม่ทำ | — |
 
 หมายเหตุ: โค้ดหน้าจอรอบวิ่งเก่ายังอยู่ใน repo เพื่อให้ test/delivery เดิมผ่าน — **ลบใน 6.11** ไม่ใช่ส่วนของ UX ปัจจุบัน (แท็บหลักเป็นตลาด/ขาย/คำสั่งซื้อ/แจ้งเตือน/บัญชี)
