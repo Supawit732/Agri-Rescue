@@ -36,10 +36,11 @@ export const defaultMarketFilters: MarketFilters = {
 export function countActiveFilters(f: MarketFilters): number {
   let n = 0;
   if (f.categoryId !== null) n += 1;
-  if (f.radiusKm !== 15) n += 1;
   if (f.priceMin !== '' || f.priceMax !== '') n += 1;
   if (f.maxHours !== null) n += 1;
-  if (f.sort !== 'urgent') n += 1;
+  // Default radius is not an active filter; changing it away from default counts.
+  if (f.radiusKm !== defaultMarketFilters.radiusKm) n += 1;
+  // Sort is never counted on the badge.
   return n;
 }
 

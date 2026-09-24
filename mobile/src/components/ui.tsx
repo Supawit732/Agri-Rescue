@@ -18,12 +18,18 @@ import { C } from '../theme';
 export function Screen({
   children,
   fullWidth,
+  skipTopSafeArea,
 }: {
   children: React.ReactNode;
   fullWidth?: boolean;
+  /** When true, do not apply SafeArea top inset (header owns insets.top). */
+  skipTopSafeArea?: boolean;
 }): React.ReactElement {
   return (
-    <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
+    <SafeAreaView
+      style={styles.screen}
+      edges={skipTopSafeArea === true ? ['left', 'right'] : ['top', 'left', 'right']}
+    >
       <View style={[styles.screenInner, fullWidth === true ? styles.screenInnerWide : null]}>{children}</View>
     </SafeAreaView>
   );

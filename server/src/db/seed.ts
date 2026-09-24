@@ -247,6 +247,7 @@ async function upsertLot(
   );
   const row = existing[0];
   if (row !== undefined) {
+    // Refresh open lots whose expires_at is already past (demo market empty).
     if (String(row.status) === 'open' && new Date(row.expires_at as Date).getTime() <= Date.now()) {
       await connection.query(
         `UPDATE harvest_lots SET status = 'open', expires_at = ?, created_at = UTC_TIMESTAMP() WHERE id = ?`,
