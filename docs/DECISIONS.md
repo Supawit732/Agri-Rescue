@@ -173,7 +173,7 @@ JWT เก็บ `sub`, `role`, `can_sell`, `can_buy`, `is_admin` (อายุ 
 | เลิก mode toggle | ไม่แสดงสลับโหมดบน TopBar ของแท็บ (capabilities จัดการที่บัญชี/โปรไฟล์) |
 | การจอง | `/lots/:id` → `/lots/:id/confirm` → `/lots/:id/success`; คำสั่งซื้อ `/orders/:id` |
 | `available_as` | response ที่ไม่ใช่เจ้าของล็อต: `['buy']` / `['donate']` / `['buy','donate']` ตามสถานะปัจจุบัน; ห้ามคืน `sale_mode` ดิบ; `sell_then_donate` ก่อนเปิดบริจาค = เหมือนขาย (`['buy']` เท่านั้น) |
-| พื้นที่รับของ | ยังไม่มีตำบล/อำเภอใน `plots` — แสดง `plot_name` + ระยะทาง; พิกัดเฉพาะเจ้าของออเดอร์/เจ้าของล็อต |
+| พื้นที่รับของ | แสดง `location_label` (ตำบล · อำเภอ ตาม D033) + ระยะทาง; พิกัดเฉพาะเจ้าของออเดอร์/เจ้าของล็อต |
 | OTP ผู้ขาย | เดโม: `POST /api/orders/:id/seller-confirm` (OTP+น้ำหนัก → delivered+impact); flow เต็ม 6.4 ยังจะขยายภายหลัง |
 | ปุ่ม UI | `paddingHorizontal ≥ 20`, `minWidth ≥ 160`; หน้าว่าง/ชวน login/สำเร็จ ใช้ `CtaStack` ให้ปุ่มกว้างเท่ากันเรียงแนวตั้ง; ข้อความปุ่มมี `textAlign: center` + padding กันชนขอบ |
 | ตกแต่งภาพ | เลื่อนไปขั้น **6.12** (หลัง 6.10) |
@@ -196,7 +196,7 @@ JWT เก็บ `sub`, `role`, `can_sell`, `can_buy`, `is_admin` (อายุ 
 | Endpoints | `GET /api/public/market`, `GET /api/public/lots/:id` — ไม่ต้อง token (Bearer เสริมได้) |
 | Rate limit | `GET /api/public/*` 60 ครั้ง/นาที/IP ด้วย in-memory store (process-local; รีสตาร์ทแล้วรีเซ็ต) |
 | ระยะทาง | ปัดเป็นขั้น 0.5 กม. (`Math.round(km * 2) / 2`); มี lat/lng → กรองรัศมี; ไม่มี → `distance_km = null` (เรียง urgent/cheap ได้; `sort=near` ถอยเป็น urgent) |
-| พื้นที่แปลง | คืน `plot_name` / `area_th`; **ห้าม** คืน lat/lng ของแปลงใน public API |
+| พื้นที่แปลง | คืน `plot_name` / `location_label` (ต./อ. ตาม D033); **ห้าม** คืน lat/lng ของแปลงใน public API |
 | ชื่ออังกฤษ | จาก `crops.name_en` (migration `014_crop_name_en`; ดู D025) |
 | รูปล็อต | ตาราง `lot_photos` (migration `015_lot_photos`) + ไฟล์ใน `server/uploads/` เสิร์ฟที่ `/uploads/...`; รูปจาก `POST /api/lots/assess-photo` (subject_match) บันทึกอัตโนมัติแล้วส่ง `photo_url` กลับ; ตอนสร้าง/แก้ล็อตถ้ามี `photo_url` จะ insert `lot_photos` และคง `harvest_lots.photo_url` เป็นรูปหลัก |
 | ขนาดรูป | ฝั่งแอปย่อด้วย `expo-image-manipulator` (ขอบยาว ≤1024, jpeg compress 0.8); เซิร์ฟเวอร์บังคับ ≤ 1MB หลัง decode (jpeg/webp/png) |
@@ -227,9 +227,9 @@ JWT เก็บ `sub`, `role`, `can_sell`, `can_buy`, `is_admin` (อายุ 
 | `crop_categories` | migration `017_crop_categories.sql` แบบย่อ 5 หมวด (ผลไม้/ผักใบ/ผักผล/สมุนไพร/หัว-ราก) ผูก `crops.category_id` — **ไม่ใช่** catalog เต็มของ 6.3 (ยังไม่มี parcel/storage/pending) |
 | Public market filters | เพิ่ม `category_id`, `price_min`, `price_max`, `max_hours` ต่อจาก `crop_id`/`sort`/`radius_km` ของ 6.2 |
 | รูปล็อต | ของ 6.2 แล้ว (migration 015) — PR A ใช้เฉพาะ UI การ์ด/placeholder |
-| ชื่อร้านบนการ์ด | ยังไม่มี `shops` (PR B) จึงแสดง `plot_name` + ระยะทาง ตาม D022 |
-| ปุ่ม PR B/C ในเมนู | ร้านที่ติดตาม / ติดต่อเรา **ยังไม่แสดง** จนกว่า PR B/C (เลี่ยงเมนูผี) |
-| Login mockup | ยังไม่มีปุ่ม LINE (PR D) และ "ลืมรหัสผ่าน" แสดงเป็นข้อความ disabled |
+| ชื่อร้านบนการ์ด | แสดง `shop_name` + `location_label` (D033) ตาม D022 |
+| ปุ่ม PR B/C ในเมนู | ร้านที่ติดตาม / ติดต่อเรา แสดงแล้ว (PR B/C merge) |
+| Login mockup | ยังไม่มีปุ่ม LINE Login (PR D) และ "ลืมรหัสผ่าน" แสดงเป็นข้อความ disabled |
 
 ## D027 — UI PR B: ร้านค้า · ติดตาม · แจ้งเตือนในแอป
 
@@ -279,7 +279,7 @@ JWT เก็บ `sub`, `role`, `can_sell`, `can_buy`, `is_admin` (อายุ 
 | รายการ | ค่า |
 |---|---|
 | เหตุผล | ห้ามโชว์ปุ่มที่กดแล้วไม่เกิดอะไรตอนเดโม |
-| ซ่อน | รูปโปรไฟล์เปลี่ยนรูป (ไม่มี upload), การ์ดตำแหน่งรับของในโปรไฟล์ (PATCH ไม่บันทึก lat/lng), ปุ่มแนบรูปใน contact-us (ยังไม่มี picker), ข้อความ “ลืมรหัสผ่าน?” (ไม่มี flow) |
+| ซ่อน | รูปโปรไฟล์เปลี่ยนรูป (ไม่มี upload), ปุ่มแนบรูปใน contact-us (ยังไม่มี picker), ข้อความ “ลืมรหัสผ่าน?” (ไม่มี flow) — **การ์ดตำแหน่งรับของกลับมาแล้วใน D033** |
 | เมนู | «แดชบอร์ด» แสดงเฉพาะ `can_sell` หรือ `is_admin`; «ร้านของฉัน» ไป `/shops/:id` |
 | ตลาด | ไม่ให้สิทธิ์ตำแหน่ง → ไม่บังคับ LocationPicker, เรียง urgent |
 | seed | `expires_at = now + hoursLeft`; refresh ล็อต open ที่หมดอายุ |
@@ -318,3 +318,27 @@ JWT เก็บ `sub`, `role`, `can_sell`, `can_buy`, `is_admin` (อายุ 
 | Org queue | แสดงเฉพาะ `application_kind = organization` |
 | Checklist | checkbox จริง (ไม่ใช่ Chip) |
 | i18n | `admin.tabOverview` ฯลฯ th/en |
+
+
+## D033 — ตำแหน่งรับของ + ป้ายตำบล/อำเภอ
+
+| รายการ | ค่า |
+|---|---|
+| เหตุผล | `PATCH /auth/profile` เดิมไม่บันทึก `lat/lng` — การ์ดตำแหน่งรับของในโปรไฟล์ถูกซ่อนไว้ (D030) |
+| Server | `PATCH /auth/profile` รับ `lat`+`lng` เป็นคู่; reverse-geocode เก็บ `users.subdistrict_th`/`district_th`; ถ้า `can_sell` อัปเดต `plots` ของผู้ใช้คนนั้นด้วยค่าเดียวกัน |
+| สร้างแปลง | `POST /api/plots` reverse-geocode เก็บป้ายตำบล/อำเภอของแปลง |
+| Migration | `023_location_labels.sql` — เพิ่ม `subdistrict_th`/`district_th` บน `plots` และ `users` |
+| แสดงผล | `location_label` = ตำบล · อำเภอ ถ้ามี ไม่งั้น `plot_name`; ใช้บนการ์ดตลาด, หน้าล็อต, หน้าร้าน |
+| ข้อมูลเก่า | `npm run backfill:location-labels` (ครั้งเดียว/รันซ้ำได้) เติมป้ายจาก lat/lng ที่มีอยู่ |
+| Reverse geocode | Nominatim `addressdetails=1` คีย์ `suburb`/`village`/… → ตำบล, `city_district`/`county`/… → อำเภอ |
+
+
+## D034 — 6.7 ปุ่มติดต่อหลัง “จองแล้ว”
+
+| รายการ | ค่า |
+|---|---|
+| เหตุผล | แผนเขียน “หลังชำระเงิน” แต่ยังไม่มีขั้น 6.5 — ใช้เงื่อนไข **จองแล้ว** (`status ≠ cancelled`) แทน |
+| API | `GET /api/orders/:id` คืน `contact: { name, phone, line_id }` ของอีกฝ่าย **เฉพาะเมื่อสั่งซื้อนี้มีอยู่จริงและไม่ถูกยกเลิก**; ก่อนจองไม่มี order อยู่แล้ว และ market/public **ห้าม** คืนเบอร์/LINE อยู่แล้ว |
+| UI | หน้ารายละเอียดคำสั่งซื้อฝั่งผู้ซื้อ/ผู้ขาย: ปุ่ม `tel:` และ LINE (`https://line.me/ti/p/~{line_id}`) ถ้ามี `line_id` |
+| บริจาค | เงื่อนไขเดียวกับขาย (จองแล้ว) — ยังไม่แยก “ยืนยันนัดรับ” เพราะยังไม่มี flow นั้น |
+| Test | order detail หลังจองมี `contact`; cancelled → `contact: null`; raw market ไม่มี `"phone"` |

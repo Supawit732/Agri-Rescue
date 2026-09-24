@@ -6,6 +6,7 @@ import { haversineKm } from '../domain/geo';
 import { remainingLotKg } from '../domain/lotInventory';
 import type { ProduceGrade } from '../domain/pricing';
 import { availableAs, lotAcceptsDonation, lotPricePerKg } from '../domain/sellerPricing';
+import { locationDisplayLabel } from '../geo/locationLabel';
 import { asyncHandler } from '../http/asyncHandler';
 import { HttpError } from '../http/errors';
 import { requireAuth, requireCapability } from '../middleware/auth';
@@ -43,13 +44,16 @@ interface MarketRow extends RowDataPacket {
   plot_name: string;
   area_rai: number;
   farmer_name: string;
+  subdistrict_th: string | null;
+  district_th: string | null;
 }
 
 const MARKET_LOT_SELECT = `SELECT h.id, h.weight_kg, h.split_allowed, h.min_order_kg, h.order_step_kg,
               h.grade, h.ripeness, h.allow_donation, h.donation_audience, h.photo_url,
               h.start_price_per_kg, h.floor_price_per_kg, h.sale_mode, h.donation_opened, h.expires_at,
               c.name_th AS crop_name_th, c.name_en AS crop_name_en, c.base_shelf_days,
-              p.lat, p.lng, p.name AS plot_name, p.area_rai, u.name AS farmer_name,
+              p.lat, p.lng, p.name AS plot_name, p.area_rai, p.subdistrict_th, p.district_th,
+              u.name AS farmer_name,
               COALESCE((
                 SELECT SUM(o.quantity_kg) FROM orders o
                 WHERE o.lot_id = h.id AND o.status IN ('reserved', 'picked', 'delivered')
@@ -87,6 +91,9 @@ function presentBuyerLot(
   price_per_kg: number | null;
   lat: number;
   lng: number;
+  subdistrict_th: string | null;
+  district_th: string | null;
+  location_label: string | null;
 } {
   const hoursLeft = (new Date(row.expires_at).getTime() - now) / (60 * 60 * 1000);
   const saleMode = String(row.sale_mode);
@@ -138,6 +145,9 @@ function presentBuyerLot(
     // Plot coords kept for authenticated booking maps (owners/buyers) — public API never returns these.
     lat: plotLat,
     lng: plotLng,
+    subdistrict_th: row.subdistrict_th ?? null,
+    district_th: row.district_th ?? null,
+    location_label: locationDisplayLabel(row.subdistrict_th, row.district_th, row.plot_name),
   };
 }
 

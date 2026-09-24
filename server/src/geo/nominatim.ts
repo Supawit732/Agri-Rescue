@@ -5,6 +5,8 @@ export const NOMINATIM_TIMEOUT_MS = 5000;
 
 interface CacheEntry {
   displayName: string | null;
+  subdistrictTh: string | null;
+  districtTh: string | null;
   expiresAt: number;
 }
 
@@ -33,21 +35,41 @@ async function waitForSlot(): Promise<void> {
   lastRequestAt = Date.now();
 }
 
+function pickAddressString(
+  address: Record<string, unknown> | undefined,
+  keys: string[],
+): string | null {
+  if (!address) return null;
+  for (const key of keys) {
+    const v = address[key];
+    if (typeof v === 'string' && v.trim() !== '') {
+      return v.trim();
+    }
+  }
+  return null;
+}
+
+export interface ReverseGeocodeResult {
+  displayName: string | null;
+  subdistrictTh: string | null;
+  districtTh: string | null;
+}
+
 /**
  * Reverse-geocode via Nominatim with 24h cache and ≤1 request/second.
- * Returns null displayName when the upstream call fails.
+ * Also extracts ตำบล/อำเภอ (tambon/amphoe) when addressdetails is present.
  */
-export async function reverseGeocode(lat: number, lng: number): Promise<{ displayName: string | null }> {
+export async function reverseGeocode(lat: number, lng: number): Promise<ReverseGeocodeResult> {
   const key = cacheKey(lat, lng);
   const hit = cache.get(key);
   if (hit !== undefined && hit.expiresAt > Date.now()) {
-    return { displayName: hit.displayName };
+    return { displayName: hit.displayName, subdistrictTh: hit.subdistrictTh, districtTh: hit.districtTh };
   }
 
   const run = chain.then(async () => {
     const again = cache.get(key);
     if (again !== undefined && again.expiresAt > Date.now()) {
-      return { displayName: again.displayName };
+      return { displayName: again.displayName, subdistrictTh: again.subdistrictTh, districtTh: again.districtTh };
     }
     await waitForSlot();
 
@@ -59,7 +81,7 @@ export async function reverseGeocode(lat: number, lng: number): Promise<{ displa
       url.searchParams.set('lat', String(lat));
       url.searchParams.set('lon', String(lng));
       url.searchParams.set('zoom', '18');
-      url.searchParams.set('addressdetails', '0');
+      url.searchParams.set('addressdetails', '1');
 
       const response = await fetch(url, {
         signal: controller.signal,
@@ -71,14 +93,41 @@ export async function reverseGeocode(lat: number, lng: number): Promise<{ displa
       if (!response.ok) {
         throw new Error(`Nominatim status ${response.status}`);
       }
-      const body = (await response.json()) as { display_name?: unknown };
+      const body = (await response.json()) as {
+        display_name?: unknown;
+        address?: Record<string, unknown>;
+      };
       const displayName = typeof body.display_name === 'string' ? body.display_name : null;
-      cache.set(key, { displayName, expiresAt: Date.now() + NOMINATIM_CACHE_TTL_MS });
-      return { displayName };
+      const subdistrictTh = pickAddressString(body.address, [
+        'suburb',
+        'village',
+        'town',
+        'neighbourhood',
+        'quarter',
+      ]);
+      const districtTh = pickAddressString(body.address, [
+        'city_district',
+        'city',
+        'county',
+        'state_district',
+        'province',
+      ]);
+      cache.set(key, {
+        displayName,
+        subdistrictTh,
+        districtTh,
+        expiresAt: Date.now() + NOMINATIM_CACHE_TTL_MS,
+      });
+      return { displayName, subdistrictTh, districtTh };
     } catch (error) {
       console.warn('Nominatim reverse geocode failed', error);
-      cache.set(key, { displayName: null, expiresAt: Date.now() + NOMINATIM_CACHE_TTL_MS });
-      return { displayName: null };
+      cache.set(key, {
+        displayName: null,
+        subdistrictTh: null,
+        districtTh: null,
+        expiresAt: Date.now() + NOMINATIM_CACHE_TTL_MS,
+      });
+      return { displayName: null, subdistrictTh: null, districtTh: null };
     } finally {
       clearTimeout(timer);
     }

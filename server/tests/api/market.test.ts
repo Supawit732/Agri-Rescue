@@ -92,6 +92,7 @@ describe('market', () => {
     expect(detailBefore.status).toBe(200);
     expect(detailBefore.body.lot.available_as).toEqual(['buy']);
     expect(detailBefore.body.lot.plot_name).toBe('แปลงทดสอบ');
+    expect(detailBefore.body.lot.location_label).toBe('แปลงทดสอบ');
     expect(detailBefore.body.lot.sale_mode).toBeUndefined();
     expect(JSON.stringify(detailBefore.body)).not.toContain('sell_then_donate');
 

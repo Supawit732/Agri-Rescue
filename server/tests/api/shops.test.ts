@@ -31,11 +31,24 @@ describe('shops & follows', () => {
     expect(pub.body.shop.phone).toBeUndefined();
     expect(pub.body.shop.lat).toBeUndefined();
     expect(pub.body.shop.lng).toBeUndefined();
+    expect(pub.body.shop.location_label).toBeNull();
     expect(pub.body.shop.stats).toEqual({
       delivered_orders: expect.any(Number),
       followers: expect.any(Number),
       kg_saved: expect.any(Number),
     });
+  });
+
+  it('prefers subdistrict/district labels for location_label when present', async () => {
+    const farmer = await registerUser(app, { role: 'farmer', name: 'ร้านป้ายตำบล' });
+    await insertPlot(farmer.user.id, 13.662, 100.611, 'แปลงเดิม');
+    await pool.query(
+      `UPDATE plots SET subdistrict_th = 'คลองเตย', district_th = 'คลองเตย' WHERE farmer_id = ?`,
+      [farmer.user.id],
+    );
+    const pub = await request(app).get(`/api/shops/${farmer.user.id}`);
+    expect(pub.status).toBe(200);
+    expect(pub.body.shop.location_label).toBe('คลองเตย · คลองเตย');
   });
 
   it('follows once; duplicate is idempotent; guest cannot follow', async () => {

@@ -50,6 +50,8 @@ export interface User {
   line_id: string | null;
   lat: number | null;
   lng: number | null;
+  subdistrict_th?: string | null;
+  district_th?: string | null;
 }
 
 export interface AuthResponse {
@@ -286,6 +288,8 @@ export interface MarketLot {
   area_th?: string;
   subdistrict_th?: string | null;
   district_th?: string | null;
+  /** Preferred display: ตำบล/อำเภอ when present, else plot name. */
+  location_label?: string | null;
   area_rai?: number;
   shop_name?: string | null;
   farmer_id?: number;
@@ -392,6 +396,12 @@ export interface Order {
   expires_at?: string;
   distance_km?: number | null;
   viewer?: 'buyer' | 'seller';
+  location_label?: string | null;
+  contact?: {
+    name: string;
+    phone: string;
+    line_id: string | null;
+  } | null;
 }
 
 export interface Driver {

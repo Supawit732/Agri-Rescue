@@ -10,6 +10,7 @@ import {
   weeklyCapKg,
   type OrgStatus,
 } from '../domain/donorRules';
+import { reverseGeocode } from '../geo/nominatim';
 import { asyncHandler } from '../http/asyncHandler';
 import { HttpError } from '../http/errors';
 import { requireAuth, requireCapability, signAccessToken } from '../middleware/auth';
@@ -74,17 +75,25 @@ const profileSchema = z
     buyer_type: buyerTypeSchema.optional(),
     email: z.union([emailSchema, z.literal('')]).optional(),
     line_id: z.string().trim().min(1).max(64).nullable().optional(),
+    lat: z.number().gte(-90).lte(90).optional(),
+    lng: z.number().gte(-180).lte(180).optional(),
   })
   .refine(
     (body) =>
       body.can_sell === true ||
       body.can_buy === true ||
       body.line_id !== undefined ||
-      body.email !== undefined,
+      body.email !== undefined ||
+      body.lat !== undefined ||
+      body.lng !== undefined,
     {
       message: 'ไม่มีข้อมูลที่จะอัปเดต',
     },
-  );
+  )
+  .refine((body) => (body.lat === undefined) === (body.lng === undefined), {
+    message: 'ต้องส่ง lat และ lng คู่กัน',
+    path: ['lat'],
+  });
 
 interface UserRow extends RowDataPacket {
   id: number;
@@ -98,6 +107,8 @@ interface UserRow extends RowDataPacket {
   line_id: string | null;
   lat: number | null;
   lng: number | null;
+  subdistrict_th: string | null;
+  district_th: string | null;
   buyer_type: 'vendor' | 'shop' | 'charity' | null;
   charity_approved: number | boolean | null;
   donor_tier: 'volunteer' | 'trusted_volunteer' | 'verified_org' | null;
@@ -153,6 +164,8 @@ export interface PublicUser {
   line_id: string | null;
   lat: number | null;
   lng: number | null;
+  subdistrict_th: string | null;
+  district_th: string | null;
 }
 
 function parseJsonStringArray(raw: unknown): string[] {
@@ -215,11 +228,13 @@ export function toPublicUser(row: UserRow): PublicUser {
     line_id: row.line_id,
     lat: row.lat,
     lng: row.lng,
+    subdistrict_th: row.subdistrict_th ?? null,
+    district_th: row.district_th ?? null,
   };
 }
 
 const USER_SELECT = `SELECT u.id, u.name, u.phone, u.email, u.role, u.can_sell, u.can_buy, u.is_admin,
-                            u.line_id, u.lat, u.lng,
+                            u.line_id, u.lat, u.lng, u.subdistrict_th, u.district_th,
                             bp.buyer_type, bp.charity_approved, bp.donor_tier, bp.beneficiary_count,
                             bp.distribution_mode, bp.donation_suspended, bp.trusted_proof_count,
                             bp.org_status, bp.org_reject_reason, bp.org_name,
@@ -352,7 +367,7 @@ authRouter.post(
     }
     const [authRows] = await pool.query<UserRow[]>(
       `SELECT u.id, u.name, u.phone, u.email, u.role, u.can_sell, u.can_buy, u.is_admin,
-              u.line_id, u.lat, u.lng, u.password_hash,
+              u.line_id, u.lat, u.lng, u.subdistrict_th, u.district_th, u.password_hash,
               bp.buyer_type, bp.charity_approved, bp.donor_tier, bp.beneficiary_count,
               bp.distribution_mode, bp.donation_suspended, bp.trusted_proof_count,
               bp.org_status, bp.org_reject_reason, bp.org_name,
@@ -394,7 +409,8 @@ authRouter.patch(
       await connection.beginTransaction();
       const [rows] = await connection.query<UserRow[]>(
         `SELECT u.id, u.name, u.phone, u.email, u.role, u.can_sell, u.can_buy, u.is_admin,
-                u.line_id, u.lat, u.lng, bp.buyer_type, bp.charity_approved
+                u.line_id, u.lat, u.lng, u.subdistrict_th, u.district_th,
+                bp.buyer_type, bp.charity_approved
          FROM users u
          LEFT JOIN buyer_profiles bp ON bp.user_id = u.id
          WHERE u.id = ?
@@ -447,10 +463,31 @@ authRouter.patch(
         current.role === 'driver' || current.role === 'coordinator'
           ? current.role
           : primaryRole(canSell, canBuy);
+      let lat = current.lat === null || current.lat === undefined ? null : Number(current.lat);
+      let lng = current.lng === null || current.lng === undefined ? null : Number(current.lng);
+      let subdistrictTh = current.subdistrict_th ?? null;
+      let districtTh = current.district_th ?? null;
+      if (body.lat !== undefined && body.lng !== undefined) {
+        lat = body.lat;
+        lng = body.lng;
+        const geo = await reverseGeocode(body.lat, body.lng);
+        subdistrictTh = geo.subdistrictTh;
+        districtTh = geo.districtTh;
+      }
       await connection.query(
-        `UPDATE users SET can_sell = ?, can_buy = ?, email = ?, line_id = ?, role = ? WHERE id = ?`,
-        [canSell ? 1 : 0, canBuy ? 1 : 0, email, lineId, role, userId],
+        `UPDATE users
+         SET can_sell = ?, can_buy = ?, email = ?, line_id = ?, role = ?,
+             lat = ?, lng = ?, subdistrict_th = ?, district_th = ?
+         WHERE id = ?`,
+        [canSell ? 1 : 0, canBuy ? 1 : 0, email, lineId, role, lat, lng, subdistrictTh, districtTh, userId],
       );
+      // Seller pickup: keep plot coords/labels in sync with the profile location.
+      if (body.lat !== undefined && body.lng !== undefined && canSell) {
+        await connection.query(
+          `UPDATE plots SET lat = ?, lng = ?, subdistrict_th = ?, district_th = ? WHERE farmer_id = ?`,
+          [lat, lng, subdistrictTh, districtTh, userId],
+        );
+      }
       if (body.can_sell === true || (canSell && !current.can_sell)) {
         await ensureShop(userId, connection);
       }

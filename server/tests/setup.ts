@@ -1,9 +1,36 @@
 import { clearWeatherCache } from '../src/weather/openMeteo';
 import { pool } from '../src/db/pool';
 import { migrate } from '../src/db/migrate';
+import { resetNominatimState } from '../src/geo/nominatim';
 import { installWeatherSuccess } from './weatherMock';
 
 const TEST_DB = 'agri_rescue_test';
+
+/** Mock Nominatim so profile/plot reverse-geocode never hits the network. */
+function installGeoSuccess(): void {
+  global.fetch = jest.fn(async (input: unknown) => {
+    const url = String(input);
+    if (url.includes('nominatim.openstreetmap.org')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          display_name: 'คลองเตย, กรุงเทพมหานคร, ประเทศไทย',
+          address: {
+            suburb: 'คลองเตย',
+            city_district: 'คลองเตย',
+            city: 'กรุงเทพมหานคร',
+          },
+        }),
+      } as unknown as Response;
+    }
+    return {
+      ok: false,
+      status: 404,
+      json: async () => ({}),
+    } as unknown as Response;
+  }) as unknown as typeof fetch;
+}
 
 beforeAll(async () => {
   clearWeatherCache();
@@ -40,6 +67,8 @@ beforeAll(async () => {
 beforeEach(() => {
   clearWeatherCache();
   installWeatherSuccess();
+  resetNominatimState();
+  installGeoSuccess();
 });
 
 afterAll(async () => {
