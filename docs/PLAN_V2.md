@@ -5,7 +5,7 @@
 > ข้อกำหนดใน `docs/IMPLEMENTATION_PLAN.md` ยังใช้ทั้งหมด (ไม่มี FK/VIEW, bcryptjs, zod, test mock API ภายนอก, กฎการ push)
 > จุดที่แผนไม่ระบุ ให้เลือกทางที่ง่ายที่สุดและบันทึกใน `docs/DECISIONS.md`
 
-## สถานะ (อัปเดตหลัง merge #19)
+## สถานะ (อัปเดตหลัง merge #24 + UI PR A)
 
 | ขั้น | สถานะ | PR |
 |---|---|---|
@@ -15,8 +15,9 @@
 | 6.1d field errors + ฟอร์มบริจาค | เสร็จ | [#17](https://github.com/Supawit732/Agri-Rescue/pull/17) |
 | 6.1e แบ่งขายล็อต | เสร็จ | [#18](https://github.com/Supawit732/Agri-Rescue/pull/18) |
 | 6.1f โครงนำทาง | เสร็จ | [#19](https://github.com/Supawit732/Agri-Rescue/pull/19) |
-| 6.2 ตลาดสาธารณะ | กำลังทำ: public browse + lot_photos + ตัวกรอง/เรียง + i18n จาก #23 | [#24](https://github.com/Supawit732/Agri-Rescue/pull/24) |
-| 6.3–6.12 | ยังไม่ทำ | — |
+| 6.2 ตลาดสาธารณะ | เสร็จ | [#24](https://github.com/Supawit732/Agri-Rescue/pull/24) |
+| UI PR A (shell/market/profile/login) | กำลังทำ | [#25](https://github.com/Supawit732/Agri-Rescue/pull/25) |
+| 6.3–6.12 / UI PR B–D | ยังไม่ทำ | — |
 
 หมายเหตุ: โค้ดหน้าจอรอบวิ่งเก่ายังอยู่ใน repo เพื่อให้ test/delivery เดิมผ่าน — **ลบใน 6.11** ไม่ใช่ส่วนของ UX ปัจจุบัน (แท็บหลักเป็นตลาด/ขาย/คำสั่งซื้อ/แจ้งเตือน/บัญชี)
 

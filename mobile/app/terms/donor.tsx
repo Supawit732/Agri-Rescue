@@ -14,7 +14,7 @@ export default function DonorTermsScreen(): React.ReactElement {
     <Screen>
       <StackHeader
         title={t.termsDonor.headerTitle}
-        onBack={() => router.replace(user !== null ? '/(tabs)/account' : '/(tabs)')}
+        onBack={() => router.replace(user !== null ? '/profile' : '/(tabs)')}
       />
       <Body>
         {user === null ? <Text style={styles.brand}>Agri Rescue</Text> : null}

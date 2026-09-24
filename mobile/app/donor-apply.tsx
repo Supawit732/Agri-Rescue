@@ -605,7 +605,7 @@ export default function DonorApplyScreen(): React.ReactElement {
 
   return (
     <Screen>
-      <StackHeader title={t.donorApply.title} onBack={() => router.replace('/(tabs)/account')} />
+      <StackHeader title={t.donorApply.title} onBack={() => router.replace('/profile')} />
       <Body scrollRef={scrollRef}>
         <ProgressBar step={step} total={totalSteps} />
         {user !== null ? (

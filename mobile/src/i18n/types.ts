@@ -47,6 +47,21 @@ export type Messages = {
     notifications: string;
     account: string;
   };
+  shell: {
+    nearMeRadius: string;
+    openAccountMenu: string;
+    myShop: string;
+    dashboard: string;
+    followedShops: string;
+    donate: string;
+    contactUs: string;
+    terms: string;
+    admin: string;
+    impact: string;
+    seller: string;
+    buyer: string;
+    viewEditProfile: string;
+  };
   market: {
     title: string;
     empty: string;
@@ -69,6 +84,7 @@ export type Messages = {
     badgeDonateOk: string;
     km: string;
     sortUrgent: string;
+    sortUrgentFull: string;
     sortNear: string;
     sortCheap: string;
     subWithLocation: string;
@@ -79,6 +95,24 @@ export type Messages = {
     searchCrop: string;
     allCrops: string;
     plotFallback: string;
+    nearYouCount: string;
+    radiusKm: string;
+    filterTitle: string;
+    filterReset: string;
+    filterCategory: string;
+    filterDistance: string;
+    filterPrice: string;
+    filterTimeLeft: string;
+    filterSort: string;
+    filterApply: string;
+    filterShowCount: string;
+    filterOpen: string;
+    priceMin: string;
+    priceMax: string;
+    hoursUnder24: string;
+    hoursUnder48: string;
+    ripeness: string;
+    shop: string;
   };
   lot: {
     title: string;
@@ -170,6 +204,12 @@ export type Messages = {
     noAccount: string;
     register: string;
     failed: string;
+    showPassword: string;
+    hidePassword: string;
+    forgotPassword: string;
+    browseGuest: string;
+    welcomeBack: string;
+    or: string;
   };
   sell: {
     title: string;
@@ -370,6 +410,27 @@ export type Messages = {
   profile: {
     title: string;
     pleaseLogin: string;
+    memberSince: string;
+    roleSeller: string;
+    roleSellerDesc: string;
+    roleBuyer: string;
+    roleBuyerDesc: string;
+    myShop: string;
+    myShopDesc: string;
+    contactTitle: string;
+    contactHint: string;
+    phone: string;
+    email: string;
+    emailPlaceholder: string;
+    pickupLocation: string;
+    changeLocation: string;
+    donorCardTitle: string;
+    donorWeekUsage: string;
+    donorUpgradeOrg: string;
+    save: string;
+    saved: string;
+    saveFailed: string;
+    changePhoto: string;
     rightsLabel: string;
     buyerTypeLabel: string;
     donorTierSuffix: string;
@@ -389,6 +450,7 @@ export type Messages = {
     applyAgain: string;
     lineId: string;
     lineOptional: string;
+    lineIdPlaceholder: string;
     saveLine: string;
     sectionEnableSell: string;
     sectionEnableBuy: string;

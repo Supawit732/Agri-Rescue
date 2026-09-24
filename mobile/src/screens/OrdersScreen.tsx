@@ -42,7 +42,7 @@ export default function OrdersScreen(): React.ReactElement {
         <EmptyState
           message={t.orders.enableBuy}
           ctaLabel={t.orders.goAccount}
-          onCta={() => router.push('/(tabs)/account')}
+          onCta={() => router.push('/profile')}
         />
       </Screen>
     );

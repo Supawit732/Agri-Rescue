@@ -136,6 +136,44 @@ describe('public market', () => {
     expect(filtered.body.lots.some((lot: { id: number }) => lot.id === mangoId)).toBe(true);
   });
 
+  it('filters by category_id, price range, and max_hours', async () => {
+    const farmer = await registerUser(app, { role: 'farmer' });
+    await pool.query(`DELETE FROM crop_categories WHERE id >= 100`);
+    await pool.query(
+      `INSERT INTO crop_categories (id, name_th, name_en, sort_order) VALUES (100, 'ทดสอบหมวด', 'Test cat', 99)`,
+    );
+    const catCrop = await insertCrop('พืชหมวดทดสอบ', 5, 40, 'Cat crop');
+    await pool.query(`UPDATE crops SET category_id = 100 WHERE id = ?`, [catCrop]);
+    const otherCrop = await insertCrop('พืชนอกหมวด', 5, 20, 'Other crop');
+    const plotId = await insertPlot(farmer.user.id, 13.662, 100.611, 'แปลงตัวกรอง');
+    await insertLot({
+      plotId,
+      cropId: catCrop,
+      expiresAt: new Date(Date.now() + 10 * 60 * 60 * 1000),
+    });
+    await insertLot({
+      plotId,
+      cropId: otherCrop,
+      expiresAt: new Date(Date.now() + 60 * 60 * 60 * 1000),
+    });
+
+    const byCat = await request(app).get('/api/public/market').query({ category_id: 100 });
+    expect(byCat.status).toBe(200);
+    expect(byCat.body.lots.every((lot: { crop_name_th: string }) => lot.crop_name_th === 'พืชหมวดทดสอบ')).toBe(true);
+
+    const under12h = await request(app).get('/api/public/market').query({ max_hours: 12 });
+    expect(under12h.status).toBe(200);
+    expect(under12h.body.lots.length).toBeGreaterThan(0);
+    expect(under12h.body.lots.every((lot: { hours_left: number }) => lot.hours_left <= 12)).toBe(true);
+
+    const priceBand = await request(app).get('/api/public/market').query({ price_min: 0, price_max: 5 });
+    expect(priceBand.status).toBe(200);
+    expect(priceBand.body.lots.every((lot: { price_per_kg: number | null }) => lot.price_per_kg !== null)).toBe(true);
+
+    const badRange = await request(app).get('/api/public/market').query({ price_min: 50, price_max: 10 });
+    expect(badRange.status).toBe(400);
+  });
+
   it('opens donation on sell_then_donate after donation_opened', async () => {
     const farmer = await registerUser(app, { role: 'farmer' });
     const cropId = await insertCrop('ส้มสาธารณะ', 5, 35);

@@ -80,7 +80,7 @@ export default function AdminScreen(): React.ReactElement {
 
   return (
     <Screen>
-      <StackHeader title={t.admin.title} onBack={() => router.replace('/(tabs)/account')} />
+      <StackHeader title={t.admin.title} onBack={() => router.replace('/profile')} />
       <Segmented
         options={[
           { key: 'orgs', label: t.admin.tabOrgs },

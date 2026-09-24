@@ -1,8 +1,21 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
+import {
+  useFonts as useAnuphan,
+  Anuphan_500Medium,
+  Anuphan_600SemiBold,
+  Anuphan_700Bold,
+} from '@expo-google-fonts/anuphan';
+import {
+  useFonts as usePlex,
+  IBMPlexSansThai_400Regular,
+  IBMPlexSansThai_500Medium,
+  IBMPlexSansThai_600SemiBold,
+} from '@expo-google-fonts/ibm-plex-sans-thai';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
 import { I18nProvider } from '../src/i18n';
 import { C } from '../src/theme';
@@ -11,8 +24,10 @@ export const unstable_settings = {
   initialRouteName: 'index',
 };
 
+void SplashScreen.preventAutoHideAsync().catch(() => undefined);
+
 /** Routes reachable without login (tabs invite internally). */
-const openRoots = new Set(['index', '(tabs)', 'login', 'register', 'terms', 'lots']);
+const openRoots = new Set(['index', '(tabs)', 'login', 'register', 'terms', 'lots', 'profile']);
 
 function AuthGate(): React.ReactElement {
   const { ready, user } = useAuth();
@@ -46,7 +61,7 @@ function AuthGate(): React.ReactElement {
     }
 
     if (root === 'admin' && !user.is_admin) {
-      router.replace('/(tabs)/account' as never);
+      router.replace('/profile' as never);
       return;
     }
 
@@ -93,11 +108,39 @@ function AuthGate(): React.ReactElement {
 }
 
 export default function RootLayout(): React.ReactElement {
+  const [anuphanLoaded] = useAnuphan({
+    Anuphan_500Medium,
+    Anuphan_600SemiBold,
+    Anuphan_700Bold,
+  });
+  const [plexLoaded] = usePlex({
+    IBMPlexSansThai_400Regular,
+    IBMPlexSansThai_500Medium,
+    IBMPlexSansThai_600SemiBold,
+  });
+  const fontsReady = anuphanLoaded && plexLoaded;
+  const [layoutReady, setLayoutReady] = useState(false);
+
+  useEffect(() => {
+    if (fontsReady && !layoutReady) {
+      setLayoutReady(true);
+      void SplashScreen.hideAsync().catch(() => undefined);
+    }
+  }, [fontsReady, layoutReady]);
+
+  if (!fontsReady) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: C.bg }}>
+        <ActivityIndicator size="large" color={C.leaf} />
+      </View>
+    );
+  }
+
   return (
     <SafeAreaProvider>
       <I18nProvider>
         <AuthProvider>
-          <StatusBar style="light" />
+          <StatusBar style="dark" />
           <AuthGate />
         </AuthProvider>
       </I18nProvider>
