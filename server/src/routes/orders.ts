@@ -35,7 +35,8 @@ import { HttpError } from '../http/errors';
 import { requireAuth, requireCapability } from '../middleware/auth';
 import { finalizeLotIfComplete, sumReservedQuantityKg, syncLotBookableStatus } from '../orders/lotInventoryService';
 import { notifyUser } from '../notifications/notificationService';
-import { locationDisplayLabel } from '../geo/locationLabel';
+import { locationDisplayLabelFor } from '../geo/locationLabel';
+import { requestLocale } from '../http/locale';
 
 export const ordersRouter = Router();
 
@@ -113,6 +114,8 @@ interface OrderDetailRow extends OrderRow {
   seller_line_id: string | null;
   plot_subdistrict_th: string | null;
   plot_district_th: string | null;
+  plot_subdistrict_en: string | null;
+  plot_district_en: string | null;
 }
 
 ordersRouter.use(requireAuth);
@@ -615,6 +618,7 @@ ordersRouter.get(
               c.name_th AS crop_name_th, c.name_en AS crop_name_en, h.grade, h.ripeness, h.photo_url, h.expires_at,
               p.name AS plot_name, p.lat AS plot_lat, p.lng AS plot_lng, p.farmer_id,
               p.subdistrict_th AS plot_subdistrict_th, p.district_th AS plot_district_th,
+              p.subdistrict_en AS plot_subdistrict_en, p.district_en AS plot_district_en,
               bu.lat AS buyer_lat, bu.lng AS buyer_lng,
               bu.name AS buyer_name, bu.phone AS buyer_phone, bu.line_id AS buyer_line_id,
               fu.name AS seller_name, fu.phone AS seller_phone, fu.line_id AS seller_line_id
@@ -668,11 +672,13 @@ ordersRouter.get(
         drop_otp: row.drop_otp,
         expires_at: new Date(row.expires_at).toISOString(),
         plot_name: row.plot_name,
-        location_label: locationDisplayLabel(
-          row.plot_subdistrict_th,
-          row.plot_district_th,
-          row.plot_name,
-        ),
+        location_label: locationDisplayLabelFor(requestLocale(req.headers['accept-language'], req.query.lang), {
+          subdistrict_th: row.plot_subdistrict_th,
+          district_th: row.plot_district_th,
+          subdistrict_en: row.plot_subdistrict_en,
+          district_en: row.plot_district_en,
+          fallback: row.plot_name,
+        }),
         lat: plotLat,
         lng: plotLng,
         distance_km: distanceKm,

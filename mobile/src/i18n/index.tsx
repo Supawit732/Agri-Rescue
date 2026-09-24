@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { loadLocale, saveLocale } from '../api/storage';
+import { setApiLang } from '../api/client';
 import en from './en';
 import { resolveMessageCode } from './serverMessageCodes';
 import th from './th';
@@ -48,6 +49,16 @@ export function formatDateTime(isoOrDate: string | Date, locale: Locale): string
   if (Number.isNaN(date.getTime())) {
     return String(isoOrDate);
   }
+  if (locale === 'en') {
+    // English: Gregorian year + English month names (explicit CE).
+    return new Intl.DateTimeFormat('en-GB', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(date);
+  }
   return new Intl.DateTimeFormat(intlLocale[locale], {
     dateStyle: 'medium',
     timeStyle: 'short',
@@ -58,6 +69,13 @@ export function formatDate(isoOrDate: string | Date, locale: Locale): string {
   const date = toDate(isoOrDate);
   if (Number.isNaN(date.getTime())) {
     return String(isoOrDate);
+  }
+  if (locale === 'en') {
+    return new Intl.DateTimeFormat('en-GB', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    }).format(date);
   }
   return new Intl.DateTimeFormat(intlLocale[locale], { dateStyle: 'medium' }).format(date);
 }
@@ -146,6 +164,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }): React
       const stored = await loadLocale();
       if (active && (stored === 'th' || stored === 'en')) {
         setLocaleState(stored);
+        setApiLang(stored);
       }
     })();
     return () => {
@@ -155,6 +174,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }): React
 
   const setLocale = useCallback((next: Locale) => {
     setLocaleState(next);
+    setApiLang(next);
     void saveLocale(next);
   }, []);
 

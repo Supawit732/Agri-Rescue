@@ -355,3 +355,18 @@ JWT เก็บ `sub`, `role`, `can_sell`, `can_buy`, `is_admin` (อายุ 
 | ไม่ทำ | parcel, batches คนขับ, แผนที่ในแอป |
 | seed:demo | 4 ล็อต reserved ของผู้ซื้อเดโมคนแรก ช่วงนัดคนละเวลาในวันเดียวกัน (ถ้าวันนี้เต็มจะใช้พรุ่งนี้) |
 
+## D036 — EN system i18n (crops, locations, notifications, dates)
+
+| รายการ | ค่า |
+|---|---|
+| ชื่อพืช | ใช้ helper `cropName(crop, locale)` ทุกหน้า; API คืน `name_th` + `name_en` |
+| หมวดพืช | `crop_categories.name_en` (มีจาก 017) ผ่าน `cropName` |
+| ตำบล/อำเภอ EN | migration `025_location_labels_en.sql` — `subdistrict_en`/`district_en` บน plots/users; Nominatim เรียกสองรอบ (`th` + `accept-language=en`); `locationDisplayLabelFor(locale, …)` |
+| ข้อมูลเก่า | `npm run backfill:location-labels` เติมทั้ง TH/EN |
+| แจ้งเตือน | params ใหม่เกิด `crop_id`/`crop_name_th`/`crop_name_en`; ฝั่ง client แปลงด้วย `cropName` (ข้อมูลเก่า `params.crop` ยังแสดงได้) |
+| วันที่ EN | `en-GB` ปี ค.ศ. + เดือนอังกฤษ; TH ใช้ `th-TH` (พ.ศ.) |
+| Client lang | `Accept-Language` จาก locale แอป (`setApiLang`) |
+| Scan | `npm run check:en-api` เรียก API ด้วย `lang=en` แล้ว fail ถ้ามีไทยใน field ระบบ |
+| seed ชื่อ | ร้าน/แปลง/ผู้ใช้สองภาษา เช่น `Somchai Farm (สวนลุงสมชาย)` — ข้อความที่ผู้ใช้พิมพ์เองไม่บังคับแปล |
+| ไม่ทำ | แปลชื่อร้าน/แปลง/ข้อความ support ที่ผู้ใช้กรอกเอง |
+

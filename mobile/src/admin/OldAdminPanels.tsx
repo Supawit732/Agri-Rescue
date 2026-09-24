@@ -761,9 +761,9 @@ export function DitMappingPanel(): React.ReactElement {
               const hits = searchHits[crop.id] ?? [];
               const matchLabel =
                 crop.dit_match_source === 'auto'
-                  ? 'auto'
+                  ? t.admin.ditMatchAuto
                   : crop.dit_match_source === 'manual'
-                    ? 'manual'
+                    ? t.admin.ditMatchManual
                     : t.admin.notMapped;
               const advancedOpen = editingId === crop.id || advancedOpenId === crop.id;
               return (

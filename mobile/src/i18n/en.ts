@@ -792,6 +792,8 @@ const en: Messages = {
     noUsablePrice: 'No usable price yet — {status}',
     outlierFlag: 'flag: outlier price — not used for estimates',
     notMapped: 'Not mapped',
+    ditMatchAuto: 'Auto',
+    ditMatchManual: 'Manual',
     estimatePrice: 'Using estimate price',
     advanced: 'Advanced',
     hideAdvanced: 'Hide advanced',

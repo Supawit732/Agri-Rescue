@@ -109,6 +109,8 @@ interface UserRow extends RowDataPacket {
   lng: number | null;
   subdistrict_th: string | null;
   district_th: string | null;
+  subdistrict_en: string | null;
+  district_en: string | null;
   buyer_type: 'vendor' | 'shop' | 'charity' | null;
   charity_approved: number | boolean | null;
   donor_tier: 'volunteer' | 'trusted_volunteer' | 'verified_org' | null;
@@ -168,6 +170,8 @@ export interface PublicUser {
   created_at: string | null;
   subdistrict_th: string | null;
   district_th: string | null;
+  subdistrict_en: string | null;
+  district_en: string | null;
 }
 
 function parseJsonStringArray(raw: unknown): string[] {
@@ -236,11 +240,14 @@ export function toPublicUser(row: UserRow): PublicUser {
         : new Date(row.created_at as string).toISOString(),
     subdistrict_th: row.subdistrict_th ?? null,
     district_th: row.district_th ?? null,
+    subdistrict_en: row.subdistrict_en ?? null,
+    district_en: row.district_en ?? null,
   };
 }
 
 const USER_SELECT = `SELECT u.id, u.name, u.phone, u.email, u.role, u.can_sell, u.can_buy, u.is_admin,
                             u.line_id, u.lat, u.lng, u.created_at, u.subdistrict_th, u.district_th,
+                            u.subdistrict_en, u.district_en,
                             bp.buyer_type, bp.charity_approved, bp.donor_tier, bp.beneficiary_count,
                             bp.distribution_mode, bp.donation_suspended, bp.trusted_proof_count,
                             bp.org_status, bp.org_reject_reason, bp.org_name,
@@ -416,6 +423,7 @@ authRouter.patch(
       const [rows] = await connection.query<UserRow[]>(
         `SELECT u.id, u.name, u.phone, u.email, u.role, u.can_sell, u.can_buy, u.is_admin,
                 u.line_id, u.lat, u.lng, u.subdistrict_th, u.district_th,
+                u.subdistrict_en, u.district_en,
                 bp.buyer_type, bp.charity_approved
          FROM users u
          LEFT JOIN buyer_profiles bp ON bp.user_id = u.id
@@ -473,25 +481,43 @@ authRouter.patch(
       let lng = current.lng === null || current.lng === undefined ? null : Number(current.lng);
       let subdistrictTh = current.subdistrict_th ?? null;
       let districtTh = current.district_th ?? null;
+      let subdistrictEn = current.subdistrict_en ?? null;
+      let districtEn = current.district_en ?? null;
       if (body.lat !== undefined && body.lng !== undefined) {
         lat = body.lat;
         lng = body.lng;
         const geo = await reverseGeocode(body.lat, body.lng);
         subdistrictTh = geo.subdistrictTh;
         districtTh = geo.districtTh;
+        subdistrictEn = geo.subdistrictEn;
+        districtEn = geo.districtEn;
       }
       await connection.query(
         `UPDATE users
          SET can_sell = ?, can_buy = ?, email = ?, line_id = ?, role = ?,
-             lat = ?, lng = ?, subdistrict_th = ?, district_th = ?
+             lat = ?, lng = ?, subdistrict_th = ?, district_th = ?,
+             subdistrict_en = ?, district_en = ?
          WHERE id = ?`,
-        [canSell ? 1 : 0, canBuy ? 1 : 0, email, lineId, role, lat, lng, subdistrictTh, districtTh, userId],
+        [
+          canSell ? 1 : 0,
+          canBuy ? 1 : 0,
+          email,
+          lineId,
+          role,
+          lat,
+          lng,
+          subdistrictTh,
+          districtTh,
+          subdistrictEn,
+          districtEn,
+          userId,
+        ],
       );
       // Seller pickup: keep plot coords/labels in sync with the profile location.
       if (body.lat !== undefined && body.lng !== undefined && canSell) {
         await connection.query(
-          `UPDATE plots SET lat = ?, lng = ?, subdistrict_th = ?, district_th = ? WHERE farmer_id = ?`,
-          [lat, lng, subdistrictTh, districtTh, userId],
+          `UPDATE plots SET lat = ?, lng = ?, subdistrict_th = ?, district_th = ?, subdistrict_en = ?, district_en = ? WHERE farmer_id = ?`,
+          [lat, lng, subdistrictTh, districtTh, subdistrictEn, districtEn, userId],
         );
       }
       if (body.can_sell === true || (canSell && !current.can_sell)) {

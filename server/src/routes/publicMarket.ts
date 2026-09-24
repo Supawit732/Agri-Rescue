@@ -8,9 +8,10 @@ import { remainingLotKg } from '../domain/lotInventory';
 import type { ProduceGrade } from '../domain/pricing';
 import { availableAs, lotAcceptsDonation, lotPricePerKg } from '../domain/sellerPricing';
 import { usedDonationKgThisWeek } from '../donors/donationService';
-import { locationDisplayLabel } from '../geo/locationLabel';
+import { locationDisplayLabelFor } from '../geo/locationLabel';
 import { asyncHandler } from '../http/asyncHandler';
 import { HttpError } from '../http/errors';
+import { requestLocale } from '../http/locale';
 import { optionalAuth } from '../middleware/optionalAuth';
 import { publicMarketRateLimit } from '../middleware/publicMarketRateLimit';
 import { lotPhotoPublicUrl } from '../storage/publicUploads';
@@ -61,6 +62,8 @@ interface PublicMarketRow extends RowDataPacket {
   plot_name: string;
   subdistrict_th: string | null;
   district_th: string | null;
+  subdistrict_en: string | null;
+  district_en: string | null;
 }
 
 const PUBLIC_LOT_SELECT = `SELECT h.id, h.crop_id, p.farmer_id, s.name AS shop_name,
@@ -69,7 +72,7 @@ const PUBLIC_LOT_SELECT = `SELECT h.id, h.crop_id, p.farmer_id, s.name AS shop_n
               h.start_price_per_kg, h.floor_price_per_kg, h.sale_mode, h.donation_opened,
               h.market_price_snapshot, h.expires_at,
               c.name_th AS crop_name_th, c.name_en AS crop_name_en, c.base_shelf_days,
-              p.lat, p.lng, p.name AS plot_name, p.subdistrict_th, p.district_th,
+              p.lat, p.lng, p.name AS plot_name, p.subdistrict_th, p.district_th, p.subdistrict_en, p.district_en,
               COALESCE((
                 SELECT SUM(o.quantity_kg) FROM orders o
                 WHERE o.lot_id = h.id AND o.status IN ('reserved', 'picked', 'delivered')
@@ -94,6 +97,8 @@ export interface PublicLotView {
   plot_name: string;
   subdistrict_th: string | null;
   district_th: string | null;
+  subdistrict_en?: string | null;
+  district_en?: string | null;
   location_label: string | null;
   photos: string[];
   photo_url: string | null;
@@ -169,6 +174,7 @@ function presentPublicLot(
   viewer: { lat: number; lng: number } | null,
   now: number,
   donor: ViewerDonorHints | null,
+  locale: 'th' | 'en',
 ): PublicLotView {
   const hoursLeft = (new Date(row.expires_at).getTime() - now) / (60 * 60 * 1000);
   const saleMode = String(row.sale_mode);
@@ -214,7 +220,15 @@ function presentPublicLot(
     plot_name: row.plot_name,
     subdistrict_th: row.subdistrict_th ?? null,
     district_th: row.district_th ?? null,
-    location_label: locationDisplayLabel(row.subdistrict_th, row.district_th, row.plot_name),
+    subdistrict_en: row.subdistrict_en ?? null,
+    district_en: row.district_en ?? null,
+    location_label: locationDisplayLabelFor(locale, {
+      subdistrict_th: row.subdistrict_th,
+      district_th: row.district_th,
+      subdistrict_en: row.subdistrict_en,
+      district_en: row.district_en,
+      fallback: row.plot_name,
+    }),
     photos: photoList,
     photo_url: photoList[0] ?? row.photo_url,
     weight_kg: weightKg,
@@ -369,8 +383,9 @@ publicMarketRouter.get(
     const donor =
       req.auth !== undefined ? await loadViewerDonor(req.auth.id) : null;
     const photoMap = await loadPhotosByLotIds(rows.map((r) => Number(r.id)));
+    const locale = requestLocale(req.headers['accept-language'], req.query.lang);
     let lots = rows
-      .map((row) => presentPublicLot(row, photoMap.get(Number(row.id)), viewer, now, donor))
+      .map((row) => presentPublicLot(row, photoMap.get(Number(row.id)), viewer, now, donor, locale))
       .filter((lot) => lot.hours_left > 0 && lot.remaining_kg > 0);
     if (hasCoords) {
       lots = lots.filter((lot) => lot.distance_km !== null && lot.distance_km <= radiusKm);
@@ -430,7 +445,8 @@ publicMarketRouter.get(
         : null;
     const donor = req.auth !== undefined ? await loadViewerDonor(req.auth.id) : null;
     const photoMap = await loadPhotosByLotIds([lotId]);
-    const lot = presentPublicLot(row, photoMap.get(lotId), viewer, Date.now(), donor);
+    const locale = requestLocale(req.headers['accept-language'], req.query.lang);
+    const lot = presentPublicLot(row, photoMap.get(lotId), viewer, Date.now(), donor, locale);
     if (lot.remaining_kg <= 0 || lot.hours_left <= 0) {
       throw new HttpError(404, 'NOT_FOUND', 'ไม่พบล็อต');
     }

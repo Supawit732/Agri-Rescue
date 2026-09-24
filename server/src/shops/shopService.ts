@@ -2,7 +2,7 @@ import type { PoolConnection } from 'mysql2/promise';
 import type { ResultSetHeader, RowDataPacket } from 'mysql2';
 import { pool } from '../db/pool';
 import { haversineKm } from '../domain/geo';
-import { locationDisplayLabel } from '../geo/locationLabel';
+import { locationDisplayLabelFor } from '../geo/locationLabel';
 
 export interface ShopRow {
   user_id: number;
@@ -21,7 +21,7 @@ export interface PublicShopView {
   description: string | null;
   location_label: string | null;
   distance_km: number | null;
-  common_crops: string[];
+  common_crops: Array<{ name_th: string; name_en: string | null }>;
   stats: {
     delivered_orders: number;
     followers: number;
@@ -147,8 +147,10 @@ export async function loadShopOwner(userId: number): Promise<RowDataPacket | nul
   const [rows] = await pool.query<RowDataPacket[]>(
     `SELECT s.user_id, s.name, s.avatar, s.cover, s.description,
             u.lat, u.lng, u.subdistrict_th AS user_subdistrict_th, u.district_th AS user_district_th,
+            u.subdistrict_en AS user_subdistrict_en, u.district_en AS user_district_en,
             p.name AS plot_name, p.lat AS plot_lat, p.lng AS plot_lng,
-            p.subdistrict_th AS plot_subdistrict_th, p.district_th AS plot_district_th
+            p.subdistrict_th AS plot_subdistrict_th, p.district_th AS plot_district_th,
+            p.subdistrict_en AS plot_subdistrict_en, p.district_en AS plot_district_en
      FROM shops s
      JOIN users u ON u.id = s.user_id
      LEFT JOIN plots p ON p.farmer_id = u.id
@@ -181,34 +183,43 @@ export async function shopStats(shopId: number): Promise<PublicShopView['stats']
   };
 }
 
-export async function commonCrops(shopId: number, limit = 3): Promise<string[]> {
+export async function commonCrops(
+  shopId: number,
+  limit = 3,
+): Promise<Array<{ name_th: string; name_en: string | null }>> {
   const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT c.name_th
+    `SELECT c.name_th, c.name_en
      FROM harvest_lots h
      JOIN plots p ON p.id = h.plot_id
      JOIN crops c ON c.id = h.crop_id
      WHERE p.farmer_id = ? AND h.deleted_at IS NULL
-     GROUP BY c.name_th, c.id
+     GROUP BY c.name_th, c.name_en, c.id
      ORDER BY COUNT(*) DESC, c.id ASC
      LIMIT ${Math.min(Math.max(limit, 1), 10)}`,
     [shopId],
   );
-  return rows.map((r) => String(r.name_th));
+  return rows.map((r) => ({
+    name_th: String(r.name_th),
+    name_en: r.name_en === null || r.name_en === '' ? null : String(r.name_en),
+  }));
 }
 
-function locationLabel(row: RowDataPacket): string | null {
+function locationLabel(row: RowDataPacket, locale: 'th' | 'en' = 'th'): string | null {
   const plotName = row.plot_name === null || row.plot_name === undefined ? null : String(row.plot_name);
-  return locationDisplayLabel(
-    row.plot_subdistrict_th ?? row.user_subdistrict_th,
-    row.plot_district_th ?? row.user_district_th,
-    plotName,
-  );
+  return locationDisplayLabelFor(locale, {
+    subdistrict_th: row.plot_subdistrict_th ?? row.user_subdistrict_th,
+    district_th: row.plot_district_th ?? row.user_district_th,
+    subdistrict_en: row.plot_subdistrict_en ?? row.user_subdistrict_en,
+    district_en: row.plot_district_en ?? row.user_district_en,
+    fallback: plotName,
+  });
 }
 
 export async function loadPublicShop(
   shopId: number,
   viewer: { lat: number; lng: number } | null,
   viewerId: number | null,
+  locale: 'th' | 'en' = 'th',
 ): Promise<PublicShopView | null> {
   const row = await loadShopOwner(shopId);
   if (row === null) {
@@ -232,7 +243,7 @@ export async function loadPublicShop(
     avatar: row.avatar === null || row.avatar === undefined ? null : String(row.avatar),
     cover: row.cover === null || row.cover === undefined ? null : String(row.cover),
     description: row.description === null || row.description === undefined ? null : String(row.description),
-    location_label: locationLabel(row),
+    location_label: locationLabel(row, locale),
     distance_km: distanceKm,
     common_crops: crops,
     stats,

@@ -52,6 +52,10 @@ function presentTicket(row: RowDataPacket): Record<string, unknown> {
     updated_at: new Date(row.updated_at as Date).toISOString(),
     user_name: row.user_name === undefined || row.user_name === null ? undefined : String(row.user_name),
     order_status: row.order_status === undefined || row.order_status === null ? undefined : String(row.order_status),
+    order_crop_th: row.order_crop_th == null ? undefined : String(row.order_crop_th),
+    order_crop_en:
+      row.order_crop_en == null || row.order_crop_en === '' ? undefined : String(row.order_crop_en),
+    order_qty_kg: row.order_qty_kg == null ? undefined : Number(row.order_qty_kg),
     order_summary:
       row.order_summary === undefined || row.order_summary === null ? undefined : String(row.order_summary),
   };
@@ -124,6 +128,7 @@ supportRouter.get(
               t.has_new_reply, t.created_at, t.updated_at,
               u.name AS user_name,
               o.status AS order_status,
+              c.name_th AS order_crop_th, c.name_en AS order_crop_en, o.quantity_kg AS order_qty_kg,
               CONCAT(COALESCE(c.name_th, ''), ' ', COALESCE(o.quantity_kg, ''), ' กก.') AS order_summary
        ${base}
        ORDER BY t.updated_at DESC, t.id DESC
@@ -246,6 +251,7 @@ supportRouter.get(
               t.has_new_reply, t.created_at, t.updated_at,
               u.name AS user_name,
               o.status AS order_status,
+              c.name_th AS order_crop_th, c.name_en AS order_crop_en, o.quantity_kg AS order_qty_kg,
               CONCAT(COALESCE(c.name_th, ''), ' ', COALESCE(o.quantity_kg, ''), ' กก.') AS order_summary
        FROM support_tickets t
        LEFT JOIN users u ON u.id = t.user_id

@@ -1,4 +1,4 @@
-import { locationDisplayLabel } from '../../src/geo/locationLabel';
+import { locationDisplayLabel, locationDisplayLabelFor } from '../../src/geo/locationLabel';
 
 describe('locationDisplayLabel', () => {
   it('joins subdistrict and district when present', () => {
@@ -17,5 +17,35 @@ describe('locationDisplayLabel', () => {
   it('returns null when nothing available', () => {
     expect(locationDisplayLabel(null, undefined, null)).toBeNull();
     expect(locationDisplayLabel(null, null, '')).toBeNull();
+  });
+});
+
+describe('locationDisplayLabelFor', () => {
+  const labels = {
+    subdistrict_th: 'คลองเตย',
+    district_th: 'กรุงเทพ',
+    subdistrict_en: 'Khlong Toei',
+    district_en: 'Bangkok',
+    fallback: 'Plot',
+  };
+
+  it('prefers English columns when locale=en', () => {
+    expect(locationDisplayLabelFor('en', labels)).toBe('Khlong Toei · Bangkok');
+  });
+
+  it('uses Thai columns when locale=th', () => {
+    expect(locationDisplayLabelFor('th', labels)).toBe('คลองเตย · กรุงเทพ');
+  });
+
+  it('falls back when English missing', () => {
+    expect(
+      locationDisplayLabelFor('en', {
+        subdistrict_th: 'คลองเตย',
+        district_th: 'กรุงเทพ',
+        subdistrict_en: null,
+        district_en: null,
+        fallback: 'Plot',
+      }),
+    ).toBe('คลองเตย · กรุงเทพ');
   });
 });

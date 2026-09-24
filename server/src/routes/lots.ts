@@ -320,18 +320,22 @@ lotsRouter.post(
       try {
         const followers = (await followerIds(farmerId)).filter((id) => id !== farmerId);
         const [cropRows] = await pool.query<RowDataPacket[]>(
-          `SELECT name_th FROM crops WHERE id = ?`,
+          `SELECT name_th, name_en FROM crops WHERE id = ?`,
           [body.crop_id],
         );
-        const cropName = String(cropRows[0]?.name_th ?? '');
         await notifyMany(
           followers,
           'shop_new_lot',
           'notif.shop_new_lot',
           {
             weight_kg: body.weight_kg,
-            crop: cropName,
+            crop_id: body.crop_id,
             lot_id: Number(lotResult.insertId),
+            crop_name_th: String(cropRows[0]?.name_th ?? ''),
+            crop_name_en:
+              cropRows[0]?.name_en == null || cropRows[0]?.name_en === ''
+                ? null
+                : String(cropRows[0]?.name_en),
           },
           () => `/lots/${lotResult.insertId}`,
         );

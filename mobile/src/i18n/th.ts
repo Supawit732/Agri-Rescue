@@ -792,6 +792,8 @@ const th: Messages = {
     noUsablePrice: 'ยังไม่มีราคาใช้ได้ — {status}',
     outlierFlag: 'flag: ราคาเพี้ยน — ไม่ใช้ประเมิน',
     notMapped: 'ยังไม่จับคู่',
+    ditMatchAuto: 'อัตโนมัติ',
+    ditMatchManual: 'manual',
     estimatePrice: 'ใช้ราคาประมาณ',
     advanced: 'ขั้นสูง',
     hideAdvanced: 'ซ่อนขั้นสูง',

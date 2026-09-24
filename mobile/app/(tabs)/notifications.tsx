@@ -45,7 +45,7 @@ function isYesterday(iso: string): boolean {
 
 export default function NotificationsTab(): React.ReactElement {
   const { user, api } = useAuth();
-  const { t, formatRelativeTime: relTime } = useI18n();
+  const { t, formatRelativeTime: relTime, cropName } = useI18n();
   const router = useRouter();
   const [filter, setFilter] = useState<FilterKey>('all');
   const [extraUnread, setExtraUnread] = useState(0);
@@ -124,6 +124,22 @@ export default function NotificationsTab(): React.ReactElement {
         today: t.confirmBooking.today,
         tomorrow: t.confirmBooking.tomorrow,
       });
+    }
+    // Prefer ids/structured fields over preformatted Thai crop names in params.
+    if (key === 'shop_new_lot') {
+      const cropTh =
+        typeof n.params.crop_name_th === 'string'
+          ? n.params.crop_name_th
+          : typeof n.params.crop === 'string'
+            ? n.params.crop
+            : '';
+      const cropEn =
+        typeof n.params.crop_name_en === 'string' && n.params.crop_name_en !== ''
+          ? n.params.crop_name_en
+          : null;
+      if (cropTh !== '' || cropEn != null) {
+        extra.crop = cropName({ name_th: cropTh || String(n.params.crop_id ?? ''), name_en: cropEn });
+      }
     }
     const bodyTemplate = withSlot;
     const category =

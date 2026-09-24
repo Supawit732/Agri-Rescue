@@ -38,10 +38,19 @@ interface RequestOptions {
   path: string;
   token?: string | null;
   body?: unknown;
+  /** App locale for system-data fields (Accept-Language). */
+  lang?: 'th' | 'en';
 }
 
-export async function apiRequest<T>({ method = 'GET', path, token, body }: RequestOptions): Promise<T> {
+/** Overridden by AuthContext from I18n locale when available. */
+let currentLang: 'th' | 'en' = 'th';
+export function setApiLang(lang: 'th' | 'en'): void {
+  currentLang = lang;
+}
+
+export async function apiRequest<T>({ method = 'GET', path, token, body, lang }: RequestOptions): Promise<T> {
   const headers: Record<string, string> = { Accept: 'application/json' };
+  headers['Accept-Language'] = lang ?? currentLang;
   if (body !== undefined) {
     headers['Content-Type'] = 'application/json';
   }

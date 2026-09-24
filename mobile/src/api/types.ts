@@ -538,7 +538,7 @@ export interface AdminOverview {
   };
   charts: {
     daily_kg: { date: string; kg: number }[];
-    by_crop: { name: string; kg: number }[];
+    by_crop: { name: string; name_en?: string | null; kg: number }[];
     top_shops: { name: string; kg: number }[];
   };
 }
@@ -607,7 +607,7 @@ export interface Shop {
   description: string | null;
   location_label: string | null;
   distance_km: number | null;
-  common_crops: string[];
+  common_crops: Array<{ name_th: string; name_en: string | null }>;
   stats: {
     delivered_orders: number;
     followers: number;
@@ -676,6 +676,9 @@ export interface SupportTicket {
   updated_at: string;
   user_name?: string;
   order_status?: string;
+  order_crop_th?: string;
+  order_crop_en?: string | null;
+  order_qty_kg?: number;
   order_summary?: string;
 }
 
