@@ -33,9 +33,10 @@ export const defaultMarketFilters: MarketFilters = {
   sort: 'urgent',
 };
 
-export function countActiveFilters(f: MarketFilters): number {
+export function countActiveFilters(f: MarketFilters, selectedCropId: number | null = null): number {
   let n = 0;
   if (f.categoryId !== null) n += 1;
+  if (selectedCropId !== null) n += 1;
   if (f.priceMin !== '' || f.priceMax !== '') n += 1;
   if (f.maxHours !== null) n += 1;
   // Default radius is not an active filter; changing it away from default counts.
@@ -71,7 +72,15 @@ export function MarketFilterSheet({
   onClose: () => void;
 }): React.ReactElement {
   const insets = useSafeAreaInsets();
-  const { t, formatNumber, cropName } = useI18n();
+  const { t, cropName } = useI18n();
+  const priceMinNum = filters.priceMin === '' ? null : Number(filters.priceMin);
+  const priceMaxNum = filters.priceMax === '' ? null : Number(filters.priceMax);
+  const priceInvalid =
+    priceMinNum !== null &&
+    priceMaxNum !== null &&
+    !Number.isNaN(priceMinNum) &&
+    !Number.isNaN(priceMaxNum) &&
+    priceMinNum > priceMaxNum;
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -142,7 +151,7 @@ export function MarketFilterSheet({
                 keyboardType="numeric"
                 value={filters.priceMin}
                 onChangeText={(text) => onChange({ ...filters, priceMin: text.replace(/[^\d.]/g, '') })}
-                style={styles.input}
+                style={[styles.input, priceInvalid ? styles.inputError : null]}
                 placeholder="0"
                 placeholderTextColor={C.mute}
               />
@@ -154,12 +163,13 @@ export function MarketFilterSheet({
                 keyboardType="numeric"
                 value={filters.priceMax}
                 onChangeText={(text) => onChange({ ...filters, priceMax: text.replace(/[^\d.]/g, '') })}
-                style={styles.input}
+                style={[styles.input, priceInvalid ? styles.inputError : null]}
                 placeholder="30"
                 placeholderTextColor={C.mute}
               />
             </View>
           </View>
+          {priceInvalid ? <Text style={styles.priceError}>{t.market.priceInvalid}</Text> : null}
 
           <Text style={styles.sectionLabel}>{t.market.filterTimeLeft}</Text>
           <View style={styles.chipWrap}>
@@ -170,7 +180,7 @@ export function MarketFilterSheet({
                   ? t.market.hoursUnder24
                   : opt.labelKey === 'under48'
                     ? t.market.hoursUnder48
-                    : t.market.allCrops;
+                    : t.market.allHours;
               return (
                 <Pressable
                   key={opt.labelKey}
@@ -210,11 +220,21 @@ export function MarketFilterSheet({
           })}
         </ScrollView>
         <View style={styles.footer}>
-          <Pressable accessibilityRole="button" onPress={onApply} style={styles.applyBtn}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              if (priceInvalid) {
+                return;
+              }
+              onApply();
+            }}
+            disabled={priceInvalid}
+            style={[styles.applyBtn, priceInvalid ? { opacity: 0.5 } : null]}
+          >
             <Text style={styles.applyText}>
               {resultCount === null
                 ? t.market.filterApply
-                : formatTemplate(t.market.filterShowCount, { count: formatNumber(resultCount) })}
+                : formatTemplate(t.market.filterShowCount, { count: String(resultCount) })}
             </Text>
           </Pressable>
         </View>
@@ -269,7 +289,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 14,
     fontFamily: fonts.bodySemi,
-    minHeight: 36,
+    minHeight: 44,
     textAlignVertical: 'center',
   },
   body: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 8, gap: 10 },
@@ -282,7 +302,7 @@ const styles = StyleSheet.create({
   },
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
-    minHeight: 36,
+    minHeight: 44,
     paddingHorizontal: 14,
     borderRadius: radius.chip,
     borderWidth: 1,
@@ -336,6 +356,8 @@ const styles = StyleSheet.create({
     backgroundColor: C.surface,
     fontFamily: fonts.body,
   },
+  inputError: { borderColor: C.chili, borderWidth: 1.5 },
+  priceError: { color: C.chili, fontSize: 12, fontFamily: fonts.body, marginTop: 4 },
   dash: { color: C.mute, marginBottom: 12 },
   radioRow: {
     flexDirection: 'row',

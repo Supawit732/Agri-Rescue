@@ -121,7 +121,9 @@ export default function ProfileScreen(): React.ReactElement {
           </View>
           <Text style={styles.name}>{user.name}</Text>
           <Text style={styles.muted}>
-            {formatTemplate(t.profile.memberSince, { date: formatDate(new Date()) })}
+            {formatTemplate(t.profile.memberSince, {
+              date: formatDate(user.created_at != null ? user.created_at : new Date()),
+            })}
           </Text>
         </View>
 
@@ -186,7 +188,8 @@ export default function ProfileScreen(): React.ReactElement {
             placeholder={user.name}
           />
           <PrimaryButton
-            label={t.shop.editShopName}
+            label={t.profile.saveShop}
+            block
             onPress={() => {
               void (async () => {
                 setBusy(true);
@@ -238,6 +241,12 @@ export default function ProfileScreen(): React.ReactElement {
             placeholder={t.profile.lineIdPlaceholder}
             autoCapitalize="none"
           />
+          <PrimaryButton
+            label={t.profile.saveContact}
+            block
+            onPress={() => void saveContact()}
+            loading={busy}
+          />
         </View>
 
         {/* Pickup location hidden for demo — PATCH /profile has no lat/lng save. */}
@@ -283,12 +292,7 @@ export default function ProfileScreen(): React.ReactElement {
           </View>
         </View>
 
-        <PrimaryButton
-          label={t.profile.save}
-          onPress={() => void saveContact()}
-          loading={busy}
-        />
-        <PrimaryButton label={t.account.impact} onPress={() => router.push('/impact')} />
+        <PrimaryButton label={t.account.impact} block onPress={() => router.push('/impact')} />
         <Pressable
           style={styles.logout}
           onPress={() => {

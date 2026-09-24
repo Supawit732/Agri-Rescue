@@ -1,22 +1,26 @@
-import { Link, Stack } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { StyleSheet } from 'react-native';
 
-import { Text, View } from '@/components/Themed';
+import { Text, View } from 'react-native';
+import { PrimaryButton, Screen } from '../src/components/ui';
 import { useI18n } from '../src/i18n';
+import { C, fonts } from '../src/theme';
 
 export default function NotFoundScreen() {
   const { t } = useI18n();
+  const router = useRouter();
   return (
-    <>
-      <Stack.Screen options={{ title: t.empty.notFoundTitle }} />
+    <Screen>
       <View style={styles.container}>
-        <Text style={styles.title}>{t.empty.notFoundBody}</Text>
-
-        <Link href="/" style={styles.link}>
-          <Text style={styles.linkText}>{t.empty.goHome}</Text>
-        </Link>
+        <Text style={styles.title}>{t.empty.notFoundTitle}</Text>
+        <Text style={styles.body}>{t.empty.notFoundBody}</Text>
+        <PrimaryButton
+          label={t.empty.goHome}
+          block
+          onPress={() => router.replace('/(tabs)')}
+        />
       </View>
-    </>
+    </Screen>
   );
 }
 
@@ -25,18 +29,20 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 20,
+    padding: 24,
+    gap: 12,
   },
   title: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 22,
+    fontWeight: '700',
+    color: C.ink,
+    fontFamily: fonts.titleBold,
   },
-  link: {
-    marginTop: 15,
-    paddingVertical: 15,
-  },
-  linkText: {
-    fontSize: 14,
-    color: '#2e78b7',
+  body: {
+    fontSize: 15,
+    color: C.mute,
+    fontFamily: fonts.body,
+    marginBottom: 8,
+    textAlign: 'center',
   },
 });

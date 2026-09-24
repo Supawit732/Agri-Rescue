@@ -10,9 +10,12 @@ import {
   type TextInputProps,
   type LayoutChangeEvent,
 } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { useI18n } from '../i18n';
-import { C } from '../theme';
+import { C, fonts } from '../theme';
 import { Chip } from './ui';
+
+export const INPUT_HEIGHT = 52;
 
 export type FieldErrors = Record<string, string>;
 
@@ -43,6 +46,8 @@ type FormFieldProps = {
   error?: string | null;
   onBlurField?: (name: string) => void;
   fieldRef?: (name: string, y: number) => void;
+  /** Show eye toggle inside the field (password fields). */
+  secureToggle?: boolean;
 } & TextInputProps;
 
 export function FormField({
@@ -53,9 +58,15 @@ export function FormField({
   fieldRef,
   onBlur,
   style,
+  secureToggle,
+  secureTextEntry,
   ...rest
 }: FormFieldProps): React.ReactElement {
+  const { t } = useI18n();
+  const [revealed, setRevealed] = useState(false);
   const hasError = error !== null && error !== undefined && error !== '';
+  const isSecure = secureToggle === true || secureTextEntry === true;
+  const hideText = isSecure && !revealed;
   return (
     <View
       style={styles.field}
@@ -64,16 +75,30 @@ export function FormField({
       }}
     >
       <Text style={styles.label}>{label}</Text>
-      <TextInput
-        style={[styles.input, hasError ? styles.inputError : null, style]}
-        placeholderTextColor={C.mute}
-        accessibilityState={hasError ? { selected: false } : undefined}
-        onBlur={(event) => {
-          onBlurField?.(name);
-          onBlur?.(event);
-        }}
-        {...rest}
-      />
+      <View style={[styles.inputWrap, hasError ? styles.inputError : null, style as object]}>
+        <TextInput
+          style={styles.inputInner}
+          placeholderTextColor={C.mute}
+          accessibilityState={hasError ? { selected: false } : undefined}
+          secureTextEntry={hideText}
+          onBlur={(event) => {
+            onBlurField?.(name);
+            onBlur?.(event);
+          }}
+          {...rest}
+        />
+        {secureToggle === true ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={revealed ? t.login.hidePassword : t.login.showPassword}
+            onPress={() => setRevealed((v) => !v)}
+            style={styles.eyeBtn}
+            hitSlop={4}
+          >
+            <Feather name={revealed ? 'eye-off' : 'eye'} size={20} color={C.mute} />
+          </Pressable>
+        ) : null}
+      </View>
       <FieldErrorText message={error} />
     </View>
   );
@@ -172,7 +197,12 @@ export function FileField({
           <Text style={styles.fileName} numberOfLines={1}>
             {file.name}
           </Text>
-          <Pressable accessibilityRole="button" onPress={() => onRemove(file.id)}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => onRemove(file.id)}
+            style={styles.removeHit}
+            hitSlop={4}
+          >
             <Text style={styles.remove}>{t.form.removeFile}</Text>
           </Pressable>
         </View>
@@ -254,16 +284,30 @@ export function useFieldScroll(): {
 
 const styles = StyleSheet.create({
   field: { marginBottom: 12 },
-  label: { fontSize: 13, fontWeight: '600', color: C.ink, marginBottom: 4 },
-  input: {
+  label: { fontSize: 13, fontWeight: '600', color: C.ink, marginBottom: 4, fontFamily: fonts.bodySemi },
+  inputWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
     borderWidth: 1,
-    borderColor: C.line,
-    borderRadius: 10,
+    borderColor: C.lineStrong,
+    borderRadius: 14,
     paddingHorizontal: 12,
-    paddingVertical: Platform.OS === 'web' ? 10 : 12,
+    minHeight: INPUT_HEIGHT,
+    backgroundColor: C.white,
+  },
+  inputInner: {
+    flex: 1,
+    minHeight: INPUT_HEIGHT - 4,
     fontSize: 16,
     color: C.ink,
-    backgroundColor: C.white,
+    fontFamily: fonts.body,
+    paddingVertical: Platform.OS === 'web' ? 10 : 12,
+  },
+  eyeBtn: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   inputError: { borderColor: C.chili, borderWidth: 1.5 },
   errorRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 4 },
@@ -293,7 +337,8 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   fileName: { flex: 1, color: C.ink, marginRight: 8 },
-  remove: { color: C.chili, fontWeight: '700' },
+  removeHit: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 },
+  remove: { color: C.chili, fontWeight: '700', fontFamily: fonts.bodySemi },
   addFile: {
     borderWidth: 1,
     borderColor: C.leaf,

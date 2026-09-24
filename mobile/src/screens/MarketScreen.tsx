@@ -217,7 +217,7 @@ function MarketCatalog(): React.ReactElement {
       .slice(0, 12);
   }, [crops, cropQuery]);
 
-  const activeCount = countActiveFilters(filters);
+  const activeCount = countActiveFilters(filters, selectedCropId);
   const sortLabel =
     filters.sort === 'near' ? t.market.sortNear : filters.sort === 'cheap' ? t.market.sortCheap : t.market.sortUrgent;
   const cardWidth = `${100 / columns - 1.5}%` as `${number}%`;
@@ -256,6 +256,10 @@ function MarketCatalog(): React.ReactElement {
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.cropScroll}>
         <Pressable
+          accessibilityRole="button"
+          accessibilityState={{
+            selected: filters.categoryId === null && selectedCropId === null,
+          }}
           style={[styles.chip, filters.categoryId === null && selectedCropId === null && styles.chipActive]}
           onPress={() => {
             setFilters((f) => ({ ...f, categoryId: null }));
@@ -276,6 +280,8 @@ function MarketCatalog(): React.ReactElement {
           return (
             <Pressable
               key={cat.id}
+              accessibilityRole="button"
+              accessibilityState={{ selected }}
               style={[styles.chip, selected && styles.chipActive]}
               onPress={() => {
                 setFilters((f) => ({ ...f, categoryId: selected ? null : cat.id }));
@@ -291,6 +297,8 @@ function MarketCatalog(): React.ReactElement {
           return (
             <Pressable
               key={crop.id}
+              accessibilityRole="button"
+              accessibilityState={{ selected }}
               style={[styles.chip, selected && styles.chipActive]}
               onPress={() => setSelectedCropId(selected ? null : crop.id)}
             >
@@ -306,19 +314,29 @@ function MarketCatalog(): React.ReactElement {
             count: data !== null ? formatNumber(data.length) : '—',
           })}
         </Text>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => {
-            setDraftFilters(filters);
-            setFilterOpen(true);
-          }}
-          style={styles.sortBtn}
-        >
-          <Text style={styles.sortBtnText}>
-            {t.market.filterSort}: {sortLabel}
-          </Text>
-          <Feather name="chevron-down" size={16} color={C.leaf} />
-        </Pressable>
+        <View style={styles.listHeaderActions}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setShowPicker(true)}
+            style={styles.sortBtn}
+          >
+            <Feather name="map-pin" size={16} color={C.leaf} />
+            <Text style={styles.sortBtnText}>{t.market.changeLocation}</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              setDraftFilters(filters);
+              setFilterOpen(true);
+            }}
+            style={styles.sortBtn}
+          >
+            <Text style={styles.sortBtnText}>
+              {t.market.filterSort}: {sortLabel}
+            </Text>
+            <Feather name="chevron-down" size={16} color={C.leaf} />
+          </Pressable>
+        </View>
       </View>
 
       {showPicker ? (
@@ -472,7 +490,7 @@ function MarketCatalog(): React.ReactElement {
         visible={filterOpen}
         filters={draftFilters}
         categories={categories}
-        resultCount={data?.length ?? null}
+        resultCount={null}
         onChange={setDraftFilters}
         onApply={() => {
           setFilters(draftFilters);
@@ -506,7 +524,14 @@ const styles = StyleSheet.create({
     borderRadius: radius.card,
   },
   enableBuyText: { color: C.soonFg, fontSize: 13, fontFamily: fonts.body },
-  enableBuyLink: { color: C.leaf, fontWeight: '700', marginTop: 6, fontFamily: fonts.bodySemi },
+  enableBuyLink: {
+    color: C.leaf,
+    fontWeight: '700',
+    marginTop: 6,
+    fontFamily: fonts.bodySemi,
+    minHeight: 44,
+    textAlignVertical: 'center',
+  },
   searchRow: { flexDirection: 'row', gap: 10, marginBottom: 10 },
   searchBox: {
     flex: 1,
@@ -546,7 +571,7 @@ const styles = StyleSheet.create({
   filterCountText: { color: C.white, fontSize: 11, fontWeight: '700' },
   cropScroll: { marginBottom: 8, flexGrow: 0 },
   chip: {
-    height: 36,
+    minHeight: 44,
     paddingHorizontal: 16,
     borderRadius: radius.chip,
     borderWidth: 1,
@@ -575,10 +600,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    height: 32,
+    minHeight: 44,
     paddingHorizontal: 10,
     borderRadius: 10,
   },
+  listHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   sortBtnText: { color: C.leaf, fontWeight: '600', fontSize: 14, fontFamily: fonts.bodySemi },
   grid: {
     flexDirection: 'row',

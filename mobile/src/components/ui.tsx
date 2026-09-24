@@ -13,7 +13,7 @@ import {
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useI18n } from '../i18n';
-import { C } from '../theme';
+import { C, fonts } from '../theme';
 
 export function Screen({
   children,
@@ -237,6 +237,7 @@ export function Chip({
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityState={{ selected }}
       onPress={onPress}
       style={[styles.chip, selected ? { backgroundColor: active, borderColor: active } : null]}
     >
@@ -264,6 +265,7 @@ export function Segmented({
           <Pressable
             key={option.key}
             accessibilityRole="button"
+            accessibilityState={{ selected }}
             onPress={() => onChange(option.key)}
             style={[styles.segment, selected ? styles.segmentActive : null]}
           >
@@ -320,26 +322,37 @@ export function SecondaryButton({
   onPress,
   disabled,
   block,
+  tone,
+  loading,
 }: {
   label: string;
   onPress: () => void;
   disabled?: boolean;
   block?: boolean;
+  tone?: 'leaf' | 'danger';
+  loading?: boolean;
 }): React.ReactElement {
+  const danger = tone === 'danger';
+  const isDisabled = disabled === true || loading === true;
   return (
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
-      disabled={disabled === true}
+      disabled={isDisabled}
       style={[
         styles.secondaryButton,
+        danger ? styles.secondaryDanger : null,
         block === true ? styles.buttonBlock : null,
-        disabled === true ? { opacity: 0.5 } : null,
+        isDisabled ? { opacity: 0.5 } : null,
       ]}
     >
-      <Text style={styles.secondaryButtonText} numberOfLines={2}>
-        {label}
-      </Text>
+      {loading === true ? (
+        <ActivityIndicator color={danger ? C.danger : C.leaf} />
+      ) : (
+        <Text style={[styles.secondaryButtonText, danger ? styles.secondaryDangerText : null]} numberOfLines={2}>
+          {label}
+        </Text>
+      )}
     </Pressable>
   );
 }
@@ -465,7 +478,11 @@ export function Body({
   scrollRef?: React.RefObject<ScrollView | null>;
 }): React.ReactElement {
   return (
-    <ScrollView ref={scrollRef} contentContainerStyle={styles.body}>
+    <ScrollView
+      ref={scrollRef}
+      contentContainerStyle={styles.body}
+      keyboardShouldPersistTaps="handled"
+    >
       {children}
     </ScrollView>
   );
@@ -497,13 +514,21 @@ const styles = StyleSheet.create({
   backBtn: { paddingHorizontal: 8, paddingVertical: 6, minWidth: 64 },
   backBtnSpacer: { minWidth: 64 },
   backBtnText: { color: C.white, fontWeight: '700', fontSize: 16 },
-  stackTitle: { flex: 1, color: C.white, fontSize: 17, fontWeight: '700', textAlign: 'center' },
+  stackTitle: {
+    flex: 1,
+    color: C.white,
+    fontSize: 17,
+    fontWeight: '700',
+    textAlign: 'center',
+    fontFamily: fonts.titleBold,
+  },
   promptTitle: {
     fontSize: 20,
     fontWeight: '800',
     color: C.ink,
     textAlign: 'center',
     paddingHorizontal: 8,
+    fontFamily: fonts.titleBold,
   },
   topBar: {
     flexDirection: 'row',
@@ -515,7 +540,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   topLeft: { flex: 1, minWidth: 0 },
-  topTitle: { color: C.white, fontSize: 18, fontWeight: '700' },
+  topTitle: { color: C.white, fontSize: 18, fontWeight: '700', fontFamily: fonts.titleBold },
   modeRow: { flexDirection: 'row', gap: 6, marginTop: 6 },
   modeChip: {
     paddingHorizontal: 10,
@@ -529,7 +554,14 @@ const styles = StyleSheet.create({
   topActions: { flexDirection: 'row', gap: 8, flexShrink: 0 },
   topLink: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.18)' },
   topLinkText: { color: C.white, fontWeight: '600', fontSize: 13 },
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: C.ink, marginBottom: 8, marginTop: 4 },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: C.ink,
+    marginBottom: 8,
+    marginTop: 4,
+    fontFamily: fonts.title,
+  },
   card: {
     backgroundColor: C.white,
     borderRadius: 14,
@@ -540,6 +572,7 @@ const styles = StyleSheet.create({
   },
   chip: {
     paddingHorizontal: 14,
+    minHeight: 44,
     paddingVertical: 8,
     borderRadius: 20,
     borderWidth: 1,
@@ -549,6 +582,8 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     maxWidth: '100%',
     flexShrink: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   chipText: { color: C.ink, fontWeight: '600', fontSize: 14, flexShrink: 1 },
   segmented: {
@@ -600,7 +635,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
     textAlign: 'center',
     paddingHorizontal: 4,
+    fontFamily: fonts.bodySemi,
   },
+  secondaryDanger: { borderColor: C.danger },
+  secondaryDangerText: { color: C.danger },
   ctaStack: {
     width: '100%',
     maxWidth: 320,
@@ -609,16 +647,18 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   field: { marginBottom: 12 },
-  fieldLabel: { color: C.ink, fontWeight: '600', marginBottom: 6 },
+  fieldLabel: { color: C.ink, fontWeight: '600', marginBottom: 6, fontFamily: fonts.bodySemi },
   input: {
     borderWidth: 1,
-    borderColor: C.line,
-    borderRadius: 10,
+    borderColor: C.lineStrong,
+    borderRadius: 14,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    minHeight: 52,
+    paddingVertical: 12,
     backgroundColor: C.white,
     color: C.ink,
     fontSize: 16,
+    fontFamily: fonts.body,
   },
   inputError: { borderColor: C.chili, borderWidth: 1.5 },
   fieldErrorRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 4 },

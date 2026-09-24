@@ -19,7 +19,6 @@ export default function LoginScreen(): React.ReactElement {
   const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
   const [identity, setIdentity] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const { errors, setErrors, setFieldError, applyServerFields } = useFieldErrors();
@@ -96,6 +95,7 @@ export default function LoginScreen(): React.ReactElement {
             <View style={styles.langToggle}>
               <Pressable
                 accessibilityRole="button"
+                accessibilityState={{ selected: locale === 'th' }}
                 onPress={() => setLocale('th')}
                 style={[styles.langBtn, locale === 'th' ? styles.langBtnOn : null]}
               >
@@ -103,6 +103,7 @@ export default function LoginScreen(): React.ReactElement {
               </Pressable>
               <Pressable
                 accessibilityRole="button"
+                accessibilityState={{ selected: locale === 'en' }}
                 onPress={() => setLocale('en')}
                 style={[styles.langBtn, locale === 'en' ? styles.langBtnOn : null]}
               >
@@ -143,25 +144,20 @@ export default function LoginScreen(): React.ReactElement {
             onBlurField={onBlurField}
             fieldRef={registerY}
             error={errors.password}
-            secureTextEntry={!showPassword}
+            secureToggle
             placeholder={t.login.password}
           />
-          <View style={styles.eyeRow}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={showPassword ? t.login.hidePassword : t.login.showPassword}
-              onPress={() => setShowPassword((v) => !v)}
-              hitSlop={8}
-            >
-              <Text style={styles.link}>
-                {showPassword ? t.login.hidePassword : t.login.showPassword}
-              </Text>
-            </Pressable>
-          </View>
           {formError !== null ? (
-            <Text style={styles.error}>{formError}</Text>
+            <Text style={styles.error} accessibilityRole="alert">
+              {formError}
+            </Text>
           ) : null}
-          <PrimaryButton label={t.login.submit} onPress={() => void onSubmit()} loading={submitting} />
+          <PrimaryButton
+            label={t.login.submit}
+            block
+            onPress={() => void onSubmit()}
+            loading={submitting}
+          />
 
           <View style={styles.footer}>
             <Text style={styles.footerText}>{t.login.noAccount} </Text>
@@ -210,7 +206,6 @@ const styles = StyleSheet.create({
     color: C.ink,
   },
   tagline: { fontSize: 15, color: C.mute, lineHeight: 22, fontFamily: fonts.body },
-  eyeRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
   muted: { fontSize: 14, color: C.mute, fontFamily: fonts.body },
   link: { color: C.leaf, fontWeight: '600', fontFamily: fonts.bodySemi, fontSize: 14 },
   error: { color: C.danger, marginBottom: 8, fontFamily: fonts.body },

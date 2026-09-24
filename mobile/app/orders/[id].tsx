@@ -2,13 +2,14 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Linking, StyleSheet, Text, View } from 'react-native';
 import { ApiError } from '../../src/api/client';
+import { FormField, useFieldErrors, useFieldScroll } from '../../src/components/form';
 import {
   Badge,
   Body,
   Card,
   DataState,
-  Field,
   PrimaryButton,
+  SecondaryButton,
   SectionTitle,
   SubScreen,
 } from '../../src/components/ui';
@@ -31,6 +32,8 @@ export default function OrderDetailScreen(): React.ReactElement {
   const [banner, setBanner] = useState<string | null>(null);
   const [otpInput, setOtpInput] = useState('');
   const [weightInput, setWeightInput] = useState('');
+  const { errors, setErrors, setFieldError } = useFieldErrors();
+  const { scrollRef, registerY, scrollToField } = useFieldScroll();
 
   const cancel = (orderIdToCancel: number): void => {
     Alert.alert(t.orderDetail.cancelTitle, t.orderDetail.cancelBody, [
@@ -88,12 +91,16 @@ export default function OrderDetailScreen(): React.ReactElement {
 
           const confirmSeller = (): void => {
             const weight = Number(weightInput);
+            const nextErrors: Record<string, string> = {};
             if (!/^\d{4}$/.test(otpInput.trim())) {
-              setBanner(t.orderDetail.otpRequired);
-              return;
+              nextErrors.otp = t.orderDetail.otpRequired;
             }
             if (!(weight > 0)) {
-              setBanner(t.orderDetail.weightRequired);
+              nextErrors.weight = t.orderDetail.weightRequired;
+            }
+            setErrors(nextErrors);
+            if (Object.keys(nextErrors).length > 0) {
+              scrollToField(Object.keys(nextErrors)[0] ?? null);
               return;
             }
             setBusy(true);
@@ -118,8 +125,26 @@ export default function OrderDetailScreen(): React.ReactElement {
             })();
           };
 
+          const nextAction =
+            isSellerView && order.status === 'reserved'
+              ? t.orderDetail.confirmDelivery
+              : active && !isSellerView
+                ? t.orderDetail.otpLabel
+                : t.orderDetail.step1;
+
           return (
-            <Body>
+            <Body scrollRef={scrollRef}>
+              <View style={styles.priorityBox}>
+                <Badge
+                  text={t.status[order.status] ?? order.status}
+                  fg={order.status === 'cancelled' ? C.mute : order.status === 'expired' ? C.urgentFg : C.leaf}
+                  bg={order.status === 'cancelled' ? '#E9ECE6' : order.status === 'expired' ? C.urgentBg : C.leafSoft}
+                />
+                <Text style={styles.nextAction}>{nextAction}</Text>
+                {hours !== null && tone !== null ? (
+                  <Badge text={formatCountdown(hours, t.countdown)} fg={tone.fg} bg={tone.bg} />
+                ) : null}
+              </View>
               {banner !== null ? <Text style={styles.banner}>{banner}</Text> : null}
               <Text style={styles.meta}>
                 {formatTemplate(t.orderDetail.orderMeta, { id: order.id })}
@@ -167,7 +192,7 @@ export default function OrderDetailScreen(): React.ReactElement {
                   </Text>
                 ) : null}
                 {lat !== null && lng !== null ? (
-                  <PrimaryButton
+                  <SecondaryButton
                     label={t.orderDetail.openMaps}
                     onPress={() => void Linking.openURL(googleMapsUrl(lat, lng))}
                   />
@@ -227,21 +252,36 @@ export default function OrderDetailScreen(): React.ReactElement {
                   <SectionTitle>{t.orderDetail.sectionSellerConfirm}</SectionTitle>
                   <Card>
                     <Text style={styles.muted}>{t.orderDetail.sellerConfirmHint}</Text>
-                    <Field
+                    <FormField
                       label={t.orderDetail.otpField}
+                      name="otp"
                       value={otpInput}
-                      onChangeText={setOtpInput}
+                      onChangeText={(text) => {
+                        setOtpInput(text);
+                        setFieldError('otp', null);
+                      }}
+                      onBlurField={() => undefined}
+                      fieldRef={registerY}
+                      error={errors.otp}
                       keyboardType="number-pad"
                     />
-                    <Field
+                    <FormField
                       label={t.orderDetail.actualWeight}
+                      name="weight"
                       value={weightInput}
-                      onChangeText={setWeightInput}
+                      onChangeText={(text) => {
+                        setWeightInput(text);
+                        setFieldError('weight', null);
+                      }}
+                      onBlurField={() => undefined}
+                      fieldRef={registerY}
+                      error={errors.weight}
                       keyboardType="numeric"
                       placeholder={String(qty)}
                     />
                     <PrimaryButton
                       label={t.orderDetail.confirmDelivery}
+                      block
                       loading={busy}
                       onPress={confirmSeller}
                     />
@@ -250,9 +290,10 @@ export default function OrderDetailScreen(): React.ReactElement {
               ) : null}
 
               {canBuyerCancel ? (
-                <PrimaryButton
+                <SecondaryButton
+                  tone="danger"
                   label={t.orderDetail.cancelBooking}
-                  tone="chili"
+                  block
                   loading={busy}
                   onPress={() => cancel(order.id)}
                 />
@@ -268,6 +309,19 @@ export default function OrderDetailScreen(): React.ReactElement {
 const styles = StyleSheet.create({
   banner: { color: C.chili, marginBottom: 10, fontWeight: '600' },
   meta: { color: C.mute, fontSize: 12, marginBottom: 4 },
+  priorityBox: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.line,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 12,
+  },
+  nextAction: { flex: 1, minWidth: 120, fontWeight: '600', color: C.ink, fontSize: 14 },
   title: { fontSize: 18, fontWeight: '800', color: C.ink, marginBottom: 6 },
   line: { color: C.ink, marginBottom: 4 },
   muted: { color: C.mute, marginTop: 6, lineHeight: 20 },

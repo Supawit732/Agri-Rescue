@@ -237,7 +237,7 @@ const styles = StyleSheet.create({
   search: { flex: 1, fontSize: 15, color: C.ink, fontFamily: fonts.body },
   filters: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
-    height: 34,
+    height: 44,
     paddingHorizontal: 12,
     borderRadius: 17,
     borderWidth: 1,

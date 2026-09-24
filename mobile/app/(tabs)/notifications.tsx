@@ -4,9 +4,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { AppNotification, NotificationFilter } from '../../src/api/types';
 import { DataState, PrimaryButton, Screen } from '../../src/components/ui';
+import { ProfileMenu } from '../../src/components/ProfileMenu';
 import { useAuth } from '../../src/context/AuthContext';
 import { useApiData } from '../../src/hooks/useApiData';
-import { formatTemplate, useI18n } from '../../src/i18n';
+import { formatRelativeTime, formatTemplate, useI18n } from '../../src/i18n';
 import { C, fonts, radius } from '../../src/theme';
 
 type FilterKey = NotificationFilter;
@@ -46,10 +47,11 @@ function isYesterday(iso: string): boolean {
 
 export default function NotificationsTab(): React.ReactElement {
   const { user, api } = useAuth();
-  const { t, formatDateTime } = useI18n();
+  const { t, formatRelativeTime: relTime } = useI18n();
   const router = useRouter();
   const [filter, setFilter] = useState<FilterKey>('all');
   const [extraUnread, setExtraUnread] = useState(0);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const fetchList = useCallback(
     () => api.listNotifications(filter),
@@ -155,18 +157,29 @@ export default function NotificationsTab(): React.ReactElement {
 
   return (
     <Screen fullWidth>
+      <ProfileMenu visible={menuOpen} onClose={() => setMenuOpen(false)} />
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Text style={styles.h1}>{t.tabs.notifications}</Text>
           {unread > 0 ? <View style={styles.headerBadge}><Text style={styles.headerBadgeText}>{unread}</Text></View> : null}
         </View>
         <View style={styles.headerRight}>
-          <Pressable accessibilityRole="button" onPress={() => void markAll()} hitSlop={8}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => void markAll()}
+            hitSlop={8}
+            style={styles.markAllHit}
+          >
             <Text style={styles.markAll}>{t.notifications.markAll}</Text>
           </Pressable>
-          <View style={styles.avatarMini}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t.shell.openAccountMenu}
+            onPress={() => setMenuOpen(true)}
+            style={styles.avatarMini}
+          >
             <Feather name="user" size={16} color={C.leafDeep} />
-          </View>
+          </Pressable>
         </View>
       </View>
 
@@ -177,6 +190,7 @@ export default function NotificationsTab(): React.ReactElement {
             <Pressable
               key={f.key}
               accessibilityRole="button"
+              accessibilityState={{ selected: active }}
               style={[styles.chip, active ? styles.chipOn : null]}
               onPress={() => setFilter(f.key)}
             >
@@ -218,7 +232,7 @@ export default function NotificationsTab(): React.ReactElement {
                       <View style={styles.cardBody}>
                         <Text style={[styles.cardCat, { color: icon.fg }]}>{title}</Text>
                         <Text style={styles.cardText}>{body}</Text>
-                        <Text style={styles.cardTime}>{formatDateTime(n.created_at)}</Text>
+                        <Text style={styles.cardTime}>{relTime(n.created_at)}</Text>
                       </View>
                       {unreadDot ? (
                         <View style={styles.dot} accessibilityLabel={t.notifications.unreadLabel} />
@@ -257,7 +271,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   headerBadgeText: { color: C.white, fontSize: 11, fontWeight: '700' },
-  markAll: { color: C.leaf, fontWeight: '600', fontSize: 14, fontFamily: fonts.bodySemi, minHeight: 36 },
+  markAll: { color: C.leaf, fontWeight: '600', fontSize: 14, fontFamily: fonts.bodySemi },
+  markAllHit: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 4 },
   avatarMini: {
     width: 44,
     height: 44,
@@ -268,7 +283,7 @@ const styles = StyleSheet.create({
   },
   filters: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingBottom: 12 },
   chip: {
-    height: 36,
+    minHeight: 44,
     paddingHorizontal: 16,
     borderRadius: 18,
     borderWidth: 1,
