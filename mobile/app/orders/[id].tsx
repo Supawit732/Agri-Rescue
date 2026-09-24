@@ -85,6 +85,9 @@ export default function OrderDetailScreen(): React.ReactElement {
             order.ripeness !== undefined
               ? t.ripenessLabels[order.ripeness] ?? String(order.ripeness)
               : null;
+          const pickupLabel =
+            order.location_label ?? order.plot_name ?? t.orderDetail.sellerPlotFallback;
+          const contact = order.contact ?? null;
 
           const confirmSeller = (): void => {
             const weight = Number(weightInput);
@@ -156,9 +159,7 @@ export default function OrderDetailScreen(): React.ReactElement {
 
               <SectionTitle>{t.orderDetail.sectionPickup}</SectionTitle>
               <Card>
-                <Text style={styles.line}>
-                  {order.plot_name ?? t.orderDetail.sellerPlotFallback}
-                </Text>
+                <Text style={styles.line}>{pickupLabel}</Text>
                 {order.distance_km !== null && order.distance_km !== undefined ? (
                   <Text style={styles.line}>
                     {formatTemplate(t.orderDetail.approxDistance, {
@@ -175,6 +176,30 @@ export default function OrderDetailScreen(): React.ReactElement {
                   <Text style={styles.muted}>{t.orderDetail.coordsHidden}</Text>
                 )}
               </Card>
+
+              {contact !== null ? (
+                <>
+                  <SectionTitle>{t.orderDetail.sectionContact}</SectionTitle>
+                  <Card>
+                    <Text style={styles.line}>{contact.name}</Text>
+                    <Text style={styles.muted}>{t.orderDetail.contactHint}</Text>
+                    {contact.phone !== '' ? (
+                      <PrimaryButton
+                        label={`${t.orderDetail.call} ${contact.phone}`}
+                        onPress={() => void Linking.openURL(`tel:${contact.phone}`)}
+                      />
+                    ) : null}
+                    {contact.line_id != null && contact.line_id !== '' ? (
+                      <PrimaryButton
+                        label={t.orderDetail.openLine}
+                        onPress={() =>
+                          void Linking.openURL(`https://line.me/ti/p/~${contact.line_id}`)
+                        }
+                      />
+                    ) : null}
+                  </Card>
+                </>
+              ) : null}
 
               {hours !== null && tone !== null ? (
                 <>

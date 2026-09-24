@@ -20,8 +20,11 @@
 | UI PR B (shops/follows/notifications) | เสร็จ | [#26](https://github.com/Supawit732/Agri-Rescue/pull/26) |
 | UI PR C (contact us / support) | เสร็จ | [#27](https://github.com/Supawit732/Agri-Rescue/pull/27) |
 | ปรับหน้าตลาด iPhone Air | เสร็จ | [#28](https://github.com/Supawit732/Agri-Rescue/pull/28) |
-| Admin Console | กำลังทำ | [#31](https://github.com/Supawit732/Agri-Rescue/pull/31) |
-| 6.3–6.12 / UI PR D | ยังไม่ทำ | — |
+| Pre-demo audit | เสร็จ | [#29](https://github.com/Supawit732/Agri-Rescue/pull/29) |
+| Phone/email fields | เสร็จ | [#30](https://github.com/Supawit732/Agri-Rescue/pull/30) |
+| Admin Console | เสร็จ | [#31](https://github.com/Supawit732/Agri-Rescue/pull/31) |
+| ตำแหน่งโปรไฟล์ + ป้าย ต./อ. + 6.7 ปุ่มติดต่อ | กำลังทำ | [#32](https://github.com/Supawit732/Agri-Rescue/pull/32) |
+| 6.3–6.6, 6.8–6.12 / UI PR D | ยังไม่ทำ | — |
 
 หมายเหตุ: โค้ดหน้าจอรอบวิ่งเก่ายังอยู่ใน repo เพื่อให้ test/delivery เดิมผ่าน — **ลบใน 6.11** ไม่ใช่ส่วนของ UX ปัจจุบัน (แท็บหลักเป็นตลาด/ขาย/คำสั่งซื้อ/แจ้งเตือน/บัญชี)
 
@@ -167,8 +170,8 @@
 - **Done when:** test ครบทุกเส้นทางการยกเลิก, waitlist ตาม กก., sell_then_donate เคารพคิว, และ job
 
 ## 6.7 ปุ่มติดต่อ
-- หลังชำระเงินแล้วเท่านั้น ทั้งสองฝ่ายเห็นปุ่ม "โทร" (`tel:`) และ "LINE" (`https://line.me/ti/p/~{line_id}`) ถ้ามี (ออเดอร์บริจาค: หลังยืนยันนัดรับ)
-- **Done when:** test ว่า API ไม่คืนเบอร์/LINE ก่อนชำระ/ก่อนยืนยันนัด
+- หลัง **จองแล้ว** (`status ≠ cancelled` — ยังไม่มีชำระเงิน 6.5; ดู D034) ทั้งสองฝ่ายเห็นปุ่ม "โทร" (`tel:`) และ "LINE" (`https://line.me/ti/p/~{line_id}`) ถ้ามี
+- **Done when:** test ว่า API ไม่คืนเบอร์/LINE ก่อนจอง และ market/public ไม่มี phone/line_id
 
 ## 6.8 ข้อพิพาท
 - `disputes(id, order_id, opened_by, reason, status, ai_summary, resolution, refund_amount, decided_by, created_at, decided_at)` + `dispute_photos`

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { ResultSetHeader, RowDataPacket } from 'mysql2';
 import { z } from 'zod';
 import { pool } from '../db/pool';
+import { reverseGeocode } from '../geo/nominatim';
 import { asyncHandler } from '../http/asyncHandler';
 import { requireAuth, requireCapability } from '../middleware/auth';
 
@@ -35,12 +36,15 @@ plotsRouter.post(
   asyncHandler(async (req, res) => {
     const body = plotSchema.parse(req.body);
     const farmerId = req.auth?.id ?? 0;
+    const geo = await reverseGeocode(body.lat, body.lng);
     const [result] = await pool.query<ResultSetHeader>(
-      'INSERT INTO plots (farmer_id, name, lat, lng, area_rai) VALUES (?, ?, ?, ?, ?)',
-      [farmerId, body.name, body.lat, body.lng, body.area_rai],
+      `INSERT INTO plots (farmer_id, name, lat, lng, area_rai, subdistrict_th, district_th)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [farmerId, body.name, body.lat, body.lng, body.area_rai, geo.subdistrictTh, geo.districtTh],
     );
     const [rows] = await pool.query<RowDataPacket[]>(
-      'SELECT id, farmer_id, name, lat, lng, area_rai FROM plots WHERE id = ? AND farmer_id = ?',
+      `SELECT id, farmer_id, name, lat, lng, area_rai, subdistrict_th, district_th
+       FROM plots WHERE id = ? AND farmer_id = ?`,
       [result.insertId, farmerId],
     );
     res.status(201).json({ plot: rows[0] });
@@ -49,7 +53,8 @@ plotsRouter.post(
 
 async function listMine(farmerId: number): Promise<RowDataPacket[]> {
   const [rows] = await pool.query<RowDataPacket[]>(
-    'SELECT id, farmer_id, name, lat, lng, area_rai FROM plots WHERE farmer_id = ? ORDER BY id',
+    `SELECT id, farmer_id, name, lat, lng, area_rai, subdistrict_th, district_th
+     FROM plots WHERE farmer_id = ? ORDER BY id`,
     [farmerId],
   );
   return rows;

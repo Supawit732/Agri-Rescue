@@ -146,3 +146,23 @@ export function donationEligibility(
 export function googleMapsUrl(lat: number, lng: number): string {
   return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
 }
+
+/** Prefer server location_label (ตำบล/อำเภอ) then plot_name. */
+export function lotLocationLabel(
+  lot: Pick<MarketLot, 'location_label' | 'subdistrict_th' | 'district_th' | 'plot_name'>,
+  fallback: string,
+): string {
+  if (lot.location_label != null && lot.location_label !== '') {
+    return lot.location_label;
+  }
+  const parts = [lot.subdistrict_th, lot.district_th].filter(
+    (p): p is string => p != null && p !== '',
+  );
+  if (parts.length > 0) {
+    return parts.join(' · ');
+  }
+  if (lot.plot_name != null && lot.plot_name !== '') {
+    return lot.plot_name;
+  }
+  return fallback;
+}

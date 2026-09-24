@@ -69,6 +69,8 @@ interface Api {
     buyer_type?: BuyerType;
     email?: string | null;
     line_id?: string | null;
+    lat?: number;
+    lng?: number;
   }) => Promise<AuthResponse>;
   getCrops: () => Promise<Crop[]>;
   getPlots: () => Promise<Plot[]>;
@@ -366,6 +368,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
       buyer_type?: BuyerType;
       email?: string | null;
       line_id?: string | null;
+      lat?: number;
+      lng?: number;
     }) => {
       const auth = await apiRequest<AuthResponse>({
         method: 'PATCH',

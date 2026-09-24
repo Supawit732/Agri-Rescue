@@ -44,6 +44,8 @@ describe('GET /api/geo/reverse', () => {
       lat: 13.668,
       lng: 100.628,
       display_name: 'บางนา, กรุงเทพมหานคร',
+      subdistrict_th: null,
+      district_th: null,
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = (fetchMock as unknown as { mock: { calls: [string, { headers: Record<string, string> }][] } })
@@ -61,7 +63,30 @@ describe('GET /api/geo/reverse', () => {
     global.fetch = jest.fn(async () => Promise.resolve({ ok: false, status: 500 })) as unknown as typeof fetch;
     const res = await request(app).get('/api/geo/reverse').query({ lat: 13.65, lng: 100.62 });
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ lat: 13.65, lng: 100.62, display_name: null });
+    expect(res.body).toEqual({
+      lat: 13.65,
+      lng: 100.62,
+      display_name: null,
+      subdistrict_th: null,
+      district_th: null,
+    });
+  });
+
+  it('extracts subdistrict and district from addressdetails', async () => {
+    resetNominatimState();
+    global.fetch = jest.fn(async () =>
+      Promise.resolve({
+        ok: true,
+        json: async () => ({
+          display_name: 'คลองเตย, กรุงเทพมหานคร',
+          address: { suburb: 'คลองเตย', city_district: 'คลองเตย', city: 'กรุงเทพมหานคร' },
+        }),
+      }),
+    ) as unknown as typeof fetch;
+    const res = await request(app).get('/api/geo/reverse').query({ lat: 13.72, lng: 100.56 });
+    expect(res.status).toBe(200);
+    expect(res.body.subdistrict_th).toBe('คลองเตย');
+    expect(res.body.district_th).toBe('คลองเตย');
   });
 
   it('rate-limits to at most one Nominatim request per second', async () => {
