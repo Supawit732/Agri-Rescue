@@ -52,7 +52,6 @@ export function createApp(): Express {
   app.use('/api/lots', lotsRouter);
   app.use('/api/public', publicMarketRouter);
   app.use('/api/market', marketRouter);
-  app.use('/api/public', publicMarketRouter);
   app.use('/api/orders', ordersRouter);
   app.use('/api/batches', batchesRouter);
   app.use('/api/stops', stopsRouter);
