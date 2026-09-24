@@ -1,12 +1,12 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import * as Location from 'expo-location';
 import {
   Badge,
   Body,
   Card,
   DataState,
-  LoginPrompt,
   PrimaryButton,
   SecondaryButton,
   SubScreen,
@@ -28,19 +28,69 @@ import {
 import { C, urgency } from '../../../src/theme';
 import type { MarketLot } from '../../../src/api/types';
 
+type ViewerCoords = { lat: number; lng: number } | null;
+
 export default function LotDetailScreen(): React.ReactElement {
   const { id, intent } = useLocalSearchParams<{ id: string; intent?: string }>();
   const lotId = Number(id);
   const { api, user } = useAuth();
   const router = useRouter();
   const now = useNow();
-  const lat = user?.lat ?? 13.65;
-  const lng = user?.lng ?? 100.62;
   const donationIntent = intent === 'donate';
+  const returnTo = `/lots/${lotId}${intent !== undefined ? `?intent=${intent}` : ''}`;
 
+  const [coords, setCoords] = useState<ViewerCoords>(
+    user?.lat != null && user.lng != null ? { lat: user.lat, lng: user.lng } : null,
+  );
+  const [coordsReady, setCoordsReady] = useState(user?.lat != null && user.lng != null);
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      if (user?.lat != null && user.lng != null) {
+        if (active) {
+          setCoords({ lat: user.lat, lng: user.lng });
+          setCoordsReady(true);
+        }
+        return;
+      }
+      try {
+        const permission = await Location.requestForegroundPermissionsAsync();
+        if (permission.status === 'granted') {
+          const position = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+          if (active) {
+            setCoords({ lat: position.coords.latitude, lng: position.coords.longitude });
+          }
+        }
+      } catch {
+        /* keep null — public lot still loads */
+      } finally {
+        if (active) {
+          setCoordsReady(true);
+        }
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [user?.lat, user?.lng]);
+
+  const loggedInBuyer = user !== null && user.can_buy;
   const { data, loading, error, reload } = useApiData(
-    () => api.getMarketLot(lotId, lat, lng),
-    [lotId, lat, lng, user?.id],
+    () => {
+      if (!coordsReady) {
+        return Promise.resolve(null as unknown as MarketLot);
+      }
+      const lat = coords?.lat;
+      const lng = coords?.lng;
+      if (loggedInBuyer) {
+        return api.getMarketLot(lotId, lat ?? user.lat ?? undefined, lng ?? user.lng ?? undefined);
+      }
+      return api.getPublicMarketLot(lotId, lat, lng);
+    },
+    [lotId, coordsReady, coords?.lat, coords?.lng, loggedInBuyer, user?.id],
   );
 
   const [quantityKg, setQuantityKg] = useState(1);
@@ -52,18 +102,6 @@ export default function LotDetailScreen(): React.ReactElement {
       setQuantityError(null);
     }
   }, [data]);
-
-  if (user === null) {
-    return (
-      <SubScreen title="รายละเอียดล็อต" onBack={() => router.replace('/(tabs)')}>
-        <LoginPrompt
-          title="ต้องเข้าสู่ระบบ"
-          message="เข้าสู่ระบบเพื่อดูรายละเอียดและจองล็อต"
-          returnTo={`/lots/${lotId}${intent !== undefined ? `?intent=${intent}` : ''}`}
-        />
-      </SubScreen>
-    );
-  }
 
   const adjustQuantity = (lot: MarketLot, deltaSteps: number): void => {
     const remaining = remainingOf(lot);
@@ -86,6 +124,10 @@ export default function LotDetailScreen(): React.ReactElement {
   };
 
   const goConfirm = (lot: MarketLot): void => {
+    if (user === null) {
+      router.push({ pathname: '/login', params: { returnTo } });
+      return;
+    }
     const remaining = remainingOf(lot);
     const min = minOrderOf(lot);
     if (splitAllowedOf(lot) && remaining + 1e-6 >= min && quantityKg + 1e-6 < min) {
@@ -106,9 +148,18 @@ export default function LotDetailScreen(): React.ReactElement {
     });
   };
 
+  const goLogin = (): void => {
+    router.push({ pathname: '/login', params: { returnTo } });
+  };
+
   return (
     <SubScreen title="รายละเอียดล็อต" onBack={() => router.replace('/(tabs)')}>
-      <DataState loading={loading} error={error} data={data} onRetry={reload}>
+      <DataState
+        loading={!coordsReady || loading}
+        error={error}
+        data={coordsReady ? data : null}
+        onRetry={reload}
+      >
         {(lot) => {
           const hours = hoursLeftFrom(lot.expires_at, now);
           const tone = urgency(hours);
@@ -118,11 +169,17 @@ export default function LotDetailScreen(): React.ReactElement {
           const saleBadge = marketSaleBadge(lot);
           const canDonate = donationIntent && elig.canDonate;
           const canBuy = !donationIntent && available.includes('buy') && lot.price_per_kg !== null;
+          const area = lot.area_th ?? lot.plot_name ?? null;
+          const cropTitle =
+            lot.crop_name_en !== undefined && lot.crop_name_en !== null && lot.crop_name_en !== ''
+              ? `${lot.crop_name_th} (${lot.crop_name_en})`
+              : lot.crop_name_th;
+
           return (
             <Body>
               <Card>
                 <View style={styles.header}>
-                  <Text style={styles.title}>{lot.crop_name_th}</Text>
+                  <Text style={styles.title}>{cropTitle}</Text>
                   <Badge text={formatCountdown(hours)} fg={tone.fg} bg={tone.bg} />
                 </View>
                 {saleBadge !== null ? (
@@ -132,58 +189,73 @@ export default function LotDetailScreen(): React.ReactElement {
                     bg={saleBadge.donate ? C.turmericSoft : C.leafSoft}
                   />
                 ) : null}
-                <Text style={styles.line}>โดย {lot.farmer_name}</Text>
+                {lot.farmer_name !== undefined ? (
+                  <Text style={styles.line}>โดย {lot.farmer_name}</Text>
+                ) : null}
                 <Text style={styles.line}>
                   เหลือ {remaining} / {lot.weight_kg} กก.
                   {splitAllowedOf(lot) ? ` · ขั้นต่ำ ${minOrderOf(lot)} กก.` : ' · ขายยกล็อต'}
                 </Text>
                 <Text style={styles.line}>
                   {lot.grade === 'substandard' ? 'ตกเกรด' : 'ปกติ'}
-                  {lot.plot_name !== undefined ? ` · ${lot.plot_name}` : ''}
+                  {area !== null ? ` · ${area}` : ''}
                 </Text>
                 {lot.distance_km !== null && lot.distance_km !== undefined ? (
                   <Text style={styles.line}>ระยะประมาณ {lot.distance_km.toFixed(1)} กม.</Text>
                 ) : null}
               </Card>
 
-              <Card>
-                <Text style={styles.qtyLabel}>จำนวน (กก.)</Text>
-                <View style={styles.stepper}>
-                  <Pressable
-                    style={styles.stepBtn}
-                    onPress={() => adjustQuantity(lot, -1)}
-                    disabled={!splitAllowedOf(lot)}
-                  >
-                    <Text style={styles.stepBtnText}>−</Text>
-                  </Pressable>
-                  <Text style={styles.qtyValue}>{quantityKg}</Text>
-                  <Pressable
-                    style={styles.stepBtn}
-                    onPress={() => adjustQuantity(lot, 1)}
-                    disabled={!splitAllowedOf(lot)}
-                  >
-                    <Text style={styles.stepBtnText}>+</Text>
-                  </Pressable>
-                </View>
-                {quantityError !== null ? <Text style={styles.fieldError}>{quantityError}</Text> : null}
-                {!donationIntent && lot.price_per_kg !== null ? (
-                  <Text style={styles.total}>
-                    รวมประมาณ {Math.round(lot.price_per_kg * quantityKg)} บาท
-                  </Text>
-                ) : null}
-                {donationIntent && !elig.canDonate && elig.reason !== null ? (
-                  <Text style={styles.fieldError}>{elig.reason}</Text>
-                ) : null}
-              </Card>
-
-              {canBuy || canDonate ? (
-                <PrimaryButton
-                  label="ไปหน้ายืนยัน"
-                  tone={donationIntent ? 'turmeric' : undefined}
-                  onPress={() => goConfirm(lot)}
-                />
+              {user === null ? (
+                <Card>
+                  <Text style={styles.line}>เข้าสู่ระบบเพื่อจองซื้อหรือขอรับบริจาค</Text>
+                  <PrimaryButton
+                    label={donationIntent ? 'เข้าสู่ระบบเพื่อขอรับบริจาค' : 'เข้าสู่ระบบเพื่อจอง'}
+                    tone={donationIntent ? 'turmeric' : undefined}
+                    onPress={goLogin}
+                  />
+                </Card>
               ) : (
-                <SecondaryButton label="กลับไปตลาด" onPress={() => router.replace('/(tabs)')} />
+                <>
+                  <Card>
+                    <Text style={styles.qtyLabel}>จำนวน (กก.)</Text>
+                    <View style={styles.stepper}>
+                      <Pressable
+                        style={styles.stepBtn}
+                        onPress={() => adjustQuantity(lot, -1)}
+                        disabled={!splitAllowedOf(lot)}
+                      >
+                        <Text style={styles.stepBtnText}>−</Text>
+                      </Pressable>
+                      <Text style={styles.qtyValue}>{quantityKg}</Text>
+                      <Pressable
+                        style={styles.stepBtn}
+                        onPress={() => adjustQuantity(lot, 1)}
+                        disabled={!splitAllowedOf(lot)}
+                      >
+                        <Text style={styles.stepBtnText}>+</Text>
+                      </Pressable>
+                    </View>
+                    {quantityError !== null ? <Text style={styles.fieldError}>{quantityError}</Text> : null}
+                    {!donationIntent && lot.price_per_kg !== null ? (
+                      <Text style={styles.total}>
+                        รวมประมาณ {Math.round(lot.price_per_kg * quantityKg)} บาท
+                      </Text>
+                    ) : null}
+                    {donationIntent && !elig.canDonate && elig.reason !== null ? (
+                      <Text style={styles.fieldError}>{elig.reason}</Text>
+                    ) : null}
+                  </Card>
+
+                  {canBuy || canDonate ? (
+                    <PrimaryButton
+                      label="ไปหน้ายืนยัน"
+                      tone={donationIntent ? 'turmeric' : undefined}
+                      onPress={() => goConfirm(lot)}
+                    />
+                  ) : (
+                    <SecondaryButton label="กลับไปตลาด" onPress={() => router.replace('/(tabs)')} />
+                  )}
+                </>
               )}
             </Body>
           );

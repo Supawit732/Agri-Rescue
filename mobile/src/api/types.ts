@@ -240,7 +240,9 @@ export interface MyLot {
 export interface MarketLot {
   id: number;
   crop_name_th: string;
-  farmer_name: string;
+  crop_name_en?: string | null;
+  /** Present on authenticated market; omitted on public API. */
+  farmer_name?: string;
   weight_kg: number;
   remaining_kg?: number;
   split_allowed?: boolean;
@@ -252,7 +254,7 @@ export interface MarketLot {
   sale_mode?: SaleMode;
   available_as?: Array<'buy' | 'donate'>;
   donation_opened?: boolean;
-  allow_donation: boolean;
+  allow_donation?: boolean;
   donation_audience?: DonationAudience;
   expires_at: string;
   hours_left: number;
@@ -261,9 +263,13 @@ export interface MarketLot {
   market_price_label?: string | null;
   start_price_per_kg?: number | null;
   floor_price_per_kg?: number | null;
-  lat: number;
-  lng: number;
+  /** Present on authenticated market; omitted on public API. */
+  lat?: number;
+  lng?: number;
   plot_name?: string;
+  area_th?: string;
+  subdistrict_th?: string | null;
+  district_th?: string | null;
   area_rai?: number;
   photo_url?: string | null;
 }
