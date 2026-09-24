@@ -76,21 +76,22 @@ export const crops = [
 export type CropKey = (typeof crops)[number]['key'];
 
 export const buyers = [
-  { name: 'รถพุ่มพวงป้าแดง', buyerType: 'vendor', lat: 13.662, lng: 100.611, phone: '0800000011' },
-  { name: 'บ้านพักเด็กชุมชน', buyerType: 'charity', lat: 13.641, lng: 100.634, phone: '0800000012' },
-  { name: 'ร้านข้าวแกงลุงชม', buyerType: 'shop', lat: 13.657, lng: 100.642, phone: '0800000013' },
+  { name: 'PaDaRed Vendor (รถพุ่มพวงป้าแดง)', buyerType: 'vendor', lat: 13.662, lng: 100.611, phone: '0800000011' },
+  { name: 'Community Children Home (บ้านพักเด็กชุมชน)', buyerType: 'charity', lat: 13.641, lng: 100.634, phone: '0800000012' },
+  { name: "Lung Chom Curry Shop (ร้านข้าวแกงลุงชม)", buyerType: 'shop', lat: 13.657, lng: 100.642, phone: '0800000013' },
 ] as const;
 
 export const staff = [
-  { role: 'driver', name: 'คนขับตัวอย่าง', phone: '0800000004' },
+  { role: 'driver', name: 'Demo Driver (คนขับตัวอย่าง)', phone: '0800000004' },
   { role: 'coordinator', name: 'admin', phone: '0800000005' },
 ] as const;
 
 export const farmers = [
   {
-    name: 'ลุงสมชาย',
+    name: 'Somchai Farmer (ลุงสมชาย)',
+    shopName: 'Somchai Farm (สวนลุงสมชาย)',
     phone: '0800000001',
-    plotName: 'แปลงลุงสมชาย',
+    plotName: 'Somchai Plot (แปลงลุงสมชาย)',
     lat: 13.668,
     lng: 100.628,
     areaRai: 1,
@@ -104,9 +105,10 @@ export const farmers = [
     },
   },
   {
-    name: 'ป้าบุญมี',
+    name: 'Bunmee Farmer (ป้าบุญมี)',
+    shopName: 'Bunmee Farm (สวนป้าบุญมี)',
     phone: '0800000002',
-    plotName: 'แปลงป้าบุญมี',
+    plotName: 'Bunmee Plot (แปลงป้าบุญมี)',
     lat: 13.645,
     lng: 100.605,
     areaRai: 1,
@@ -120,9 +122,10 @@ export const farmers = [
     },
   },
   {
-    name: 'พี่ต้อม',
+    name: 'Tom Farmer (พี่ต้อม)',
+    shopName: 'Tom Farm (สวนพี่ต้อม)',
     phone: '0800000003',
-    plotName: 'แปลงพี่ต้อม',
+    plotName: 'Tom Plot (แปลงพี่ต้อม)',
     lat: 13.635,
     lng: 100.622,
     areaRai: 1,

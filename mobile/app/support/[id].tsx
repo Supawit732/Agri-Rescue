@@ -26,7 +26,7 @@ export default function SupportTicketScreen(): React.ReactElement {
   const params = useLocalSearchParams<{ id?: string }>();
   const ticketId = Number(params.id);
   const { user, api } = useAuth();
-  const { t, formatDateTime, formatNumber } = useI18n();
+  const { t, formatDateTime, formatNumber, cropName } = useI18n();
   const router = useRouter();
   const [reply, setReply] = useState('');
   const [busy, setBusy] = useState(false);
@@ -114,9 +114,14 @@ export default function SupportTicketScreen(): React.ReactElement {
               {ticket.order_id !== null ? (
                 <Text style={styles.meta}>
                   {t.support.relatedOrder}: #{ticket.order_id}
-                  {ticket.order_summary != null && ticket.order_summary.trim() !== ''
-                    ? ` · ${ticket.order_summary}`
-                    : ''}
+                  {ticket.order_crop_th != null && ticket.order_qty_kg != null
+                    ? ` · ${cropName({
+                        name_th: ticket.order_crop_th,
+                        name_en: ticket.order_crop_en ?? null,
+                      })} · ${formatNumber(ticket.order_qty_kg)} ${t.common.kg}`
+                    : ticket.order_summary != null && ticket.order_summary.trim() !== ''
+                      ? ` · ${ticket.order_summary}`
+                      : ''}
                 </Text>
               ) : null}
               {ticket.order_status != null && ticket.order_status !== '' ? (

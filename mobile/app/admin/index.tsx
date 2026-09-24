@@ -54,7 +54,7 @@ function barPct(value: number, max: number): `${number}%` {
 
 export default function AdminOverviewScreen(): React.ReactElement {
   const { api } = useAuth();
-  const { t, formatNumber, formatDateTime: fmtDateTime } = useI18n();
+  const { t, formatNumber, formatDateTime: fmtDateTime, cropName } = useI18n();
   const router = useRouter();
   const [showMore, setShowMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -239,7 +239,7 @@ export default function AdminOverviewScreen(): React.ReactElement {
                   o.charts.by_crop.map((row) => (
                     <View key={row.name} style={styles.barRow}>
                       <Text style={styles.barLabel} numberOfLines={1}>
-                        {row.name}
+                        {cropName({ name_th: row.name, name_en: row.name_en ?? null })}
                       </Text>
                       <View style={styles.barTrack}>
                         <View

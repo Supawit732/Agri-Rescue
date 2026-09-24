@@ -30,7 +30,7 @@ function bangkokDateString(offsetDays: number): string {
 
 export default function RouteScreen(): React.ReactElement {
   const { user, api } = useAuth();
-  const { t, formatNumber } = useI18n();
+  const { t, formatNumber, cropName } = useI18n();
   const router = useRouter();
   const [dayOffset, setDayOffset] = useState<0 | 1>(0);
   const date = bangkokDateString(dayOffset);
@@ -171,10 +171,7 @@ export default function RouteScreen(): React.ReactElement {
                   <Text style={styles.itemsLabel}>{t.route.items}</Text>
                   {stop.items.map((item) => (
                     <Text key={`${String(item.quantity_kg)}-${item.crop_name_th}`} style={styles.item}>
-                      · {item.crop_name_th}
-                      {item.crop_name_en != null && item.crop_name_en !== ''
-                        ? ` (${item.crop_name_en})`
-                        : ''}{' '}
+                      · {cropName({ name_th: item.crop_name_th, name_en: item.crop_name_en })}{' '}
                       {formatNumber(item.quantity_kg)} {t.common.kg}
                     </Text>
                   ))}

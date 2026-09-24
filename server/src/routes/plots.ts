@@ -38,12 +38,22 @@ plotsRouter.post(
     const farmerId = req.auth?.id ?? 0;
     const geo = await reverseGeocode(body.lat, body.lng);
     const [result] = await pool.query<ResultSetHeader>(
-      `INSERT INTO plots (farmer_id, name, lat, lng, area_rai, subdistrict_th, district_th)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [farmerId, body.name, body.lat, body.lng, body.area_rai, geo.subdistrictTh, geo.districtTh],
+      `INSERT INTO plots (farmer_id, name, lat, lng, area_rai, subdistrict_th, district_th, subdistrict_en, district_en)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        farmerId,
+        body.name,
+        body.lat,
+        body.lng,
+        body.area_rai,
+        geo.subdistrictTh,
+        geo.districtTh,
+        geo.subdistrictEn,
+        geo.districtEn,
+      ],
     );
     const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT id, farmer_id, name, lat, lng, area_rai, subdistrict_th, district_th
+      `SELECT id, farmer_id, name, lat, lng, area_rai, subdistrict_th, district_th, subdistrict_en, district_en
        FROM plots WHERE id = ? AND farmer_id = ?`,
       [result.insertId, farmerId],
     );
@@ -53,7 +63,7 @@ plotsRouter.post(
 
 async function listMine(farmerId: number): Promise<RowDataPacket[]> {
   const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT id, farmer_id, name, lat, lng, area_rai, subdistrict_th, district_th
+    `SELECT id, farmer_id, name, lat, lng, area_rai, subdistrict_th, district_th, subdistrict_en, district_en
      FROM plots WHERE farmer_id = ? ORDER BY id`,
     [farmerId],
   );

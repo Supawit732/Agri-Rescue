@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { asyncHandler } from '../http/asyncHandler';
 import { HttpError } from '../http/errors';
 import { requireAuth, requireCapability } from '../middleware/auth';
+import { requestLocale } from '../http/locale';
 import {
   ensureShop,
   followShop,
@@ -35,7 +36,12 @@ shopsRouter.get(
   asyncHandler(async (req, res) => {
     const shopId = shopIdSchema.parse(req.params.userId);
     const viewerId = req.auth?.id ?? null;
-    const shop = await loadPublicShop(shopId, viewerCoords(req), viewerId);
+    const shop = await loadPublicShop(
+      shopId,
+      viewerCoords(req),
+      viewerId,
+      requestLocale(req.headers['accept-language'], req.query.lang),
+    );
     if (shop === null) {
       throw new HttpError(404, 'NOT_FOUND', 'ไม่พบร้าน');
     }

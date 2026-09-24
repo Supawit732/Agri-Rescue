@@ -6,9 +6,10 @@ import { haversineKm } from '../domain/geo';
 import { remainingLotKg } from '../domain/lotInventory';
 import type { ProduceGrade } from '../domain/pricing';
 import { availableAs, lotAcceptsDonation, lotPricePerKg } from '../domain/sellerPricing';
-import { locationDisplayLabel } from '../geo/locationLabel';
+import { locationDisplayLabelFor } from '../geo/locationLabel';
 import { asyncHandler } from '../http/asyncHandler';
 import { HttpError } from '../http/errors';
+import { requestLocale } from '../http/locale';
 import { requireAuth, requireCapability } from '../middleware/auth';
 
 export const marketRouter = Router();
@@ -46,6 +47,8 @@ interface MarketRow extends RowDataPacket {
   farmer_name: string;
   subdistrict_th: string | null;
   district_th: string | null;
+  subdistrict_en: string | null;
+  district_en: string | null;
 }
 
 const MARKET_LOT_SELECT = `SELECT h.id, h.weight_kg, h.split_allowed, h.min_order_kg, h.order_step_kg,
@@ -53,6 +56,7 @@ const MARKET_LOT_SELECT = `SELECT h.id, h.weight_kg, h.split_allowed, h.min_orde
               h.start_price_per_kg, h.floor_price_per_kg, h.sale_mode, h.donation_opened, h.expires_at,
               c.name_th AS crop_name_th, c.name_en AS crop_name_en, c.base_shelf_days,
               p.lat, p.lng, p.name AS plot_name, p.area_rai, p.subdistrict_th, p.district_th,
+              p.subdistrict_en, p.district_en,
               u.name AS farmer_name,
               COALESCE((
                 SELECT SUM(o.quantity_kg) FROM orders o
@@ -67,6 +71,7 @@ function presentBuyerLot(
   row: MarketRow,
   viewer: { lat: number; lng: number } | null,
   now: number,
+  locale: 'th' | 'en',
 ): {
   id: number;
   crop_name_th: string;
@@ -93,6 +98,8 @@ function presentBuyerLot(
   lng: number;
   subdistrict_th: string | null;
   district_th: string | null;
+  subdistrict_en?: string | null;
+  district_en?: string | null;
   location_label: string | null;
 } {
   const hoursLeft = (new Date(row.expires_at).getTime() - now) / (60 * 60 * 1000);
@@ -147,7 +154,15 @@ function presentBuyerLot(
     lng: plotLng,
     subdistrict_th: row.subdistrict_th ?? null,
     district_th: row.district_th ?? null,
-    location_label: locationDisplayLabel(row.subdistrict_th, row.district_th, row.plot_name),
+    subdistrict_en: row.subdistrict_en ?? null,
+    district_en: row.district_en ?? null,
+    location_label: locationDisplayLabelFor(locale, {
+      subdistrict_th: row.subdistrict_th,
+      district_th: row.district_th,
+      subdistrict_en: row.subdistrict_en,
+      district_en: row.district_en,
+      fallback: row.plot_name,
+    }),
   };
 }
 
@@ -166,8 +181,9 @@ marketRouter.get(
     );
     const now = Date.now();
     const viewer = { lat: query.lat, lng: query.lng };
+    const locale = requestLocale(req.headers['accept-language'], req.query.lang);
     const lots = rows
-      .map((row) => presentBuyerLot(row, viewer, now))
+      .map((row) => presentBuyerLot(row, viewer, now, locale))
       .filter(
         (lot) =>
           lot.distance_km !== null &&
@@ -205,7 +221,8 @@ marketRouter.get(
       coords.lat !== undefined && coords.lng !== undefined
         ? { lat: coords.lat, lng: coords.lng }
         : null;
-    const lot = presentBuyerLot(row, viewer, Date.now());
+    const locale = requestLocale(req.headers['accept-language'], req.query.lang);
+    const lot = presentBuyerLot(row, viewer, Date.now(), locale);
     if (lot.remaining_kg <= 0 || lot.hours_left <= 0) {
       throw new HttpError(404, 'NOT_FOUND', 'ไม่พบล็อต');
     }

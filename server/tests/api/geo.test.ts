@@ -40,14 +40,17 @@ describe('GET /api/geo/reverse', () => {
 
     const first = await request(app).get('/api/geo/reverse').query({ lat: 13.668, lng: 100.628 });
     expect(first.status).toBe(200);
-    expect(first.body).toEqual({
+    expect(first.body).toMatchObject({
       lat: 13.668,
       lng: 100.628,
       display_name: 'บางนา, กรุงเทพมหานคร',
       subdistrict_th: null,
       district_th: null,
+      subdistrict_en: null,
+      district_en: null,
     });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    // TH + EN reverse geocode requests (accept-language=en second call)
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     const [url, init] = (fetchMock as unknown as { mock: { calls: [string, { headers: Record<string, string> }][] } })
       .mock.calls[0]!;
     expect(String(url)).toContain('nominatim.openstreetmap.org/reverse');
@@ -56,19 +59,21 @@ describe('GET /api/geo/reverse', () => {
     const second = await request(app).get('/api/geo/reverse').query({ lat: 13.668, lng: 100.628 });
     expect(second.status).toBe(200);
     expect(second.body.display_name).toBe('บางนา, กรุงเทพมหานคร');
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('returns null display_name when Nominatim fails', async () => {
     global.fetch = jest.fn(async () => Promise.resolve({ ok: false, status: 500 })) as unknown as typeof fetch;
     const res = await request(app).get('/api/geo/reverse').query({ lat: 13.65, lng: 100.62 });
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({
+    expect(res.body).toMatchObject({
       lat: 13.65,
       lng: 100.62,
       display_name: null,
       subdistrict_th: null,
       district_th: null,
+      subdistrict_en: null,
+      district_en: null,
     });
   });
 
@@ -87,6 +92,8 @@ describe('GET /api/geo/reverse', () => {
     expect(res.status).toBe(200);
     expect(res.body.subdistrict_th).toBe('คลองเตย');
     expect(res.body.district_th).toBe('คลองเตย');
+    expect(res.body).toHaveProperty('subdistrict_en');
+    expect(res.body).toHaveProperty('district_en');
   });
 
   it('rate-limits to at most one Nominatim request per second', async () => {
@@ -101,16 +108,18 @@ describe('GET /api/geo/reverse', () => {
 
     const firstPromise = request(app).get('/api/geo/reverse').query({ lat: 13.1, lng: 100.1 });
     await jest.advanceTimersByTimeAsync(0);
+    await jest.advanceTimersByTimeAsync(1000);
     const first = await firstPromise;
     expect(first.status).toBe(200);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    // TH + EN reverse for one location
+    expect(fetchMock).toHaveBeenCalledTimes(2);
 
     const secondPromise = request(app).get('/api/geo/reverse').query({ lat: 13.2, lng: 100.2 });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await jest.advanceTimersByTimeAsync(0);
     await jest.advanceTimersByTimeAsync(1000);
     const second = await secondPromise;
     expect(second.status).toBe(200);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 });
 

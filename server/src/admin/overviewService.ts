@@ -34,7 +34,7 @@ export interface AdminOverview {
   };
   charts: {
     daily_kg: { date: string; kg: number }[];
-    by_crop: { name: string; kg: number }[];
+    by_crop: { name: string; name_en: string | null; kg: number }[];
     top_shops: { name: string; kg: number }[];
   };
 }
@@ -109,12 +109,12 @@ export async function buildOverview(): Promise<AdminOverview> {
   `);
 
   const [byCrop] = await pool.query<RowDataPacket[]>(`
-    SELECT c.name_th AS name, SUM(i.kg_saved) AS kg
+    SELECT c.name_th AS name, c.name_en AS name_en, SUM(i.kg_saved) AS kg
     FROM impact_logs i
     JOIN orders o ON o.id = i.order_id
     JOIN harvest_lots h ON h.id = o.lot_id
     JOIN crops c ON c.id = h.crop_id
-    GROUP BY c.id, c.name_th
+    GROUP BY c.id, c.name_th, c.name_en
     ORDER BY kg DESC
     LIMIT 12
   `);
@@ -175,7 +175,11 @@ export async function buildOverview(): Promise<AdminOverview> {
     },
     charts: {
       daily_kg: daily.map((r) => ({ date: String(r.d).slice(0, 10), kg: r2(r.kg) })),
-      by_crop: byCrop.map((r) => ({ name: String(r.name), kg: r2(r.kg) })),
+      by_crop: byCrop.map((r) => ({
+        name: String(r.name),
+        name_en: r.name_en == null || r.name_en === '' ? null : String(r.name_en),
+        kg: r2(r.kg),
+      })),
       top_shops: topShops.map((r) => ({ name: String(r.name), kg: r2(r.kg) })),
     },
   };

@@ -795,6 +795,8 @@ export type Messages = {
     noUsablePrice: string;
     outlierFlag: string;
     notMapped: string;
+    ditMatchAuto: string;
+    ditMatchManual: string;
     estimatePrice: string;
     advanced: string;
     hideAdvanced: string;

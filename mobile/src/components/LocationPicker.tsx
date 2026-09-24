@@ -52,7 +52,8 @@ export function LocationPicker({
       try {
         const result = await reverseGeocode(value.lat, value.lng);
         if (active) {
-          setPlaceName(result.display_name);
+          // Prefer structured location_label (en/th per Accept-Language) over raw display_name.
+          setPlaceName(result.location_label ?? result.display_name);
         }
       } catch {
         if (active) {

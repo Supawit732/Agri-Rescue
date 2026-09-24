@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { asyncHandler } from '../http/asyncHandler';
 import { HttpError } from '../http/errors';
+import { requestLocale } from '../http/locale';
 import { reverseGeocode } from '../geo/nominatim';
 import { resolveGoogleMapsLink } from '../geo/resolveLink';
 import { geoRateLimit } from '../middleware/geoRateLimit';
@@ -36,13 +37,20 @@ geoRouter.get(
       throw new HttpError(400, 'VALIDATION', query.error.issues[0]?.message ?? 'พิกัดไม่ถูกต้อง');
     }
     const { lat, lng } = query.data;
-    const { displayName, subdistrictTh, districtTh } = await reverseGeocode(lat, lng);
+    const locale = requestLocale(req.headers['accept-language'], req.query.lang);
+    const { displayName, displayNameEn, subdistrictTh, districtTh, subdistrictEn, districtEn } = await reverseGeocode(lat, lng);
     res.json({
       lat,
       lng,
-      display_name: displayName,
+      display_name: locale === 'en' ? displayNameEn ?? displayName : displayName,
       subdistrict_th: subdistrictTh,
       district_th: districtTh,
+      subdistrict_en: subdistrictEn,
+      district_en: districtEn,
+      location_label:
+        locale === 'en'
+          ? [subdistrictEn, districtEn].filter(Boolean).join(' · ') || subdistrictEn || subdistrictTh || ''
+          : [subdistrictTh, districtTh].filter(Boolean).join(' · ') || subdistrictTh || '',
     });
   }),
 );

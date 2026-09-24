@@ -64,7 +64,7 @@ export async function seed(): Promise<void> {
       await connection.query(
         `INSERT INTO shops (user_id, name) VALUES (?, ?)
          ON DUPLICATE KEY UPDATE name = VALUES(name)`,
-        [farmerId, `สวน${farmer.name}`],
+        [farmerId, farmer.shopName],
       );
     }
 
@@ -170,6 +170,7 @@ async function upsertUser(connection: PoolConnection, user: NewUser): Promise<nu
   );
   const row = existing[0];
   if (row !== undefined) {
+    await connection.query('UPDATE users SET name = ? WHERE id = ?', [user.name, row.id]);
     return Number(row.id);
   }
   const canSell = user.role === 'farmer' ? 1 : 0;
@@ -215,11 +216,12 @@ async function upsertPlot(
   areaRai: number,
 ): Promise<number> {
   const [existing] = await connection.query<RowDataPacket[]>(
-    'SELECT id FROM plots WHERE farmer_id = ? AND name = ?',
-    [farmerId, name],
+    'SELECT id FROM plots WHERE farmer_id = ? ORDER BY id ASC LIMIT 1',
+    [farmerId],
   );
   const row = existing[0];
   if (row !== undefined) {
+    await connection.query('UPDATE plots SET name = ? WHERE id = ?', [name, row.id]);
     return Number(row.id);
   }
   const [result] = await connection.query<ResultSetHeader>(

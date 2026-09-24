@@ -130,7 +130,10 @@ export default function ShopScreen(): React.ReactElement {
               </View>
               {s.common_crops.length > 0 ? (
                 <Text style={styles.meta}>
-                  {t.shop.commonCrops}: {s.common_crops.join(' · ')}
+                  {t.shop.commonCrops}:{' '}
+                  {s.common_crops
+                    .map((c) => cropName({ name_th: c.name_th, name_en: c.name_en }))
+                    .join(' · ')}
                 </Text>
               ) : null}
               {s.description !== null && s.description !== '' ? (
