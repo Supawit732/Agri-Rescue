@@ -225,6 +225,16 @@ const en: Messages = {
     welcomeBack: 'Welcome back',
     or: 'or',
   },
+  identity: {
+    label: 'Phone or email',
+    modePhone: 'Phone',
+    modeEmail: 'Email',
+    phonePlaceholder: '0XX-XXX-XXXX',
+    emailPlaceholder: 'name@email.com',
+    phoneInvalid: 'Enter a 10-digit phone starting with 0',
+    emailInvalid: 'Invalid email',
+    didYouMean: 'Did you mean {domain}?',
+  },
   sell: {
     title: 'Sell',
     loginTitle: 'List produce',

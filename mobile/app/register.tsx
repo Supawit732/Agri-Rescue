@@ -4,9 +4,11 @@ import { KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-na
 import { DonorIntroModal, type DonorIntroChoice } from '../components/DonorIntroModal';
 import { ApiError } from '../src/api/client';
 import { LocationPicker, type LatLng } from '../src/components/LocationPicker';
+import { PhoneEmailField } from '../src/components/PhoneEmailField';
 import { Body, Chip, Field, PrimaryButton, Screen, SectionTitle } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
 import { useI18n } from '../src/i18n';
+import { isValidEmail, isValidThaiPhone, normalizeEmail, normalizePhone } from '../src/lib/phoneEmail';
 import { C } from '../src/theme';
 import type { BuyerType } from '../src/api/types';
 
@@ -17,7 +19,7 @@ export default function RegisterScreen(): React.ReactElement {
   const [canSell, setCanSell] = useState(true);
   const [canBuy, setCanBuy] = useState(false);
   const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
+  const [identity, setIdentity] = useState('');
   const [password, setPassword] = useState('');
   const [lineId, setLineId] = useState('');
   const [buyerType, setBuyerType] = useState<BuyerType>('vendor');
@@ -26,6 +28,15 @@ export default function RegisterScreen(): React.ReactElement {
   const [submitting, setSubmitting] = useState(false);
   const [introVisible, setIntroVisible] = useState(false);
   const [donorIntent, setDonorIntent] = useState<'now' | 'later' | null>(null);
+
+  const isEmailMode = identity.includes('@');
+  const normalizedPhone = isEmailMode ? '' : normalizePhone(identity);
+  const normalizedEmail = isEmailMode ? normalizeEmail(identity) : '';
+  const identityValid = isEmailMode
+    ? isValidEmail(identity)
+    : identity.trim() === ''
+      ? false
+      : isValidThaiPhone(normalizedPhone);
 
   const buyerTypes = useMemo(
     () =>
@@ -38,7 +49,7 @@ export default function RegisterScreen(): React.ReactElement {
 
   const canSubmit =
     name.trim().length > 0 &&
-    phone.trim().length > 0 &&
+    identityValid &&
     password.length >= 8 &&
     coords !== null &&
     (canSell || canBuy);
@@ -79,7 +90,8 @@ export default function RegisterScreen(): React.ReactElement {
     try {
       await register({
         name: name.trim(),
-        phone: phone.trim(),
+        phone: isEmailMode ? null : normalizedPhone,
+        ...(isEmailMode ? { email: normalizedEmail } : {}),
         password,
         can_sell: canSell,
         can_buy: canBuy,
@@ -136,12 +148,12 @@ export default function RegisterScreen(): React.ReactElement {
             onChangeText={setName}
             placeholder={t.register.namePlaceholder}
           />
-          <Field
-            label={t.register.phone}
-            value={phone}
-            onChangeText={setPhone}
-            keyboardType="phone-pad"
-            placeholder={t.register.phonePlaceholder}
+          <PhoneEmailField
+            name="phone"
+            value={identity}
+            onValueChange={setIdentity}
+            fieldRef={() => undefined}
+            error={identityValid || identity === '' ? null : t.identity.phoneInvalid}
           />
           <Field label={t.register.password} value={password} onChangeText={setPassword} secureTextEntry />
           <Field

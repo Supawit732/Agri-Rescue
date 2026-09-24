@@ -5,10 +5,12 @@ import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-nat
 import { ApiError } from '../src/api/client';
 import { initialsOf } from '../src/components/LogoMark';
 import { FormField, useFieldErrors, useFieldScroll } from '../src/components/form';
+import { PhoneEmailField } from '../src/components/PhoneEmailField';
 import { Body, PrimaryButton, Screen, StackHeader } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
 import { donorStatusLabel } from '../src/donorLabels';
 import { formatTemplate, useI18n } from '../src/i18n';
+import { formatPhone, isValidEmail, normalizeEmail } from '../src/lib/phoneEmail';
 import { C, fonts, radius } from '../src/theme';
 
 export default function ProfileScreen(): React.ReactElement {
@@ -75,9 +77,9 @@ export default function ProfileScreen(): React.ReactElement {
     setError(null);
     setMessage(null);
     const nextErrors: Record<string, string> = {};
-    const emailTrim = email.trim();
-    if (emailTrim !== '' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrim)) {
-      nextErrors.email = t.login.phoneInvalid;
+    const emailTrim = normalizeEmail(email);
+    if (emailTrim !== '' && !isValidEmail(emailTrim)) {
+      nextErrors.email = t.identity.emailInvalid;
     }
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) {
@@ -210,23 +212,21 @@ export default function ProfileScreen(): React.ReactElement {
           <FormField
             label={t.profile.phone}
             name="phone"
-            value={user.phone}
+            value={formatPhone(user.phone)}
             onChangeText={() => undefined}
             onBlurField={() => undefined}
             fieldRef={registerY}
             editable={false}
           />
-          <FormField
+          <PhoneEmailField
+            initialMode="email"
             label={t.profile.email}
             name="email"
             value={email}
-            onChangeText={setEmail}
-            onBlurField={(name) => setFieldError(name, null)}
+            onValueChange={setEmail}
+            onBlurField={(n) => setFieldError(n, null)}
             fieldRef={registerY}
             error={errors.email}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            placeholder={t.profile.emailPlaceholder}
           />
           <FormField
             label={t.profile.lineId}

@@ -5,9 +5,11 @@ import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text
 import { ApiError } from '../src/api/client';
 import { FormField, useFieldErrors, useFieldScroll } from '../src/components/form';
 import { LogoMark } from '../src/components/LogoMark';
+import { PhoneEmailField } from '../src/components/PhoneEmailField';
 import { PrimaryButton, Screen } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
 import { useI18n } from '../src/i18n';
+import { isValidEmail, isValidThaiPhone, normalizeEmail, normalizePhone } from '../src/lib/phoneEmail';
 import { C, fonts, radius } from '../src/theme';
 
 export default function LoginScreen(): React.ReactElement {
@@ -24,15 +26,14 @@ export default function LoginScreen(): React.ReactElement {
   const { scrollRef, registerY, scrollToField } = useFieldScroll();
   const touched = useRef<Record<string, boolean>>({});
 
+  const identityLooksEmail = identity.includes('@');
+
   const validateField = (name: string): string | null => {
     if (name === 'phone') {
-      const value = identity.trim();
-      const isPhone = /^\d{9,15}$/.test(value);
-      const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-      if (!isPhone && !isEmail) {
-        return t.login.phoneInvalid;
+      if (identityLooksEmail) {
+        return isValidEmail(identity) ? null : t.identity.emailInvalid;
       }
-      return null;
+      return isValidThaiPhone(normalizePhone(identity)) ? null : t.identity.phoneInvalid;
     }
     if (name === 'password') {
       if (password.length < 1) {
@@ -64,7 +65,8 @@ export default function LoginScreen(): React.ReactElement {
     setFormError(null);
     setSubmitting(true);
     try {
-      await login(identity.trim(), password);
+      const payload = identityLooksEmail ? normalizeEmail(identity) : normalizePhone(identity);
+      await login(payload, password);
       const target =
         typeof returnTo === 'string' && returnTo.length > 0 && returnTo.startsWith('/')
           ? returnTo
@@ -115,22 +117,18 @@ export default function LoginScreen(): React.ReactElement {
             <Text style={styles.tagline}>{t.login.tagline}</Text>
           </View>
 
-          <FormField
-            label={t.login.phone}
+          <PhoneEmailField
             name="phone"
             value={identity}
-            onChangeText={(text) => {
-              setIdentity(text);
+            onValueChange={(next) => {
+              setIdentity(next);
               if (touched.current.phone) {
-                setFieldError('phone', validateField('phone'));
+                setFieldError('phone', null);
               }
             }}
             onBlurField={onBlurField}
             fieldRef={registerY}
             error={errors.phone}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            placeholder={t.login.phonePlaceholder}
           />
           <FormField
             label={t.login.password}

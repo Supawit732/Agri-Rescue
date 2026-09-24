@@ -285,3 +285,16 @@ JWT เก็บ `sub`, `role`, `can_sell`, `can_buy`, `is_admin` (อายุ 
 | seed | `expires_at = now + hoursLeft`; refresh ล็อต open ที่หมดอายุ |
 | DEMO_SCRIPT | อัปเดตเป็น 4 แท็บ + เมนูโปรไฟล์ (ไม่มีแท็บบัญชี) |
 
+
+## D031 — Phone/email identity fields
+
+| รายการ | ค่า |
+|---|---|
+| Toggle | ปุ่ม «เบอร์โทร \| อีเมล» จำใน `agri_rescue_identity_mode` (SecureStore/localStorage) ค่าเริ่มต้นเบอร์โทร |
+| เบอร์ UI | แป้นเลข, ฟอร์맷 `0XX-XXX-XXXX`, paste `+66`/ขีด/ช่องว่าง → `0XXXXXXXXX`, ส่งเป็น digits, ตรวจ 10 หลักขึ้นต้น 0 |
+| โค้ด | `mobile/src/lib/phoneEmail.ts` + unit test ใน `server/tests/domain/phoneEmail.test.ts` |
+| Server | `normalizePhone` ฝั่ง server; register รับ phone มี/ไม่มีขีด; login ค้น raw หรือ normalized หรือ email |
+| `users.phone` | migration `021_users_phone_nullable` — สมัครด้วยอีเมลอย่างเดียวได้ (phone NULL) |
+| อีเมล | ไม่ autocapitalize/autocorrect; ชิปโดเมนหลัง `@`; ข้อเสนอพิมพ์ผิด (gmial → gmail) ไม่บังคับ; trim+lowercase ก่อนส่ง |
+| หน้าจอ | login (toggle identity), register (toggle), profile (phone ฟอร์แมต read-only + email chips) |
+| i18n | `identity.*` th/en |

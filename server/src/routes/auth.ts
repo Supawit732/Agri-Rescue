@@ -14,6 +14,7 @@ import { asyncHandler } from '../http/asyncHandler';
 import { HttpError } from '../http/errors';
 import { requireAuth, requireCapability, signAccessToken } from '../middleware/auth';
 import { ensureShop } from '../shops/shopService';
+import { isValidThaiPhone, normalizePhone } from '../lib/normalizePhone';
 import type { UserRole } from '../types/express';
 
 export const authRouter = Router();
@@ -28,10 +29,16 @@ const emailSchema = z
   .nullable()
   .optional();
 
+/** Accepts 0XX-XXX-XXXX, spaces, +66, bare digits → stores digits only. */
+const phoneInputSchema = z
+  .string()
+  .transform((v) => normalizePhone(v))
+  .refine((v) => isValidThaiPhone(v), 'เบอร์โทรไม่ถูกต้อง');
+
 const registerSchema = z
   .object({
     name: z.string().trim().min(1, 'กรุณากรอกชื่อ'),
-    phone: z.string().trim().regex(/^\d{9,15}$/, 'เบอร์โทรไม่ถูกต้อง'),
+    phone: phoneInputSchema.optional().nullable(),
     email: emailSchema,
     password: z.string().min(8, 'รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร'),
     can_sell: z.boolean(),
@@ -51,10 +58,18 @@ const registerSchema = z
     if (!body.can_buy && body.buyer_type !== undefined && body.buyer_type !== null) {
       ctx.addIssue({ code: 'custom', message: 'ประเภทผู้ซื้อใช้ได้เฉพาะเมื่อเปิดสิทธิ์ซื้อ', path: ['buyer_type'] });
     }
+    const phone = body.phone ?? '';
+    const email = body.email ?? '';
+    if (!phone && !email) {
+      ctx.addIssue({ code: 'custom', message: 'กรุณากรอกเบอร์โทรหรืออีเมล', path: ['phone'] });
+    }
+    if (phone && !isValidThaiPhone(phone)) {
+      ctx.addIssue({ code: 'custom', message: 'เบอร์โทรไม่ถูกต้อง', path: ['phone'] });
+    }
   });
 
 const loginSchema = z.object({
-  /** Phone number or email (PR A single login field). */
+  /** Phone (with or without dashes) or email identity — normalized in handler for lookup. */
   phone: z.string().trim().min(1, 'กรุณากรอกเบอร์โทรหรืออีเมล'),
   password: z.string().min(1, 'กรุณากรอกรหัสผ่าน'),
 });
@@ -282,7 +297,7 @@ authRouter.post(
          VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
         [
           body.name,
-          body.phone,
+          body.phone ?? null,
           body.email ?? null,
           passwordHash,
           role,
@@ -331,6 +346,17 @@ authRouter.post(
   '/login',
   asyncHandler(async (req, res) => {
     const body = loginSchema.parse(req.body);
+    const rawIdentity = body.phone;
+    const isEmail = rawIdentity.includes('@');
+    const phoneNorm = isEmail ? '' : normalizePhone(rawIdentity);
+    const emailNorm = isEmail ? rawIdentity.toLowerCase() : '';
+    if (!isEmail && !isValidThaiPhone(phoneNorm) && phoneNorm.replace(/^0/, '').length < 9) {
+      // Allow seed/test phones that may lack leading 0 (e.g. 800000001).
+      // Still reject obvious garbage.
+      if (!/^\d{7,15}$/.test(phoneNorm)) {
+        throw new HttpError(400, 'VALIDATION', 'เบอร์โทรหรืออีเมลไม่ถูกต้อง');
+      }
+    }
     const [authRows] = await pool.query<UserRow[]>(
       `SELECT u.id, u.name, u.phone, u.email, u.role, u.can_sell, u.can_buy, u.is_admin,
               u.line_id, u.lat, u.lng, u.password_hash,
@@ -342,8 +368,8 @@ authRouter.post(
               bp.donor_terms_version, bp.donor_terms_accepted_at, bp.org_type
        FROM users u
        LEFT JOIN buyer_profiles bp ON bp.user_id = u.id
-       WHERE u.phone = ? OR u.email = ?`,
-      [body.phone, body.phone],
+       WHERE u.phone = ? OR u.phone = ? OR u.email = ?`,
+      [rawIdentity, phoneNorm || rawIdentity, isEmail ? emailNorm : rawIdentity],
     );
     const user = authRows[0];
     const passwordHash = user?.password_hash;
