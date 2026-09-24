@@ -218,12 +218,7 @@ export default function ContactUsScreen(): React.ReactElement {
             {formatTemplate(t.support.detailsCount, { count: details.length })}
           </Text>
 
-          <Text style={styles.label}>{t.support.photos}</Text>
-          <View style={styles.photoRow}>
-            <View style={styles.photoAdd} accessibilityLabel={t.support.photosHint}>
-              <Feather name="camera" size={22} color={C.mute} />
-            </View>
-          </View>
+          {/* Photo attach hidden for demo — no picker wired yet. */}
           <Text style={styles.muted}>{t.support.photosHint}</Text>
 
           <Text style={styles.label}>{t.support.replyVia}</Text>
@@ -325,18 +320,6 @@ const styles = StyleSheet.create({
   selectText: { fontSize: 15, color: C.ink, fontFamily: fonts.body },
   textarea: { minHeight: 110, paddingTop: 12 },
   counter: { fontSize: 12, color: C.mute, textAlign: 'right', fontFamily: fonts.body },
-  photoRow: { flexDirection: 'row', gap: 8 },
-  photoAdd: {
-    width: 72,
-    height: 72,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
-    borderColor: C.lineStrong,
-    backgroundColor: C.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   radioRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 40 },
   radio: {
     width: 20,

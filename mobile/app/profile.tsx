@@ -3,8 +3,7 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { ApiError } from '../src/api/client';
-import { LogoMark, initialsOf } from '../src/components/LogoMark';
-import { LocationPicker } from '../src/components/LocationPicker';
+import { initialsOf } from '../src/components/LogoMark';
 import { FormField, useFieldErrors, useFieldScroll } from '../src/components/form';
 import { Body, PrimaryButton, Screen, StackHeader } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
@@ -22,9 +21,6 @@ export default function ProfileScreen(): React.ReactElement {
   const [email, setEmail] = useState(user?.email ?? '');
   const [lineId, setLineId] = useState(user?.line_id ?? '');
   const [shopName, setShopName] = useState(user?.name ?? '');
-  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(
-    user?.lat != null && user?.lng != null ? { lat: user.lat, lng: user.lng } : null,
-  );
   const { errors, setErrors, setFieldError, applyServerFields } = useFieldErrors();
   const { scrollRef, registerY, scrollToField } = useFieldScroll();
 
@@ -120,14 +116,6 @@ export default function ProfileScreen(): React.ReactElement {
             <View style={styles.avatar}>
               <Text style={styles.avatarText}>{initialsOf(user.name)}</Text>
             </View>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t.profile.changePhoto}
-              style={styles.camera}
-              onPress={() => setMessage(t.profile.changePhoto)}
-            >
-              <Feather name="camera" size={18} color={C.white} />
-            </Pressable>
           </View>
           <Text style={styles.name}>{user.name}</Text>
           <Text style={styles.muted}>
@@ -252,16 +240,7 @@ export default function ProfileScreen(): React.ReactElement {
           />
         </View>
 
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>{t.profile.pickupLocation}</Text>
-          <LocationPicker
-            value={coords}
-            onChange={(next) => {
-              setCoords(next);
-            }}
-            label={t.profile.changeLocation}
-          />
-        </View>
+        {/* Pickup location hidden for demo — PATCH /profile has no lat/lng save. */}
 
         <Pressable style={styles.card} onPress={() => router.push('/donor-apply')}>
           <View style={styles.linkRow}>
@@ -338,19 +317,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   avatarText: { fontFamily: fonts.titleBold, fontSize: 32, fontWeight: '700', color: C.leafDeep },
-  camera: {
-    position: 'absolute',
-    right: -4,
-    bottom: -4,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: C.leaf,
-    borderWidth: 3,
-    borderColor: C.bg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   name: { fontFamily: fonts.titleBold, fontSize: 22, fontWeight: '700', color: C.ink },
   muted: { fontSize: 12, color: C.mute, fontFamily: fonts.body, marginBottom: 4 },
   ok: { color: C.leafDeep, fontWeight: '600', fontFamily: fonts.bodySemi },

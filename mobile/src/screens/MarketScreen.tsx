@@ -143,8 +143,9 @@ function MarketCatalog(): React.ReactElement {
           return;
         }
         if (permission.status !== 'granted') {
+          // Demo: no location → show all lots sorted by remaining time (no forced picker).
           setLocationTried(true);
-          setShowPicker(true);
+          setFilters((f) => ({ ...f, sort: 'urgent' }));
           return;
         }
         const position = await Location.getCurrentPositionAsync({
@@ -160,7 +161,7 @@ function MarketCatalog(): React.ReactElement {
         setFilters((f) => ({ ...f, sort: 'near' }));
       } catch {
         if (active) {
-          setShowPicker(true);
+          setFilters((f) => ({ ...f, sort: 'urgent' }));
         }
       } finally {
         if (active) {
