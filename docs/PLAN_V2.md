@@ -27,7 +27,8 @@
 | UI audit polish | เสร็จ | [#33](https://github.com/Supawit732/Agri-Rescue/pull/33) |
 | 6.4 แบบย่อ (ช่วงนัดรับ + เส้นทางผู้ซื้อ) | เสร็จ | [#34](https://github.com/Supawit732/Agri-Rescue/pull/34) |
 | EN system i18n | เสร็จ | [#35](https://github.com/Supawit732/Agri-Rescue/pull/35) |
-| งานเล็กก่อนเดโม (6.9 + รูปโปรไฟล์ + รูปติดต่อเรา) | กำลังทำ | branch `feat/post-delivery-tips-media` |
+| งานเล็กก่อนเดโม (6.9 + รูปโปรไฟล์ + รูปติดต่อเรา) | เสร็จ | [#36](https://github.com/Supawit732/Agri-Rescue/pull/36) |
+| 6.3 พืช ~30 ชนิด + เกษตรกรเพิ่มพืชเอง | กำลังทำ | branch `feat/6.3-crop-catalog` |
 | 6.3, 6.5–6.6, 6.8, 6.10–6.12 / UI PR D | ยังไม่ทำ | — |
 
 หมายเหตุ: โค้ดหน้าจอรอบวิ่งเก่ายังอยู่ใน repo เพื่อให้ test/delivery เดิมผ่าน — **ลบใน 6.11** ไม่ใช่ส่วนของ UX ปัจจุบัน (แท็บหลักเป็นตลาด/ขาย/คำสั่งซื้อ/แจ้งเตือน/บัญชี)
