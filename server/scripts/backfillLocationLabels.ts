@@ -3,20 +3,15 @@ import { pool } from '../src/db/pool';
 import { reverseGeocode } from '../src/geo/nominatim';
 
 /**
- * Backfill location labels:
- * - TH fields when missing
- * - EN fields (subdistrict_en/district_en) when missing (D036)
- * Safe to re-run — only touches rows with coordinates and missing labels.
+ * Backfill location labels for all rows with coordinates.
+ * Overwrites TH/EN subdistrict+district every run (parser fixes need re-fill).
+ * Safe to re-run — respects Nominatim ≤1 req/s inside reverseGeocode.
  */
 async function backfillTable(table: 'plots' | 'users'): Promise<number> {
   const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT id AS row_id, lat, lng, subdistrict_th, district_th, subdistrict_en, district_en
+    `SELECT id AS row_id, lat, lng
      FROM ${table}
-     WHERE lat IS NOT NULL AND lng IS NOT NULL
-       AND (
-         subdistrict_th IS NULL OR district_th IS NULL
-         OR subdistrict_en IS NULL OR district_en IS NULL
-       )`,
+     WHERE lat IS NOT NULL AND lng IS NOT NULL`,
   );
   let updated = 0;
   for (const row of rows) {
@@ -33,10 +28,10 @@ async function backfillTable(table: 'plots' | 'users'): Promise<number> {
     }
     await pool.query(
       `UPDATE ${table}
-       SET subdistrict_th = COALESCE(subdistrict_th, ?),
-           district_th = COALESCE(district_th, ?),
-           subdistrict_en = COALESCE(subdistrict_en, ?),
-           district_en = COALESCE(district_en, ?)
+       SET subdistrict_th = ?,
+           district_th = ?,
+           subdistrict_en = ?,
+           district_en = ?
        WHERE id = ?`,
       [
         geo.subdistrictTh,

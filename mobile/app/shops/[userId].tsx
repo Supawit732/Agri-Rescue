@@ -87,6 +87,8 @@ export default function ShopScreen(): React.ReactElement {
       <View style={[styles.cover, { paddingTop: insets.top }]}>
         {shop?.cover != null && mediaUri(shop.cover) !== null ? (
           <Image source={{ uri: mediaUri(shop.cover)! }} style={styles.coverImg} />
+        ) : shop?.avatar != null && mediaUri(shop.avatar) !== null ? (
+          <Image source={{ uri: mediaUri(shop.avatar)! }} style={styles.coverImg} />
         ) : (
           <View style={styles.coverFallback} />
         )}

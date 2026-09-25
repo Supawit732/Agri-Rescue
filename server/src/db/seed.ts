@@ -28,6 +28,10 @@ export async function seed(): Promise<void> {
           categoryId: crop.categoryId,
           normalFeaturesTh: crop.normalFeaturesTh,
           defectExamplesTh: crop.defectExamplesTh,
+          storageTipTh: crop.storageTipTh,
+          storageTipEn: crop.storageTipEn,
+          fridgeOk: crop.fridgeOk,
+          fridgeExtraDays: crop.fridgeExtraDays,
         }),
       );
     }
@@ -111,6 +115,10 @@ async function upsertCrop(
     categoryId?: number | null;
     normalFeaturesTh: string;
     defectExamplesTh: string;
+    storageTipTh?: string;
+    storageTipEn?: string;
+    fridgeOk?: boolean;
+    fridgeExtraDays?: number;
   },
 ): Promise<number> {
   const [existing] = await connection.query<RowDataPacket[]>(
@@ -122,7 +130,8 @@ async function upsertCrop(
     await connection.query(
       `UPDATE crops
        SET name_en = ?, base_shelf_days = ?, market_price_per_kg = ?, category_id = ?,
-           normal_features_th = ?, defect_examples_th = ?
+           normal_features_th = ?, defect_examples_th = ?,
+           storage_tip_th = ?, storage_tip_en = ?, fridge_ok = ?, fridge_extra_days = ?
        WHERE id = ?`,
       [
         input.nameEn,
@@ -131,6 +140,10 @@ async function upsertCrop(
         input.categoryId ?? null,
         input.normalFeaturesTh,
         input.defectExamplesTh,
+        input.storageTipTh ?? null,
+        input.storageTipEn ?? null,
+        input.fridgeOk === true ? 1 : 0,
+        input.fridgeExtraDays ?? 0,
         row.id,
       ],
     );
@@ -138,8 +151,9 @@ async function upsertCrop(
   }
   const [result] = await connection.query<ResultSetHeader>(
     `INSERT INTO crops
-       (name_th, name_en, base_shelf_days, market_price_per_kg, category_id, normal_features_th, defect_examples_th)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+       (name_th, name_en, base_shelf_days, market_price_per_kg, category_id, normal_features_th, defect_examples_th,
+        storage_tip_th, storage_tip_en, fridge_ok, fridge_extra_days)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       input.nameTh,
       input.nameEn,
@@ -148,6 +162,10 @@ async function upsertCrop(
       input.categoryId ?? null,
       input.normalFeaturesTh,
       input.defectExamplesTh,
+      input.storageTipTh ?? null,
+      input.storageTipEn ?? null,
+      input.fridgeOk === true ? 1 : 0,
+      input.fridgeExtraDays ?? 0,
     ],
   );
   return result.insertId;

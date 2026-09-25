@@ -370,3 +370,26 @@ JWT เก็บ `sub`, `role`, `can_sell`, `can_buy`, `is_admin` (อายุ 
 | seed ชื่อ | ร้าน/แปลง/ผู้ใช้สองภาษา เช่น `Somchai Farm (สวนลุงสมชาย)` — ข้อความที่ผู้ใช้พิมพ์เองไม่บังคับแปล |
 | ไม่ทำ | แปลชื่อร้าน/แปลง/ข้อความ support ที่ผู้ใช้กรอกเอง |
 
+## D037 — งานเล็กก่อนเดโม (6.9 + รูป)
+
+| รายการ | ค่า |
+|---|---|
+| 6.9 tips | `crops.storage_tip_th/en`, `fridge_ok`, `fridge_extra_days` (migration 026); คำนวณใน `server/src/domain/storageAdvice.ts` + unit test; ข้อความจาก i18n ไม่ใช่ AI |
+| แสดงผล | หน้า `/orders/:id` เมื่อ `status=delivered`: ควรทาน/ขาย/แจก ภายใน `expires_at`; แช่เย็นยืด `+fridge_extra_days`; รถเร่/ร้าน ลดราคาเมื่อ &lt;12 ชม. |
+| แหล่ง | `docs/crop-sources.md` (ค่าประมาณ สำหรับเดโม/ให้ความรู้) |
+| รูปโปรไฟล์ | `users.avatar` (migration 027); `POST /api/auth/avatar` ย่อ ≤512px ฝั่ง client; เก็บ `uploads/avatars/` แบบเดียวกับรูปล็อต; sync `shops.avatar`; แสดงบน ProfileMenu, profile, หน้าร้าน (fallback ปก) |
+| รูปติดต่อเรา | เปิด UI แนบ ≤3 รูป (backend มีอยู่แล้ว): `private_uploads/` เห็นเฉพาะ owner/admin |
+| ไม่ทำ | หน้า “ของที่ได้รับ” แยก — tips อยู่ใน order detail |
+
+## D038 — เลือกฟิลด์ Nominatim เป็น ต./อ. (TH + EN)
+
+Nominatim ไม่ได้ผังคีย์คงที่: กรุงเทพฯ ใส่ **เขต** ไว้ที่ `suburb` และ **แขวง** ที่ `quarter` ส่วนต่างจังหวัดใส่ **ตำบล** ที่ `city_district` และ **อำเภอ** ที่ `county` (`town` มักเป็นเทศบาล — ห้ามใช้เป็น ต./อ.)
+
+| ระดับ | ลำดับคีย์ |
+|---|---|
+| ตำบล/แขวง | `quarter` → `city_district` (ถ้าขึ้นต้น ตำบล/แขวง/Subdistrict) → `neighbourhood`/`village` → `suburb` (ถ้าเป็น ต.) → fallback `city_district` (ไม่ใช่เทศบาล) |
+| อำเภอ/เขต | `suburb` (ถ้าขึ้นต้น เขต/อำเภอ/District) → `county` → `state_district` → `city` เฉพาะไม่ใช่จังหวัด |
+
+- หน่วย: `pickSubdistrict` / `pickDistrict` ใน `server/src/geo/nominatim.ts` มี unit test (`tests/geo/addressFields.test.ts`)
+- `npm run backfill:location-labels` **เขียนทับ** ทุกแถวที่มีพิกัด (ไม่ใช่ COALESCE) เพื่อแก้ป้ายเก่าหลังแก้ตัวเลือกคีย์
+

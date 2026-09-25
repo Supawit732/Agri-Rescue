@@ -25,7 +25,7 @@ export default function OrderDetailScreen(): React.ReactElement {
   const { id } = useLocalSearchParams<{ id: string }>();
   const orderId = Number(id);
   const { api } = useAuth();
-  const { t, formatNumber, formatDateTime, cropName, translateError } = useI18n();
+  const { t, formatNumber, formatDateTime, cropName, translateError, locale } = useI18n();
   const router = useRouter();
   const now = useNow();
   const { data, loading, error, reload } = useApiData(() => api.getOrder(orderId), [orderId]);
@@ -92,6 +92,11 @@ export default function OrderDetailScreen(): React.ReactElement {
           const pickupLabel =
             order.location_label ?? order.plot_name ?? t.orderDetail.sellerPlotFallback;
           const contact = order.contact ?? null;
+          const advice = order.advice ?? null;
+          const adviceWhen =
+            advice !== null && advice.consumeBy !== undefined
+              ? formatDateTime(advice.consumeBy)
+              : '';
 
           const confirmSeller = (): void => {
             const weight = Number(weightInput);
@@ -282,6 +287,43 @@ export default function OrderDetailScreen(): React.ReactElement {
                 </Text>
               </Card>
 
+              {advice !== null && order.status === 'delivered' ? (
+                <>
+                  <SectionTitle>{t.orderDetail.sectionAdvice}</SectionTitle>
+                  <Card>
+                    <Text style={styles.adviceMain}>
+                      {advice.audience === 'distribute'
+                        ? formatTemplate(t.orderDetail.adviceDistribute, { when: adviceWhen })
+                        : advice.audience === 'sell'
+                          ? formatTemplate(t.orderDetail.adviceSell, { when: adviceWhen })
+                          : formatTemplate(t.orderDetail.adviceEat, { when: adviceWhen })}
+                    </Text>
+                    {advice.fridgeUntil !== null ? (
+                      <Text style={styles.line}>
+                        {formatTemplate(t.orderDetail.adviceFridge, {
+                          when: formatDateTime(advice.fridgeUntil),
+                        })}
+                      </Text>
+                    ) : null}
+                    {advice.priceDropHint ? (
+                      <Text style={styles.adviceWarn}>{t.orderDetail.advicePriceDrop}</Text>
+                    ) : null}
+                    {advice.storageTipEn !== null || advice.storageTipTh !== null ? (
+                      <Text style={styles.muted}>
+                        {formatTemplate(t.orderDetail.adviceTip, {
+                          tip: (locale === 'en'
+                            ? advice.storageTipEn
+                            : advice.storageTipTh) ??
+                            advice.storageTipTh ??
+                            advice.storageTipEn ??
+                            '',
+                        })}
+                      </Text>
+                    ) : null}
+                  </Card>
+                </>
+              ) : null}
+
               {isSellerView && order.status === 'reserved' ? (
                 <>
                   <SectionTitle>{t.orderDetail.sectionSellerConfirm}</SectionTitle>
@@ -362,6 +404,8 @@ const styles = StyleSheet.create({
   slot: { color: C.leafDeep, fontWeight: '600', marginBottom: 6 },
   muted: { color: C.mute, marginTop: 6, lineHeight: 20 },
   step: { color: C.ink, marginBottom: 6, lineHeight: 20 },
+  adviceMain: { color: C.leafDeep, fontWeight: '700', fontSize: 16, marginBottom: 6 },
+  adviceWarn: { color: C.soonFg, fontWeight: '600', marginTop: 4, marginBottom: 4 },
   otpBox: { backgroundColor: C.leafSoft, borderRadius: 12, padding: 12, alignItems: 'center' },
   otpLabel: { color: C.mute, marginBottom: 4 },
   otpValue: { fontSize: 40, fontWeight: '900', color: C.leaf, letterSpacing: 8 },

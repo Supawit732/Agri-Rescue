@@ -416,6 +416,13 @@ export type Messages = {
     contactHint: string;
     call: string;
     openLine: string;
+    sectionAdvice: string;
+    adviceEat: string;
+    adviceSell: string;
+    adviceDistribute: string;
+    adviceFridge: string;
+    advicePriceDrop: string;
+    adviceTip: string;
   };
   confirmBooking: {
     title: string;
@@ -488,6 +495,8 @@ export type Messages = {
     saveContact: string;
     saveShop: string;
     saveLocation: string;
+    photoFailed: string;
+    takePhoto: string;
     changePhoto: string;
     rightsLabel: string;
     buyerTypeLabel: string;
@@ -939,6 +948,9 @@ export type Messages = {
     detailLabel: string;
     photos: string;
     photosHint: string;
+    attachPhoto: string;
+    maxPhotos: string;
+    photoTooLarge: string;
     relatedOrder: string;
     noOrder: string;
     replyVia: string;

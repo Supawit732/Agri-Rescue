@@ -16,6 +16,7 @@ import { HttpError } from '../http/errors';
 import { requireAuth, requireCapability, signAccessToken } from '../middleware/auth';
 import { ensureShop } from '../shops/shopService';
 import { isValidThaiPhone, normalizePhone } from '../lib/normalizePhone';
+import { saveAvatarPhoto } from '../storage/publicUploads';
 import type { UserRole } from '../types/express';
 
 export const authRouter = Router();
@@ -131,6 +132,7 @@ interface UserRow extends RowDataPacket {
   donor_terms_accepted_at: string | Date | null;
   org_type: string | null;
   created_at?: string | Date;
+  avatar?: string | null;
   password_hash?: string;
 }
 
@@ -168,6 +170,7 @@ export interface PublicUser {
   lat: number | null;
   lng: number | null;
   created_at: string | null;
+  avatar: string | null;
   subdistrict_th: string | null;
   district_th: string | null;
   subdistrict_en: string | null;
@@ -238,6 +241,7 @@ export function toPublicUser(row: UserRow): PublicUser {
       row.created_at === null || row.created_at === undefined
         ? null
         : new Date(row.created_at as string).toISOString(),
+    avatar: row.avatar === null || row.avatar === undefined ? null : String(row.avatar),
     subdistrict_th: row.subdistrict_th ?? null,
     district_th: row.district_th ?? null,
     subdistrict_en: row.subdistrict_en ?? null,
@@ -246,7 +250,7 @@ export function toPublicUser(row: UserRow): PublicUser {
 }
 
 const USER_SELECT = `SELECT u.id, u.name, u.phone, u.email, u.role, u.can_sell, u.can_buy, u.is_admin,
-                            u.line_id, u.lat, u.lng, u.created_at, u.subdistrict_th, u.district_th,
+                            u.line_id, u.lat, u.lng, u.created_at, u.avatar, u.subdistrict_th, u.district_th,
                             u.subdistrict_en, u.district_en,
                             bp.buyer_type, bp.charity_approved, bp.donor_tier, bp.beneficiary_count,
                             bp.distribution_mode, bp.donation_suspended, bp.trusted_proof_count,
@@ -380,7 +384,8 @@ authRouter.post(
     }
     const [authRows] = await pool.query<UserRow[]>(
       `SELECT u.id, u.name, u.phone, u.email, u.role, u.can_sell, u.can_buy, u.is_admin,
-              u.line_id, u.lat, u.lng, u.created_at, u.subdistrict_th, u.district_th, u.password_hash,
+              u.line_id, u.lat, u.lng, u.created_at, u.avatar,
+              u.subdistrict_th, u.district_th, u.subdistrict_en, u.district_en, u.password_hash,
               bp.buyer_type, bp.charity_approved, bp.donor_tier, bp.beneficiary_count,
               bp.distribution_mode, bp.donation_suspended, bp.trusted_proof_count,
               bp.org_status, bp.org_reject_reason, bp.org_name,
@@ -408,6 +413,26 @@ authRouter.get(
   asyncHandler(async (req, res) => {
     const user = await loadPublicUser(req.auth?.id ?? 0);
     res.json({ user });
+  }),
+);
+
+const avatarSchema = z.object({
+  base64: z.string().min(1),
+  mime: z.string().min(1).max(128),
+});
+
+authRouter.post(
+  '/avatar',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const body = avatarSchema.parse(req.body);
+    const userId = req.auth?.id ?? 0;
+    const saved = await saveAvatarPhoto({ base64: body.base64, mime: body.mime });
+    await pool.query('UPDATE users SET avatar = ? WHERE id = ?', [saved.url, userId]);
+    // Keep shop avatar in sync so shop header/cover fallback shows the photo.
+    await pool.query('UPDATE shops SET avatar = ? WHERE user_id = ?', [saved.url, userId]);
+    const user = await loadPublicUser(userId);
+    res.json({ user, avatar: saved.url });
   }),
 );
 

@@ -1,9 +1,10 @@
 import { Feather } from '@expo/vector-icons';
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { formatTemplate, useI18n } from '../i18n';
+import { mediaUri } from '../lib/media';
 import { C, fonts, radius } from '../theme';
 import { LogoMark, initialsOf } from './LogoMark';
 import { ProfileMenu } from './ProfileMenu';
@@ -35,7 +36,11 @@ export function AppHeader({ radiusKm = 15 }: { radiusKm?: number }): React.React
           onPress={() => setMenuOpen(true)}
           style={styles.avatar}
         >
-          <Text style={styles.avatarText}>{initialsOf(user.name)}</Text>
+          {mediaUri(user.avatar) !== null ? (
+            <Image source={{ uri: mediaUri(user.avatar)! }} style={styles.avatarImg} />
+          ) : (
+            <Text style={styles.avatarText}>{initialsOf(user.name)}</Text>
+          )}
         </Pressable>
       ) : (
         <View style={styles.avatarSpacer} accessibilityElementsHidden />
@@ -85,7 +90,9 @@ const styles = StyleSheet.create({
     elevation: 0,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
+  avatarImg: { width: '100%', height: '100%' },
   avatarSpacer: { width: 44, height: 44 },
   avatarText: {
     fontFamily: fonts.titleBold,

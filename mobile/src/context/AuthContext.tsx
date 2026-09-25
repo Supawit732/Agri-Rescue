@@ -65,6 +65,7 @@ interface RegisterInput {
 
 interface Api {
   getMe: () => Promise<User>;
+  uploadAvatar: (input: { base64: string; mime: string }) => Promise<{ user: User; avatar: string }>;
   updateProfile: (input: {
     can_sell?: true;
     can_buy?: true;
@@ -397,6 +398,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
       apiRequest<T>({ method, path, token, body });
     return {
       getMe: () => authed<{ user: User }>('GET', '/api/auth/me').then((r) => r.user),
+      uploadAvatar: async (input) => {
+        const res = await authed<{ user: User; avatar: string }>('POST', '/api/auth/avatar', input);
+        setUser(res.user);
+        return res;
+      },
       updateProfile,
       getCrops: () =>
         apiRequest<{ crops: Crop[] }>({ method: 'GET', path: '/api/crops', token }).then((r) => r.crops),

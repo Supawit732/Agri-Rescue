@@ -25,9 +25,10 @@
 | Admin Console | เสร็จ | [#31](https://github.com/Supawit732/Agri-Rescue/pull/31) |
 | ตำแหน่งโปรไฟล์ + ป้าย ต./อ. + 6.7 ปุ่มติดต่อ | เสร็จ | [#32](https://github.com/Supawit732/Agri-Rescue/pull/32) |
 | UI audit polish | เสร็จ | [#33](https://github.com/Supawit732/Agri-Rescue/pull/33) |
-| 6.4 แบบย่อ (ช่วงนัดรับ + เส้นทางผู้ซื้อ) | กำลังทำ |  branch `feat/pickup-slot-route` ([#34](https://github.com/Supawit732/Agri-Rescue/pull/34)) |
-| EN system i18n | กำลังทำ | branch `fix/en-system-i18n` |
-| 6.3, 6.5–6.6, 6.8–6.12 / UI PR D | ยังไม่ทำ | — |
+| 6.4 แบบย่อ (ช่วงนัดรับ + เส้นทางผู้ซื้อ) | เสร็จ | [#34](https://github.com/Supawit732/Agri-Rescue/pull/34) |
+| EN system i18n | เสร็จ | [#35](https://github.com/Supawit732/Agri-Rescue/pull/35) |
+| งานเล็กก่อนเดโม (6.9 + รูปโปรไฟล์ + รูปติดต่อเรา) | กำลังทำ | branch `feat/post-delivery-tips-media` |
+| 6.3, 6.5–6.6, 6.8, 6.10–6.12 / UI PR D | ยังไม่ทำ | — |
 
 หมายเหตุ: โค้ดหน้าจอรอบวิ่งเก่ายังอยู่ใน repo เพื่อให้ test/delivery เดิมผ่าน — **ลบใน 6.11** ไม่ใช่ส่วนของ UX ปัจจุบัน (แท็บหลักเป็นตลาด/ขาย/คำสั่งซื้อ/แจ้งเตือน/บัญชี)
 
