@@ -384,7 +384,8 @@ authRouter.post(
     }
     const [authRows] = await pool.query<UserRow[]>(
       `SELECT u.id, u.name, u.phone, u.email, u.role, u.can_sell, u.can_buy, u.is_admin,
-              u.line_id, u.lat, u.lng, u.created_at, u.subdistrict_th, u.district_th, u.password_hash,
+              u.line_id, u.lat, u.lng, u.created_at, u.avatar,
+              u.subdistrict_th, u.district_th, u.subdistrict_en, u.district_en, u.password_hash,
               bp.buyer_type, bp.charity_approved, bp.donor_tier, bp.beneficiary_count,
               bp.distribution_mode, bp.donation_suspended, bp.trusted_proof_count,
               bp.org_status, bp.org_reject_reason, bp.org_name,
