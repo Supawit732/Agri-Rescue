@@ -38,16 +38,109 @@ async function waitForSlot(): Promise<void> {
   lastRequestAt = Date.now();
 }
 
-function pickAddressString(
+function addressString(
   address: Record<string, unknown> | undefined,
-  keys: string[],
+  key: string,
+): string | null {
+  const v = address?.[key];
+  return typeof v === 'string' && v.trim() !== '' ? v.trim() : null;
+}
+
+/** ตำบล / แขวง / Subdistrict (not municipality or district). */
+function isSubdistrictLike(value: string): boolean {
+  return /ตำบล|แขวง|\bSubdistrict\b/i.test(value);
+}
+
+/** อำเภอ / เขต / District (word “District”, not “Subdistrict”). */
+function isDistrictLike(value: string): boolean {
+  return /อำเภอ|เขต|\bDistrict\b/i.test(value);
+}
+
+function isMunicipality(value: string): boolean {
+  return /เทศบาล|\bMunicipality\b/i.test(value);
+}
+
+function isProvinceLike(value: string): boolean {
+  return /จังหวัด|\bProvince\b|^Bangkok$|^กรุงเทพ/i.test(value);
+}
+
+/**
+ * Pick ตำบล/แขวง from Nominatim address keys.
+ * Bangkok: khwaeng is `quarter` (khet wrongly sits in `suburb`).
+ * Elsewhere: ตำบล is usually `city_district` (not `town` municipality).
+ */
+export function pickSubdistrict(address: Record<string, unknown> | undefined): string | null {
+  if (!address) return null;
+  const quarter = addressString(address, 'quarter');
+  if (quarter !== null && !isMunicipality(quarter) && !isDistrictLike(quarter)) {
+    return quarter;
+  }
+  const cityDistrict = addressString(address, 'city_district');
+  if (cityDistrict !== null && isSubdistrictLike(cityDistrict)) {
+    return cityDistrict;
+  }
+  for (const key of ['neighbourhood', 'village'] as const) {
+    const v = addressString(address, key);
+    if (v !== null && !isMunicipality(v) && !isDistrictLike(v)) {
+      return v;
+    }
+  }
+  const suburb = addressString(address, 'suburb');
+  if (suburb !== null && isSubdistrictLike(suburb)) {
+    return suburb;
+  }
+  if (cityDistrict !== null && !isMunicipality(cityDistrict)) {
+    return cityDistrict;
+  }
+  const town = addressString(address, 'town');
+  if (town !== null && !isMunicipality(town) && !isDistrictLike(town)) {
+    return town;
+  }
+  if (suburb !== null && !isDistrictLike(suburb) && !isMunicipality(suburb)) {
+    return suburb;
+  }
+  return null;
+}
+
+/** Pick อำเภอ/เขต. Bangkok: khet is `suburb`; provinces: `county`. */
+export function pickDistrict(
+  address: Record<string, unknown> | undefined,
+  subdistrict: string | null,
 ): string | null {
   if (!address) return null;
-  for (const key of keys) {
-    const v = address[key];
-    if (typeof v === 'string' && v.trim() !== '') {
-      return v.trim();
-    }
+  const suburb = addressString(address, 'suburb');
+  if (suburb !== null && isDistrictLike(suburb)) {
+    return suburb;
+  }
+  const county = addressString(address, 'county');
+  if (county !== null) {
+    return county;
+  }
+  const cityDistrict = addressString(address, 'city_district');
+  if (
+    cityDistrict !== null &&
+    isDistrictLike(cityDistrict) &&
+    cityDistrict !== subdistrict
+  ) {
+    return cityDistrict;
+  }
+  const stateDistrict = addressString(address, 'state_district');
+  if (stateDistrict !== null && stateDistrict !== subdistrict) {
+    return stateDistrict;
+  }
+  // Same value used as subdistrict (test fixtures / identical names) still OK as district.
+  if (cityDistrict !== null && !isMunicipality(cityDistrict) && !isSubdistrictLike(cityDistrict)) {
+    return cityDistrict;
+  }
+  if (cityDistrict !== null && cityDistrict === subdistrict) {
+    return cityDistrict;
+  }
+  const city = addressString(address, 'city');
+  if (city !== null && isDistrictLike(city) && city !== subdistrict) {
+    return city;
+  }
+  if (city !== null && !isProvinceLike(city) && city !== subdistrict && !isMunicipality(city)) {
+    return city;
   }
   return null;
 }
@@ -98,20 +191,8 @@ async function fetchOnce(
       address?: Record<string, unknown>;
     };
     const displayName = typeof body.display_name === 'string' ? body.display_name : null;
-    const subdistrict = pickAddressString(body.address, [
-      'suburb',
-      'village',
-      'town',
-      'neighbourhood',
-      'quarter',
-    ]);
-    const district = pickAddressString(body.address, [
-      'city_district',
-      'city',
-      'county',
-      'state_district',
-      'province',
-    ]);
+    const subdistrict = pickSubdistrict(body.address);
+    const district = pickDistrict(body.address, subdistrict);
     return { displayName, subdistrict, district };
   } finally {
     clearTimeout(timer);

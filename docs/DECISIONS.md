@@ -381,3 +381,15 @@ JWT เก็บ `sub`, `role`, `can_sell`, `can_buy`, `is_admin` (อายุ 
 | รูปติดต่อเรา | เปิด UI แนบ ≤3 รูป (backend มีอยู่แล้ว): `private_uploads/` เห็นเฉพาะ owner/admin |
 | ไม่ทำ | หน้า “ของที่ได้รับ” แยก — tips อยู่ใน order detail |
 
+## D038 — เลือกฟิลด์ Nominatim เป็น ต./อ. (TH + EN)
+
+Nominatim ไม่ได้ผังคีย์คงที่: กรุงเทพฯ ใส่ **เขต** ไว้ที่ `suburb` และ **แขวง** ที่ `quarter` ส่วนต่างจังหวัดใส่ **ตำบล** ที่ `city_district` และ **อำเภอ** ที่ `county` (`town` มักเป็นเทศบาล — ห้ามใช้เป็น ต./อ.)
+
+| ระดับ | ลำดับคีย์ |
+|---|---|
+| ตำบล/แขวง | `quarter` → `city_district` (ถ้าขึ้นต้น ตำบล/แขวง/Subdistrict) → `neighbourhood`/`village` → `suburb` (ถ้าเป็น ต.) → fallback `city_district` (ไม่ใช่เทศบาล) |
+| อำเภอ/เขต | `suburb` (ถ้าขึ้นต้น เขต/อำเภอ/District) → `county` → `state_district` → `city` เฉพาะไม่ใช่จังหวัด |
+
+- หน่วย: `pickSubdistrict` / `pickDistrict` ใน `server/src/geo/nominatim.ts` มี unit test (`tests/geo/addressFields.test.ts`)
+- `npm run backfill:location-labels` **เขียนทับ** ทุกแถวที่มีพิกัด (ไม่ใช่ COALESCE) เพื่อแก้ป้ายเก่าหลังแก้ตัวเลือกคีย์
+
