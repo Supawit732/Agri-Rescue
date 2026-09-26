@@ -59,6 +59,9 @@ adminConsoleRouter.get(
        ORDER BY due_at ASC
        LIMIT 50`,
     );
+    const [pendingCrops] = await pool.query<RowDataPacket[]>(
+      `SELECT id, name_th, created_at FROM crops WHERE status = 'pending' ORDER BY id ASC LIMIT 50`,
+    );
 
     const orgItems = orgs.map((r) => ({
       kind: 'org' as const,
@@ -109,6 +112,15 @@ adminConsoleRouter.get(
       updated_at: new Date(r.due_at as Date).toISOString(),
       link: '/admin?tab=overview',
     }));
+    const cropItems = pendingCrops.map((r) => ({
+      kind: 'crop' as const,
+      id: Number(r.id),
+      title: String(r.name_th),
+      subtitle: null,
+      status: 'pending',
+      updated_at: new Date(r.created_at as Date).toISOString(),
+      link: `/admin?tab=crops&id=${String(r.id)}`,
+    }));
 
     res.json({
       counts: {
@@ -117,14 +129,16 @@ adminConsoleRouter.get(
         weight: weightItems.length,
         otp: otpItems.length,
         proof: overdueItems.length,
+        crop: cropItems.length,
         total:
           orgItems.length +
           supportItems.length +
           weightItems.length +
           otpItems.length +
-          overdueItems.length,
+          overdueItems.length +
+          cropItems.length,
       },
-      items: [...orgItems, ...supportItems, ...weightItems, ...otpItems, ...overdueItems],
+      items: [...orgItems, ...supportItems, ...weightItems, ...otpItems, ...overdueItems, ...cropItems],
     });
   }),
 );
@@ -325,6 +339,138 @@ adminConsoleRouter.get(
         created_at: new Date(r.created_at as Date).toISOString(),
       })),
     });
+  }),
+);
+
+/** List crops with optional status filter. */
+adminConsoleRouter.get(
+  '/crops',
+  asyncHandler(async (req, res) => {
+    const query = z
+      .object({
+        status: z.enum(['pending', 'approved', 'all']).default('all'),
+        limit: z.coerce.number().int().min(1).max(200).default(100),
+      })
+      .parse(req.query);
+    const params: unknown[] = [];
+    let where = '1 = 1';
+    if (query.status !== 'all') {
+      where += ' AND status = ?';
+      params.push(query.status);
+    }
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT id, name_th, name_en, category_id, base_shelf_days, market_price_per_kg,
+              parcel_allowed, status, created_by, created_at
+       FROM crops
+       WHERE ${where}
+       ORDER BY status ASC, id DESC
+       LIMIT ${query.limit}`,
+      params,
+    );
+    res.json({
+      crops: rows.map((r) => ({
+        id: n(r.id),
+        name_th: String(r.name_th),
+        name_en: r.name_en == null ? null : String(r.name_en),
+        category_id: r.category_id == null ? null : n(r.category_id),
+        base_shelf_days: n(r.base_shelf_days),
+        market_price_per_kg: n(r.market_price_per_kg),
+        parcel_allowed: n(r.parcel_allowed) === 1,
+        status: String(r.status),
+        created_by: r.created_by == null ? null : n(r.created_by),
+        created_at: new Date(r.created_at as Date).toISOString(),
+      })),
+    });
+  }),
+);
+
+const patchCropSchema = z.object({
+  name_th: z.string().min(1).max(100).optional(),
+  name_en: z.string().min(1).max(100).nullable().optional(),
+  category_id: z.number().int().positive().optional(),
+  base_shelf_days: z.number().int().positive().optional(),
+  market_price_per_kg: z.number().positive().optional(),
+  parcel_allowed: z.boolean().optional(),
+  status: z.enum(['approved', 'pending']).optional(),
+  normal_features_th: z.string().max(512).nullable().optional(),
+  defect_examples_th: z.string().max(512).nullable().optional(),
+  storage_tip_th: z.string().max(512).nullable().optional(),
+  storage_tip_en: z.string().max(512).nullable().optional(),
+});
+
+/** Admin edit / approve a crop. */
+adminConsoleRouter.patch(
+  '/crops/:id',
+  asyncHandler(async (req, res) => {
+    const id = z.coerce.number().int().positive().parse(req.params.id);
+    const body = patchCropSchema.parse(req.body);
+
+    const fields: string[] = [];
+    const values: unknown[] = [];
+    if (body.name_th !== undefined) { fields.push('name_th = ?'); values.push(body.name_th); }
+    if (body.name_en !== undefined) { fields.push('name_en = ?'); values.push(body.name_en); }
+    if (body.category_id !== undefined) { fields.push('category_id = ?'); values.push(body.category_id); }
+    if (body.base_shelf_days !== undefined) { fields.push('base_shelf_days = ?'); values.push(body.base_shelf_days); }
+    if (body.market_price_per_kg !== undefined) { fields.push('market_price_per_kg = ?'); values.push(body.market_price_per_kg); }
+    if (body.parcel_allowed !== undefined) { fields.push('parcel_allowed = ?'); values.push(body.parcel_allowed ? 1 : 0); }
+    if (body.status !== undefined) { fields.push('status = ?'); values.push(body.status); }
+    if (body.normal_features_th !== undefined) { fields.push('normal_features_th = ?'); values.push(body.normal_features_th); }
+    if (body.defect_examples_th !== undefined) { fields.push('defect_examples_th = ?'); values.push(body.defect_examples_th); }
+    if (body.storage_tip_th !== undefined) { fields.push('storage_tip_th = ?'); values.push(body.storage_tip_th); }
+    if (body.storage_tip_en !== undefined) { fields.push('storage_tip_en = ?'); values.push(body.storage_tip_en); }
+
+    if (fields.length === 0) {
+      throw new HttpError(400, 'VALIDATION', 'ไม่มีฟิลด์ที่จะแก้ไข');
+    }
+    values.push(id);
+    const [result] = await pool.query<ResultSetHeader>(
+      `UPDATE crops SET ${fields.join(', ')} WHERE id = ?`,
+      values,
+    );
+    if (result.affectedRows === 0) {
+      throw new HttpError(404, 'NOT_FOUND', 'ไม่พบพืช');
+    }
+    res.json({ ok: true, id });
+  }),
+);
+
+/** Merge a pending crop into an existing approved crop; re-points lots. */
+adminConsoleRouter.post(
+  '/crops/:id/merge',
+  asyncHandler(async (req, res) => {
+    const pendingId = z.coerce.number().int().positive().parse(req.params.id);
+    const body = z.object({ target_id: z.number().int().positive() }).parse(req.body);
+
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      const [pending] = await conn.query<RowDataPacket[]>(
+        `SELECT id, status FROM crops WHERE id = ? FOR UPDATE`,
+        [pendingId],
+      );
+      if (pending.length === 0) throw new HttpError(404, 'NOT_FOUND', 'ไม่พบพืชต้นทาง');
+      if (String(pending[0]?.status) !== 'pending') {
+        throw new HttpError(409, 'CONFLICT', 'รวมได้เฉพาะพืช pending เท่านั้น');
+      }
+      const [target] = await conn.query<RowDataPacket[]>(
+        `SELECT id FROM crops WHERE id = ? FOR UPDATE`,
+        [body.target_id],
+      );
+      if (target.length === 0) throw new HttpError(404, 'NOT_FOUND', 'ไม่พบพืชปลายทาง');
+
+      await conn.query(
+        `UPDATE harvest_lots SET crop_id = ? WHERE crop_id = ?`,
+        [body.target_id, pendingId],
+      );
+      await conn.query(`DELETE FROM crops WHERE id = ?`, [pendingId]);
+      await conn.commit();
+      res.json({ ok: true, merged_id: pendingId, target_id: body.target_id });
+    } catch (e) {
+      await conn.rollback();
+      throw e;
+    } finally {
+      conn.release();
+    }
   }),
 );
 

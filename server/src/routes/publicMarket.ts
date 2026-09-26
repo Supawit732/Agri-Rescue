@@ -56,6 +56,7 @@ interface PublicMarketRow extends RowDataPacket {
   expires_at: Date;
   crop_name_th: string;
   crop_name_en: string | null;
+  crop_status: string;
   base_shelf_days: number;
   lat: number;
   lng: number;
@@ -71,7 +72,7 @@ const PUBLIC_LOT_SELECT = `SELECT h.id, h.crop_id, p.farmer_id, s.name AS shop_n
               h.grade, h.ripeness, h.donation_audience, h.photo_url,
               h.start_price_per_kg, h.floor_price_per_kg, h.sale_mode, h.donation_opened,
               h.market_price_snapshot, h.expires_at,
-              c.name_th AS crop_name_th, c.name_en AS crop_name_en, c.base_shelf_days,
+              c.name_th AS crop_name_th, c.name_en AS crop_name_en, c.status AS crop_status, c.base_shelf_days,
               p.lat, p.lng, p.name AS plot_name, p.subdistrict_th, p.district_th, p.subdistrict_en, p.district_en,
               COALESCE((
                 SELECT SUM(o.quantity_kg) FROM orders o
@@ -115,6 +116,7 @@ export interface PublicLotView {
   expires_at: string;
   hours_left: number;
   distance_km: number | null;
+  crop_pending?: boolean;
   donation_audience?: DonationAudience;
   can_request_donation?: boolean;
   reason?: string | null;
@@ -245,6 +247,10 @@ function presentPublicLot(
     hours_left: hoursLeft,
     distance_km: distanceKm,
   };
+
+  if (String(row.crop_status) === 'pending') {
+    view.crop_pending = true;
+  }
 
   if (donor !== null && available.includes('donate')) {
     view.donation_audience = row.donation_audience;

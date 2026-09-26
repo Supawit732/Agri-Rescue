@@ -39,6 +39,7 @@ interface MarketRow extends RowDataPacket {
   expires_at: Date;
   crop_name_th: string;
   crop_name_en: string | null;
+  crop_status: string;
   base_shelf_days: number;
   lat: number;
   lng: number;
@@ -54,7 +55,7 @@ interface MarketRow extends RowDataPacket {
 const MARKET_LOT_SELECT = `SELECT h.id, h.weight_kg, h.split_allowed, h.min_order_kg, h.order_step_kg,
               h.grade, h.ripeness, h.allow_donation, h.donation_audience, h.photo_url,
               h.start_price_per_kg, h.floor_price_per_kg, h.sale_mode, h.donation_opened, h.expires_at,
-              c.name_th AS crop_name_th, c.name_en AS crop_name_en, c.base_shelf_days,
+              c.name_th AS crop_name_th, c.name_en AS crop_name_en, c.status AS crop_status, c.base_shelf_days,
               p.lat, p.lng, p.name AS plot_name, p.area_rai, p.subdistrict_th, p.district_th,
               p.subdistrict_en, p.district_en,
               u.name AS farmer_name,
@@ -101,6 +102,7 @@ function presentBuyerLot(
   subdistrict_en?: string | null;
   district_en?: string | null;
   location_label: string | null;
+  crop_pending: boolean;
 } {
   const hoursLeft = (new Date(row.expires_at).getTime() - now) / (60 * 60 * 1000);
   const saleMode = String(row.sale_mode);
@@ -163,6 +165,7 @@ function presentBuyerLot(
       district_en: row.district_en,
       fallback: row.plot_name,
     }),
+    crop_pending: String(row.crop_status) === 'pending',
   };
 }
 

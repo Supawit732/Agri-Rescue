@@ -11,6 +11,7 @@ import type {
   BuyerType,
   Crop,
   CropCategory,
+  CropProposalRequest,
   DashboardPayload,
   DitCropsResponse,
   DitProductSearchHit,
@@ -76,6 +77,8 @@ interface Api {
     lng?: number;
   }) => Promise<AuthResponse>;
   getCrops: () => Promise<Crop[]>;
+  getMyFrequentCrops: () => Promise<Crop[]>;
+  proposeCrop: (input: CropProposalRequest) => Promise<{ id: number; status: string }>;
   getPlots: () => Promise<Plot[]>;
   createPlot: (input: { name: string; lat: number; lng: number; area_rai: number }) => Promise<Plot>;
   estimate: (input: {
@@ -406,6 +409,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
       updateProfile,
       getCrops: () =>
         apiRequest<{ crops: Crop[] }>({ method: 'GET', path: '/api/crops', token }).then((r) => r.crops),
+      getMyFrequentCrops: () =>
+        authed<{ crops: Crop[] }>('GET', '/api/crops/my-frequent').then((r) => r.crops),
+      proposeCrop: (input) =>
+        authed<{ id: number; status: string }>('POST', '/api/crops/propose', input),
       getPlots: () => authed<{ plots: Plot[] }>('GET', '/api/plots/mine').then((r) => r.plots),
       createPlot: (input) => authed<{ plot: Plot }>('POST', '/api/plots', input).then((r) => r.plot),
       estimate: (input) => authed<EstimateResponse>('POST', '/api/lots/estimate', input),

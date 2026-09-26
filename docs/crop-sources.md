@@ -59,6 +59,80 @@ Sources: [NHS fruit and veg storage](https://www.nhs.uk/live-well/eat-and-drink/
 
 Sources: [FDA keeping food safe](https://www.fda.gov/consumers/food-safety-keeping-food-safe/keeping-food-safe-food-safe) · [UC Riverside citrus](https://www.fruitandvegetable.ucr.edu/)
 
+### ทุเรียน / Durian (`durian`)
+| Shelf | 4 days | Fridge OK | no |
+
+### ส้มโอ / Pomelo (`pomelo`)
+| Shelf | 14 days | Fridge OK | yes | Fridge extra | +7 |
+
+### ลำไย / Longan (`longan`)
+| Shelf | 5 days | Fridge OK | yes | Fridge extra | +3 |
+
+### เงาะ / Rambutan (`rambutan`)
+| Shelf | 4 days | Fridge OK | yes | Fridge extra | +2 |
+
+### ฝรั่ง / Guava (`guava`)
+| Shelf | 4 days | Fridge OK | yes | Fridge extra | +3 |
+
+### สับปะรด / Pineapple (`pineapple`)
+| Shelf | 5 days | Fridge OK | yes | Fridge extra | +3 |
+
+### น้อยหน่า / Custard apple (`custard-apple`)
+| Shelf | 3 days | Fridge OK | yes | Fridge extra | +1 |
+
+### คะน้า / Chinese kale (`chinese-kale`)
+| Shelf | 3 days | Fridge OK | yes | Fridge extra | +2 |
+
+### กะหล่ำปลีจีน / Napa cabbage (`napa-cabbage`)
+| Shelf | 5 days | Fridge OK | yes | Fridge extra | +4 |
+
+### ผักชี / Cilantro (`cilantro`)
+| Shelf | 2 days | Fridge OK | yes | Fridge extra | +2 |
+
+### ต้นหอม / Green onion (`green-onion`)
+| Shelf | 3 days | Fridge OK | yes | Fridge extra | +3 |
+
+### แตงกวา / Cucumber (`cucumber`)
+| Shelf | 5 days | Fridge OK | yes | Fridge extra | +3 |
+
+### พริก / Chili (`chili`)
+| Shelf | 5 days | Fridge OK | yes | Fridge extra | +5 |
+
+### มะเขือพวง / Thai eggplant (`thai-eggplant`)
+| Shelf | 4 days | Fridge OK | yes | Fridge extra | +3 |
+
+### กะหล่ำปลี / Cabbage (`cabbage`)
+| Shelf | 7 days | Fridge OK | yes | Fridge extra | +7 |
+
+### ข้าวโพด / Corn (`corn`)
+| Shelf | 2 days | Fridge OK | yes | Fridge extra | +2 |
+
+### ถั่วฝักยาว / Long bean (`long-bean`)
+| Shelf | 3 days | Fridge OK | yes | Fridge extra | +3 |
+
+### ฟักทอง / Pumpkin (`pumpkin`)
+| Shelf | 14 days | Fridge OK | no |
+
+### ตะไคร้ / Lemongrass (`lemongrass`)
+| Shelf | 5 days | Fridge OK | yes | Fridge extra | +7 |
+
+### กะเพรา / Holy basil (`holy-basil`)
+| Shelf | 2 days | Fridge OK | yes | Fridge extra | +2 |
+
+### ขิง / Ginger (`ginger`)
+| Shelf | 14 days | Fridge OK | yes | Fridge extra | +14 |
+
+### มันเทศ / Sweet potato (`sweet-potato`)
+| Shelf | 14 days | Fridge OK | no |
+
+### หอมแดง / Shallot (`shallot`)
+| Shelf | 14 days | Fridge OK | no |
+
+### กระเทียม / Garlic (`garlic`)
+| Shelf | 30 days | Fridge OK | no |
+
+Sources: UC Davis Postharvest Technology Center, Thai DOA crop guidelines, NHS food storage.
+
 ## Notes
 - `fridge_extra_days` is added **on top of** `expires_at` for “fridge by” display only — it does not change market `expires_at`.
 - Price-drop hint for vendor/shop when hours left &lt; 12h is product policy (PLAN 6.9), not from these sources.

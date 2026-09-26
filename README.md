@@ -2,7 +2,7 @@
 
 แอปมือถือช่วยระบายผลผลิตตกเกรดหรือใกล้เน่าเสียของเกษตรกรรายย่อยไปยังผู้รับซื้อในพื้นที่ แผนการทำอยู่ที่ [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md)
 
-ตอนนี้ Phase 4 พร้อมใช้ สคีมาอยู่ใน `server/src/db/migrations/` ค่าตัวอย่างจากต้นแบบอยู่ใน `server/src/db/seedData.ts` และสีอยู่ใน `mobile/src/theme.ts` API อยู่ใต้ `/api`
+ตอนนี้ Phase 6 (v2) พร้อมใช้ สคีมาอยู่ใน `server/src/db/migrations/` ค่าตัวอย่างจากต้นแบบอยู่ใน `server/src/db/seedData.ts` และสีอยู่ใน `mobile/src/theme.ts` API อยู่ใต้ `/api`
 
 ## โครงโปรเจกต์
 
