@@ -413,3 +413,50 @@ Nominatim ไม่ได้ผังคีย์คงที่: กรุง�
 | ไม่ทำ | lot form ยังไม่แสดง pending crop ใน chip list สาธารณะ — เกษตรกรที่เสนอเองเพิ่มได้ผ่าน propose แล้วรอ approve ก่อนจึงจะเลือกลงล็อตได้ |
 
 Migration: `server/src/db/migrations/028_crop_catalog_63.sql`
+
+## D040 — 6.3 Design Change: Auto-approve + Duplicate Prevention + Price Sanity
+
+### Auto-approve
+เปลี่ยน `POST /api/crops/propose` ให้สร้าง crop ด้วย `status='approved'` ทันที ไม่มี pending queue อีกต่อไป เหตุผล: ทีมตัดสินใจว่า spam/ไม่เหมาะสมหายาก และ UX ที่ใช้ crop ได้เลยดีกว่า ลบ pending badge ออกจาก MarketScreen, ลบ pending crop ออกจาก admin inbox, drop PATCH/GET admin crops endpoints (เหลือแค่ merge)
+
+### Duplicate Prevention (auto-detect)
+เมื่อ propose สร้าง domain functions ใน `server/src/domain/cropNormalize.ts`:
+- `normalizeNameTh` — trim + lowercase + remove spaces/hyphens/parentheses
+- `levenshtein` — standard DP edit distance
+- `findNearMatches` — คืน crops ที่ edit distance ≤ 2
+
+Flow:
+1. exact match (distance 0) → 409 `DUPLICATE` (ไม่ผ่าน force)
+2. near match (distance 1–2, ไม่มี force=true) → 409 `NEAR_MATCH` + `details.suggestions`
+3. near match ที่ user ยืนยัน (force=true) → สร้างได้
+4. ไม่มี match → สร้างได้
+
+Mobile: แสดง "Did you mean?" พร้อม chip ให้เลือก และปุ่ม "เพิ่มเป็นพืชใหม่ต่อไป" (force=true)
+
+### Price Sanity
+เมื่อ propose คำนวณ median ของ `market_price_per_kg` ของ approved crops ในหมวดเดียวกัน (ถ้ามี ≥ 2 crops) แล้วใช้ `isPriceOutlier` จาก `priceSanity.ts` → 422 `PRICE_SANITY` ถ้าราคา < 1/3 หรือ > 3× median
+
+### Category Picker Help
+`GET /api/crops/categories` คืน `example_crops` (≤3 รายการ) ต่อหมวดเพิ่มเติม; Mobile propose form แสดง hint เมื่อเลือกหมวด: ชื่อตัวอย่าง + `default_shelf_days`
+
+## D041 — Seasonal Price Multipliers (crop_season_factors)
+
+### Schema
+Migration 030: `crop_season_factors(id, crop_id INT, month TINYINT, factor DECIMAL(4,3), UNIQUE(crop_id,month))`
+
+### Seed
+พืชผลไม้ตามฤดูกาล 6 ชนิด: มะม่วง, ทุเรียน, ลำไย, เงาะ, ส้มโอ, น้อยหน่า
+แหล่ง: OAE (สำนักงานเศรษฐกิจการเกษตร) ปฏิทินผลผลิตหลักของไทย
+เก็บเฉพาะเดือนที่ factor ≠ 1.0
+
+### Domain Function
+`fallbackReferencePrice(basePrice, factors, month)` ใน `server/src/domain/seasonalPrice.ts`
+คืน `{price, seasonal: boolean}` — `seasonal=true` เมื่อ factor ≠ 1
+
+### Wiring
+ใช้เฉพาะใน `resolveMarketPrice` fallback path (source='crop_fallback') เมื่อไม่มี MOC DIT price ล่าสุด
+เดือนใช้ Asia/Bangkok (UTC+7)
+`label_th` เพิ่ม "(ปรับตามฤดูกาล)" เมื่อ seasonal=true
+
+### ไม่ทำ
+ไม่ส่งผลต่อ MOC DIT price ที่ดึงมาแล้ว (real-time), ไม่มี admin UI สำหรับแก้ factors

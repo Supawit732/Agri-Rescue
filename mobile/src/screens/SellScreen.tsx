@@ -406,6 +406,9 @@ function NewLotForm({
   const [proposePrice, setProposePrice] = useState('');
   const [proposeSubmitting, setProposeSubmitting] = useState(false);
   const [proposeError, setProposeError] = useState<string | null>(null);
+  const [proposeNearMatches, setProposeNearMatches] = useState<
+    Array<{ id: number; name_th: string; name_en: string | null }>
+  >([]);
   const primedDirty = useRef(false);
 
   const saleModeOptions = useMemo(
@@ -930,6 +933,23 @@ function NewLotForm({
               />
             ))}
           </View>
+          {proposeCategoryId !== 0 ? (() => {
+            const selectedCat = categories.find((c) => c.id === proposeCategoryId);
+            if (selectedCat === undefined) return null;
+            const exampleNames = (selectedCat.example_crops ?? [])
+              .map((c) => (locale === 'en' && c.name_en !== null ? c.name_en : c.name_th))
+              .join(', ');
+            const shelfDays = selectedCat.default_shelf_days ?? 0;
+            if (exampleNames === '' || shelfDays === 0) return null;
+            return (
+              <Text style={styles.categoryHint}>
+                {formatTemplate(t.sell.proposeCropCategoryHint, {
+                  examples: exampleNames,
+                  days: shelfDays,
+                })}
+              </Text>
+            );
+          })() : null}
           <Field
             label={t.sell.proposeCropPrice}
             value={proposePrice}
@@ -939,6 +959,67 @@ function NewLotForm({
           {proposeError !== null ? (
             <Text style={styles.previewError}>{proposeError}</Text>
           ) : null}
+          {proposeNearMatches.length > 0 ? (
+            <View style={styles.nearMatchBox}>
+              <Text style={styles.nearMatchTitle}>{t.sell.proposeCropNearMatch}</Text>
+              {proposeNearMatches.map((c) => (
+                <Pressable
+                  key={c.id}
+                  style={styles.nearMatchItem}
+                  onPress={() => {
+                    setCropId(c.id);
+                    setShowProposeForm(false);
+                    setProposeNearMatches([]);
+                    setProposeNameTh('');
+                    setProposeNameEn('');
+                    setProposeCategoryId(0);
+                    setProposePrice('');
+                  }}
+                >
+                  <Text style={styles.nearMatchName}>
+                    {locale === 'en' && c.name_en !== null ? c.name_en : c.name_th}
+                  </Text>
+                </Pressable>
+              ))}
+              <Pressable
+                style={styles.addCropButton}
+                onPress={async () => {
+                  setProposeSubmitting(true);
+                  setProposeError(null);
+                  setProposeNearMatches([]);
+                  try {
+                    await api.proposeCrop({
+                      name_th: proposeNameTh.trim(),
+                      name_en: proposeNameEn.trim() !== '' ? proposeNameEn.trim() : undefined,
+                      category_id: proposeCategoryId,
+                      market_price_per_kg: Number(proposePrice),
+                      force: true,
+                    });
+                    setShowProposeForm(false);
+                    setProposeNameTh('');
+                    setProposeNameEn('');
+                    setProposeCategoryId(0);
+                    setProposePrice('');
+                    Alert.alert('', t.sell.proposeCropSuccess);
+                  } catch (err) {
+                    setProposeError(
+                      err instanceof ApiError
+                        ? err.code === 'PRICE_SANITY'
+                          ? t.sell.proposeCropPriceSanity
+                          : err.code === 'DUPLICATE'
+                            ? t.sell.proposeCropDuplicate
+                            : t.sell.proposeCropFailed
+                        : t.sell.proposeCropFailed,
+                    );
+                  } finally {
+                    setProposeSubmitting(false);
+                  }
+                }}
+              >
+                <Text style={styles.addCropButtonText}>{t.sell.proposeCropForceAdd}</Text>
+              </Pressable>
+            </View>
+          ) : null}
           <PrimaryButton
             label={t.sell.proposeCropSubmit}
             loading={proposeSubmitting}
@@ -946,6 +1027,7 @@ function NewLotForm({
             onPress={async () => {
               setProposeSubmitting(true);
               setProposeError(null);
+              setProposeNearMatches([]);
               try {
                 await api.proposeCrop({
                   name_th: proposeNameTh.trim(),
@@ -960,8 +1042,21 @@ function NewLotForm({
                 setProposePrice('');
                 Alert.alert('', t.sell.proposeCropSuccess);
               } catch (err) {
-                if (err instanceof ApiError && err.code === 'DUPLICATE') {
-                  setProposeError(t.sell.proposeCropDuplicate);
+                if (err instanceof ApiError) {
+                  if (err.code === 'NEAR_MATCH') {
+                    const suggestions = (err.details?.suggestions ?? []) as Array<{
+                      id: number;
+                      name_th: string;
+                      name_en: string | null;
+                    }>;
+                    setProposeNearMatches(suggestions);
+                  } else if (err.code === 'DUPLICATE') {
+                    setProposeError(t.sell.proposeCropDuplicate);
+                  } else if (err.code === 'PRICE_SANITY') {
+                    setProposeError(t.sell.proposeCropPriceSanity);
+                  } else {
+                    setProposeError(t.sell.proposeCropFailed);
+                  }
                 } else {
                   setProposeError(t.sell.proposeCropFailed);
                 }
@@ -1539,5 +1634,35 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 12,
     backgroundColor: C.surface,
+  },
+  categoryHint: {
+    fontSize: 12,
+    color: C.mute,
+    marginTop: 4,
+    marginBottom: 8,
+    fontStyle: 'italic',
+  },
+  nearMatchBox: {
+    backgroundColor: C.turmericSoft,
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 8,
+  },
+  nearMatchTitle: {
+    fontWeight: '600',
+    color: C.ink,
+    marginBottom: 6,
+    fontSize: 13,
+  },
+  nearMatchItem: {
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: C.line,
+  },
+  nearMatchName: {
+    color: C.leaf,
+    fontWeight: '600',
+    fontSize: 14,
   },
 });
