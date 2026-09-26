@@ -363,6 +363,11 @@ export type Messages = {
     proposeCropSuccess: string;
     proposeCropFailed: string;
     proposeCropDuplicate: string;
+    proposeCropNearMatch: string;
+    proposeCropDidYouMean: string;
+    proposeCropForceAdd: string;
+    proposeCropPriceSanity: string;
+    proposeCropCategoryHint: string;
   };
   orders: {
     title: string;

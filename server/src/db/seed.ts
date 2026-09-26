@@ -4,6 +4,7 @@ import type { PoolConnection } from 'mysql2/promise';
 import { pool } from './pool';
 import {
   buyers,
+  cropSeasonFactors,
   crops,
   DEMO_PASSWORD,
   farmers,
@@ -34,6 +35,17 @@ export async function seed(): Promise<void> {
           fridgeExtraDays: crop.fridgeExtraDays,
           parcelAllowed: crop.parcelAllowed,
         }),
+      );
+    }
+
+    for (const { cropKey, month, factor } of cropSeasonFactors) {
+      const cropId = cropIds.get(cropKey);
+      if (cropId === undefined) continue;
+      await connection.query(
+        `INSERT INTO crop_season_factors (crop_id, month, factor)
+         VALUES (?, ?, ?)
+         ON DUPLICATE KEY UPDATE factor = VALUES(factor)`,
+        [cropId, month, factor],
       );
     }
 

@@ -10,6 +10,7 @@ import {
   suggestedStartPrice,
 } from '../domain/sellerPricing';
 import { isPriceOutlier, priceOutlierRatio } from '../domain/priceSanity';
+import { fallbackReferencePrice } from '../domain/seasonalPrice';
 import { mapPool } from '../lib/mapPool';
 import {
   daysAgoIso,
@@ -83,15 +84,24 @@ export async function resolveMarketPrice(cropId: number, today = new Date()): Pr
     }
   }
   const fallback = Number(crop.market_price_per_kg);
+  const [factorRows] = await pool.query<RowDataPacket[]>(
+    `SELECT month, factor FROM crop_season_factors WHERE crop_id = ?`,
+    [cropId],
+  );
+  // Asia/Bangkok month: UTC+7 so offset 7 hours
+  const bangkokMonth = new Date(today.getTime() + 7 * 60 * 60 * 1000).getUTCMonth() + 1;
+  const factors = factorRows.map((r) => ({ month: Number(r.month), factor: Number(r.factor) }));
+  const { price, seasonal } = fallbackReferencePrice(fallback, factors, bangkokMonth);
+  const adjNote = seasonal ? ' (ปรับตามฤดูกาล)' : '';
   return {
-    price_per_kg: fallback,
+    price_per_kg: price,
     is_estimate: true,
     as_of: null,
     source: 'crop_fallback',
     unit: 'บาท/กก.',
     product_code: crop.dit_product_code,
     source_url: null,
-    label_th: `ราคาประมาณ ${fallback} บาท/กก.`,
+    label_th: `ราคาประมาณ ${price} บาท/กก.${adjNote}`,
   };
 }
 

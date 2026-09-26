@@ -11,3 +11,4 @@ server/private_uploads/
 server/uploads/*
 !server/uploads/.gitkeep
 server/.cache/
+.claude/

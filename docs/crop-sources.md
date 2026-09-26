@@ -131,7 +131,40 @@ Sources: [FDA keeping food safe](https://www.fda.gov/consumers/food-safety-keepi
 ### กระเทียม / Garlic (`garlic`)
 | Shelf | 30 days | Fridge OK | no |
 
+### มังคุด / Mangosteen (`mangosteen`)
+| Shelf | 7 days | Fridge OK | yes | Fridge extra | +3 |
+
+### ลิ้นจี่ / Lychee (`lychee`)
+| Shelf | 5 days | Fridge OK | yes | Fridge extra | +3 |
+
 Sources: UC Davis Postharvest Technology Center, Thai DOA crop guidelines, NHS food storage.
+
+## Seasonal price factors
+
+**Direction rule:** Peak harvest season = high supply = prices **DROP** (factor < 1, e.g. 0.60–0.85).
+Off-season = low supply = prices **RISE** (factor > 1, e.g. 1.15–1.40).
+Months not listed default to factor 1.0 (normal).
+
+**Source for harvest calendar months:** OAE (สำนักงานเศรษฐกิจการเกษตร) production calendar for major Thai fruit regions.
+
+**Important:** Factor magnitudes are team estimates for demo purposes and are **not official OAE data**. Only the peak/off-season timing comes from OAE; the numeric multipliers are approximations.
+
+Factors are stored in `crop_season_factors` table and seeded by `server/src/db/seed.ts` from `seedData.ts`.
+
+### Factor table (non-1.0 months only)
+
+| พืช / Crop | Jan | Feb | Mar | Apr | May | Jun | Jul | Aug | Sep | Oct | Nov | Dec | Peak months (region) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| มะม่วง Mango | 1.35 | — | 0.75 | 0.70 | 0.70 | 0.80 | — | — | — | 1.25 | 1.30 | 1.35 | Mar-Jun (Central/East) |
+| ทุเรียน Durian | 1.40 | 1.30 | 0.85 | 0.65 | 0.60 | 0.65 | 0.85 | — | — | **1.0** | 1.30 | 1.40 | Apr-Jun (East) |
+| ลำไย Longan | 1.35 | 1.40 | 1.35 | 1.25 | 1.15 | 0.85 | 0.65 | 0.65 | 0.85 | — | — | — | Jul-Aug (North) |
+| เงาะ Rambutan | 1.35 | 1.30 | 1.25 | 0.85 | 0.70 | 0.65 | 0.70 | 0.85 | — | — | 1.25 | 1.30 | May-Jul (East) |
+| ส้มโอ Pomelo | — | — | 1.30 | 1.35 | 1.30 | 1.15 | — | 0.85 | 0.70 | **0.75** | 0.75 | 0.85 | Aug-Nov (Central) |
+| น้อยหน่า Custard apple | 1.25 | 1.30 | 1.30 | 1.25 | — | — | 0.85 | 0.70 | 0.70 | 0.75 | 0.85 | — | Jul-Oct (North) |
+| มังคุด Mangosteen | 1.40 | 1.30 | 0.85 | 0.65 | 0.60 | 0.65 | 0.85 | — | — | — | 1.25 | 1.35 | Apr-Jun (East) |
+| ลิ้นจี่ Lychee | 1.35 | 1.25 | 0.80 | 0.65 | 0.60 | 0.70 | — | — | — | 1.25 | 1.35 | 1.40 | Apr-Jun (North) |
+
+> "—" = 1.0 (factor not stored; price unchanged). Bold **1.0** calls out a commonly-asked month that is normal (not peak/off-season).
 
 ## Notes
 - `fridge_extra_days` is added **on top of** `expires_at` for “fridge by” display only — it does not change market `expires_at`.

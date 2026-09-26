@@ -161,6 +161,7 @@ export interface CropCategory {
   sort_order?: number;
   default_shelf_days?: number;
   parcel_allowed?: boolean;
+  example_crops?: Array<{ id: number; name_th: string; name_en: string | null }>;
 }
 
 export interface CropProposalRequest {
@@ -168,6 +169,13 @@ export interface CropProposalRequest {
   name_en?: string;
   category_id: number;
   market_price_per_kg: number;
+  force?: boolean;
+}
+
+export interface CropNearMatchResponse {
+  code: 'NEAR_MATCH';
+  message: string;
+  suggestions: Array<{ id: number; name_th: string; name_en: string | null }>;
 }
 
 export interface Plot {
