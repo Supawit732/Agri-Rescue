@@ -274,6 +274,68 @@ describe('orders', () => {
     expect(Number(impact[0]?.co2e_kg)).toBeCloseTo(9.5 * 2.5, 5);
   });
 
+  it('locks seller-confirm after 5 wrong OTP attempts (423) and still works on correct OTP after 4 wrong', async () => {
+    const farmer = await registerUser(app, { role: 'farmer' });
+    const buyer = await registerUser(app, { role: 'buyer', buyer_type: 'shop' });
+    const cropId = await insertCrop('แตงโม', 6, 25);
+    const plotId = await insertPlot(farmer.user.id, 13.66, 100.61);
+
+    // Order A — locked after 5 wrong attempts
+    const lotA = await insertLot({ plotId, cropId, expiresAt: new Date(Date.now() + 5 * 86400000), weightKg: 10 });
+    const bookA = await request(app)
+      .post('/api/orders')
+      .set(bearer(buyer.token))
+      .send({ lot_id: lotA, donation: false, quantity_kg: 10, ...pickAvailablePickupSlot() });
+    expect(bookA.status).toBe(201);
+    const orderAId = bookA.body.order.id as number;
+
+    for (let i = 0; i < 4; i++) {
+      const r = await request(app)
+        .post(`/api/orders/${orderAId}/seller-confirm`)
+        .set(bearer(farmer.token))
+        .send({ otp: '0000', weight_kg: 10 });
+      expect(r.status).toBe(400);
+      expect(r.body.error.code).toBe('OTP_MISMATCH');
+    }
+    const fifth = await request(app)
+      .post(`/api/orders/${orderAId}/seller-confirm`)
+      .set(bearer(farmer.token))
+      .send({ otp: '0000', weight_kg: 10 });
+    expect(fifth.status).toBe(400);
+    expect(fifth.body.error.code).toBe('OTP_MISMATCH');
+
+    const locked = await request(app)
+      .post(`/api/orders/${orderAId}/seller-confirm`)
+      .set(bearer(farmer.token))
+      .send({ otp: bookA.body.order.drop_otp as string, weight_kg: 10 });
+    expect(locked.status).toBe(423);
+    expect(locked.body.error.code).toBe('OTP_LOCKED');
+
+    // Order B — correct OTP still works after 4 wrong
+    const lotB = await insertLot({ plotId, cropId, expiresAt: new Date(Date.now() + 5 * 86400000), weightKg: 10 });
+    const bookB = await request(app)
+      .post('/api/orders')
+      .set(bearer(buyer.token))
+      .send({ lot_id: lotB, donation: false, quantity_kg: 10, ...pickAvailablePickupSlot() });
+    expect(bookB.status).toBe(201);
+    const orderBId = bookB.body.order.id as number;
+    const realOtp = bookB.body.order.drop_otp as string;
+
+    for (let i = 0; i < 4; i++) {
+      const r = await request(app)
+        .post(`/api/orders/${orderBId}/seller-confirm`)
+        .set(bearer(farmer.token))
+        .send({ otp: '0000', weight_kg: 10 });
+      expect(r.status).toBe(400);
+    }
+    const okAfter4 = await request(app)
+      .post(`/api/orders/${orderBId}/seller-confirm`)
+      .set(bearer(farmer.token))
+      .send({ otp: realOtp, weight_kg: 8 });
+    expect(okAfter4.status).toBe(200);
+    expect(okAfter4.body.order.status).toBe('delivered');
+  });
+
   it('requires pickup slot for self-pickup and returns available windows', async () => {
     const { lotId } = await openLot(false);
     const buyer = await registerUser(app, { role: 'buyer', buyer_type: 'shop', lat: 13.65, lng: 100.62 });

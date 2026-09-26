@@ -46,10 +46,10 @@ adminConsoleRouter.get(
        LIMIT 50`,
     );
     const [otps] = await pool.query<RowDataPacket[]>(
-      `SELECT s.id, s.batch_id, s.lot_id, s.otp_attempts, s.status
-       FROM route_stops s
-       WHERE s.otp_attempts >= 5 AND s.status <> 'done'
-       ORDER BY s.id DESC
+      `SELECT o.id, o.lot_id, o.buyer_id, o.otp_attempts, o.status
+       FROM orders o
+       WHERE o.otp_attempts >= 5 AND o.status NOT IN ('delivered', 'cancelled')
+       ORDER BY o.id DESC
        LIMIT 50`,
     );
     const [overdue] = await pool.query<RowDataPacket[]>(
@@ -93,7 +93,7 @@ adminConsoleRouter.get(
     const otpItems = otps.map((r) => ({
       kind: 'otp' as const,
       id: Number(r.id),
-      title: `OTP locked #${String(r.id)}`,
+      title: `OTP locked order#${String(r.id)}`,
       subtitle: `${String(r.otp_attempts)}/5`,
       status: String(r.status),
       updated_at: new Date().toISOString(),
@@ -323,6 +323,27 @@ adminConsoleRouter.get(
         created_at: new Date(r.created_at as Date).toISOString(),
       })),
     });
+  }),
+);
+
+/** Unlock an OTP-locked order by resetting otp_attempts to 0. */
+adminConsoleRouter.post(
+  '/orders/:id/unlock-otp',
+  asyncHandler(async (req, res) => {
+    const id = z.coerce.number().int().positive().parse(req.params.id);
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT id, otp_attempts, status FROM orders WHERE id = ?`,
+      [id],
+    );
+    const order = rows[0];
+    if (order === undefined) {
+      throw new HttpError(404, 'NOT_FOUND', 'ไม่พบคำสั่งซื้อ');
+    }
+    if (n(order.otp_attempts) < 5) {
+      throw new HttpError(409, 'CONFLICT', 'ออเดอร์นี้ไม่ได้ถูกล็อก');
+    }
+    await pool.query(`UPDATE orders SET otp_attempts = 0 WHERE id = ?`, [id]);
+    res.json({ ok: true, id, otp_attempts: 0 });
   }),
 );
 

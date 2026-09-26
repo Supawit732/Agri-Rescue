@@ -754,6 +754,9 @@ export type Messages = {
     weightsTitle: string;
     noOtpLocked: string;
     noWeightFlags: string;
+    unlockOtp: string;
+    unlockOtpConfirm: string;
+    unlockOtpSuccess: string;
     tabOrgs: string;
     tabDit: string;
     tabSupport: string;
