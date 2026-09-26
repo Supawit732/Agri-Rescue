@@ -135,6 +135,7 @@ export type Messages = {
     hoursUnder48: string;
     ripeness: string;
     shop: string;
+    cropPendingBadge: string;
   };
   lot: {
     title: string;
@@ -349,6 +350,19 @@ export type Messages = {
     donationOpened: string;
     bookings: string;
     ripenessLine: string;
+    frequentCropsSection: string;
+    allCropsSection: string;
+    searchCropPlaceholder: string;
+    addNewCrop: string;
+    proposeCropTitle: string;
+    proposeCropNameTh: string;
+    proposeCropNameEn: string;
+    proposeCropCategory: string;
+    proposeCropPrice: string;
+    proposeCropSubmit: string;
+    proposeCropSuccess: string;
+    proposeCropFailed: string;
+    proposeCropDuplicate: string;
   };
   orders: {
     title: string;

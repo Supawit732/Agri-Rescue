@@ -431,6 +431,15 @@ function MarketCatalog(): React.ReactElement {
                         {lot.shop_name}
                       </Text>
                     ) : null}
+                    {lot.crop_pending === true ? (
+                      <View style={styles.badgeRow}>
+                        <Badge
+                          text={t.market.cropPendingBadge}
+                          fg={C.turmeric}
+                          bg={C.turmericSoft}
+                        />
+                      </View>
+                    ) : null}
                     {saleBadge !== null ? (
                       <View style={styles.badgeRow}>
                         <Badge

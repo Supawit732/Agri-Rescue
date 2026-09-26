@@ -149,6 +149,9 @@ export interface Crop {
   base_shelf_days: number;
   market_price_per_kg: number;
   category_id?: number | null;
+  status?: 'approved' | 'pending';
+  parcel_allowed?: boolean;
+  lot_count?: number;
 }
 
 export interface CropCategory {
@@ -156,6 +159,15 @@ export interface CropCategory {
   name_th: string;
   name_en: string | null;
   sort_order?: number;
+  default_shelf_days?: number;
+  parcel_allowed?: boolean;
+}
+
+export interface CropProposalRequest {
+  name_th: string;
+  name_en?: string;
+  category_id: number;
+  market_price_per_kg: number;
 }
 
 export interface Plot {
@@ -301,6 +313,7 @@ export interface MarketLot {
   photos?: string[];
   can_request_donation?: boolean;
   reason?: string | null;
+  crop_pending?: boolean;
 }
 
 export interface DitCropRefPrice {

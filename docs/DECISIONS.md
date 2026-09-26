@@ -393,3 +393,23 @@ Nominatim ไม่ได้ผังคีย์คงที่: กรุง�
 - หน่วย: `pickSubdistrict` / `pickDistrict` ใน `server/src/geo/nominatim.ts` มี unit test (`tests/geo/addressFields.test.ts`)
 - `npm run backfill:location-labels` **เขียนทับ** ทุกแถวที่มีพิกัด (ไม่ใช่ COALESCE) เพื่อแก้ป้ายเก่าหลังแก้ตัวเลือกคีย์
 
+
+
+## D039 — 6.3 Crop Catalog (~30 ชนิด + เกษตรกรเพิ่มพืชเอง)
+
+### Scope
+เพิ่ม ~25 พืชทั่วไปของไทย (รวมเป็น ~30) พร้อมทุกฟิลด์ (`storage_tip`, `fridge_ok`, `normal_features_th`, ฯลฯ); เกษตรกรเสนอพืชที่ไม่มีในระบบ; แอดมิน approve / แก้ / merge
+
+### ตัดสินใจหลัก
+
+| เรื่อง | ตัดสินใจ |
+|---|---|
+| Schema ใหม่ | `crop_categories`: +`default_shelf_days`, `parcel_allowed`, `default_normal_features_th`, `default_defect_examples_th`; `crops`: +`parcel_allowed`, `status ENUM('approved','pending')`, `created_by` |
+| pending ใช้ defaults จาก category | เมื่อ propose ระบบคัดลอก `default_shelf_days`, `parcel_allowed`, `default_normal_features_th`, `default_defect_examples_th` จาก `crop_categories` ทันที ไม่รอ approve |
+| `GET /api/crops` | คืนเฉพาะ `status='approved'` เพื่อป้องกัน pending ปรากฏในฟอร์มลงล็อตทั่วไป |
+| market badge | lot ของพืช pending มี `crop_pending: true` ในทุก market response; แอปแสดง badge "พืชใหม่ รอตรวจ" |
+| merge | `POST /api/admin/crops/:id/merge` ย้าย lot ทั้งหมดไปชี้ target_id แล้วลบ pending crop |
+| DIT auto-match | รัน `pickAutoDitMatch` ในเวลา seed สำหรับพืชใหม่ทั้งหมด (ไม่ต้องรันใหม่สำหรับ pending เพราะยังไม่มี DIT code) |
+| ไม่ทำ | lot form ยังไม่แสดง pending crop ใน chip list สาธารณะ — เกษตรกรที่เสนอเองเพิ่มได้ผ่าน propose แล้วรอ approve ก่อนจึงจะเลือกลงล็อตได้ |
+
+Migration: `server/src/db/migrations/028_crop_catalog_63.sql`

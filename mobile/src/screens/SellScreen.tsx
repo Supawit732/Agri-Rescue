@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
@@ -29,6 +29,7 @@ import { C, urgency } from '../theme';
 import type {
   AssessPhotoResponse,
   Crop,
+  CropCategory,
   DonationAudience,
   EstimateResponse,
   Grade,
@@ -226,8 +227,13 @@ function NewLot({
 }): React.ReactElement {
   const { t } = useI18n();
   const meta = useApiData(async () => {
-    const [crops, plots] = await Promise.all([api.getCrops(), api.getPlots()]);
-    return { crops, plots };
+    const [crops, plots, frequentCrops, categories] = await Promise.all([
+      api.getCrops(),
+      api.getPlots(),
+      api.getMyFrequentCrops().catch(() => [] as Crop[]),
+      api.getCropCategories().catch(() => [] as CropCategory[]),
+    ]);
+    return { crops, plots, frequentCrops, categories };
   }, [refreshKey]);
 
   return (
@@ -246,6 +252,8 @@ function NewLot({
           <NewLotForm
             api={api}
             crops={data.crops}
+            frequentCrops={data.frequentCrops}
+            categories={data.categories}
             plots={data.plots}
             editingLot={editingLot}
             onCreated={onCreated}
@@ -327,6 +335,8 @@ function AddPlotForm({
 function NewLotForm({
   api,
   crops,
+  frequentCrops,
+  categories,
   plots,
   editingLot,
   onCreated,
@@ -335,6 +345,8 @@ function NewLotForm({
 }: {
   api: ReturnType<typeof useAuth>['api'];
   crops: Crop[];
+  frequentCrops: Crop[];
+  categories: CropCategory[];
   plots: Plot[];
   editingLot: MyLot | null;
   onCreated: (summary?: { crop?: string; weight?: string; price?: string }) => void;
@@ -386,6 +398,14 @@ function NewLotForm({
   >(null);
   const [aiEdited, setAiEdited] = useState(false);
   const [aiMessage, setAiMessage] = useState<string | null>(null);
+  const [cropSearch, setCropSearch] = useState('');
+  const [showProposeForm, setShowProposeForm] = useState(false);
+  const [proposeNameTh, setProposeNameTh] = useState('');
+  const [proposeNameEn, setProposeNameEn] = useState('');
+  const [proposeCategoryId, setProposeCategoryId] = useState<number>(0);
+  const [proposePrice, setProposePrice] = useState('');
+  const [proposeSubmitting, setProposeSubmitting] = useState(false);
+  const [proposeError, setProposeError] = useState<string | null>(null);
   const primedDirty = useRef(false);
 
   const saleModeOptions = useMemo(
@@ -831,8 +851,42 @@ function NewLotForm({
         ) : null}
 
       <SectionTitle>{t.sell.selectCrop}</SectionTitle>
-      <View style={styles.row}>
-        {crops.map((crop) => (
+      {!isEditing ? (
+        <TextInput
+          style={styles.cropSearchInput}
+          value={cropSearch}
+          onChangeText={setCropSearch}
+          placeholder={t.sell.searchCropPlaceholder}
+          placeholderTextColor={C.mute}
+          returnKeyType="search"
+          clearButtonMode="while-editing"
+        />
+      ) : null}
+      {!isEditing && frequentCrops.length > 0 && cropSearch.trim() === '' ? (
+        <>
+          <Text style={styles.cropSubheading}>{t.sell.frequentCropsSection}</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
+            {frequentCrops.map((crop) => (
+              <Chip
+                key={crop.id}
+                label={cropName(crop)}
+                selected={crop.id === cropId}
+                onPress={() => { setCropId(crop.id); }}
+              />
+            ))}
+          </ScrollView>
+          <Text style={styles.cropSubheading}>{t.sell.allCropsSection}</Text>
+        </>
+      ) : null}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
+        {(cropSearch.trim() === ''
+          ? crops
+          : crops.filter((c) => {
+              const q = cropSearch.trim().toLowerCase();
+              return c.name_th.toLowerCase().includes(q) ||
+                (c.name_en ?? '').toLowerCase().includes(q);
+            })
+        ).map((crop) => (
           <Chip
             key={crop.id}
             label={cropName(crop)}
@@ -844,7 +898,80 @@ function NewLotForm({
             }}
           />
         ))}
-      </View>
+      </ScrollView>
+      {!isEditing ? (
+        <Pressable
+          style={styles.addCropButton}
+          onPress={() => { setShowProposeForm((v) => !v); }}
+        >
+          <Text style={styles.addCropButtonText}>{t.sell.addNewCrop}</Text>
+        </Pressable>
+      ) : null}
+      {showProposeForm ? (
+        <View style={styles.proposeForm}>
+          <Field
+            label={t.sell.proposeCropNameTh}
+            value={proposeNameTh}
+            onChangeText={setProposeNameTh}
+          />
+          <Field
+            label={t.sell.proposeCropNameEn}
+            value={proposeNameEn}
+            onChangeText={setProposeNameEn}
+          />
+          <SectionTitle>{t.sell.proposeCropCategory}</SectionTitle>
+          <View style={styles.row}>
+            {categories.map((cat) => (
+              <Chip
+                key={cat.id}
+                label={locale === 'en' && cat.name_en !== null ? cat.name_en : cat.name_th}
+                selected={cat.id === proposeCategoryId}
+                onPress={() => { setProposeCategoryId(cat.id); }}
+              />
+            ))}
+          </View>
+          <Field
+            label={t.sell.proposeCropPrice}
+            value={proposePrice}
+            onChangeText={setProposePrice}
+            keyboardType="numeric"
+          />
+          {proposeError !== null ? (
+            <Text style={styles.previewError}>{proposeError}</Text>
+          ) : null}
+          <PrimaryButton
+            label={t.sell.proposeCropSubmit}
+            loading={proposeSubmitting}
+            disabled={proposeNameTh.trim().length === 0 || proposeCategoryId === 0 || Number(proposePrice) <= 0}
+            onPress={async () => {
+              setProposeSubmitting(true);
+              setProposeError(null);
+              try {
+                await api.proposeCrop({
+                  name_th: proposeNameTh.trim(),
+                  name_en: proposeNameEn.trim() !== '' ? proposeNameEn.trim() : undefined,
+                  category_id: proposeCategoryId,
+                  market_price_per_kg: Number(proposePrice),
+                });
+                setShowProposeForm(false);
+                setProposeNameTh('');
+                setProposeNameEn('');
+                setProposeCategoryId(0);
+                setProposePrice('');
+                Alert.alert('', t.sell.proposeCropSuccess);
+              } catch (err) {
+                if (err instanceof ApiError && err.code === 'DUPLICATE') {
+                  setProposeError(t.sell.proposeCropDuplicate);
+                } else {
+                  setProposeError(t.sell.proposeCropFailed);
+                }
+              } finally {
+                setProposeSubmitting(false);
+              }
+            }}
+          />
+        </View>
+      ) : null}
 
       <SectionTitle>{t.sell.plot}</SectionTitle>
       {plots.length === 1 ? (
@@ -1390,4 +1517,27 @@ const styles = StyleSheet.create({
   bookingsBox: { backgroundColor: C.leafSoft, borderRadius: 12, padding: 10, marginVertical: 8 },
   bookingsTitle: { fontWeight: '700', color: C.ink, marginBottom: 4 },
   editBtn: { marginTop: 10 },
+  cropSearchInput: {
+    borderWidth: 1,
+    borderColor: C.line,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 15,
+    color: C.ink,
+    backgroundColor: C.surface,
+    marginBottom: 8,
+  },
+  cropSubheading: { fontSize: 13, color: C.mute, fontWeight: '600', marginBottom: 4, marginTop: 4 },
+  chipScroll: { marginBottom: 4 },
+  addCropButton: { paddingVertical: 6, paddingHorizontal: 2, marginBottom: 8 },
+  addCropButtonText: { color: C.leaf, fontWeight: '600', fontSize: 14 },
+  proposeForm: {
+    borderWidth: 1,
+    borderColor: C.line,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+    backgroundColor: C.surface,
+  },
 });

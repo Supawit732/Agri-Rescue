@@ -32,6 +32,7 @@ export async function seed(): Promise<void> {
           storageTipEn: crop.storageTipEn,
           fridgeOk: crop.fridgeOk,
           fridgeExtraDays: crop.fridgeExtraDays,
+          parcelAllowed: crop.parcelAllowed,
         }),
       );
     }
@@ -119,6 +120,7 @@ async function upsertCrop(
     storageTipEn?: string;
     fridgeOk?: boolean;
     fridgeExtraDays?: number;
+    parcelAllowed?: boolean;
   },
 ): Promise<number> {
   const [existing] = await connection.query<RowDataPacket[]>(
@@ -131,7 +133,8 @@ async function upsertCrop(
       `UPDATE crops
        SET name_en = ?, base_shelf_days = ?, market_price_per_kg = ?, category_id = ?,
            normal_features_th = ?, defect_examples_th = ?,
-           storage_tip_th = ?, storage_tip_en = ?, fridge_ok = ?, fridge_extra_days = ?
+           storage_tip_th = ?, storage_tip_en = ?, fridge_ok = ?, fridge_extra_days = ?,
+           parcel_allowed = ?
        WHERE id = ?`,
       [
         input.nameEn,
@@ -144,6 +147,7 @@ async function upsertCrop(
         input.storageTipEn ?? null,
         input.fridgeOk === true ? 1 : 0,
         input.fridgeExtraDays ?? 0,
+        input.parcelAllowed === true ? 1 : 0,
         row.id,
       ],
     );
@@ -152,8 +156,8 @@ async function upsertCrop(
   const [result] = await connection.query<ResultSetHeader>(
     `INSERT INTO crops
        (name_th, name_en, base_shelf_days, market_price_per_kg, category_id, normal_features_th, defect_examples_th,
-        storage_tip_th, storage_tip_en, fridge_ok, fridge_extra_days)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        storage_tip_th, storage_tip_en, fridge_ok, fridge_extra_days, parcel_allowed)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       input.nameTh,
       input.nameEn,
@@ -166,6 +170,7 @@ async function upsertCrop(
       input.storageTipEn ?? null,
       input.fridgeOk === true ? 1 : 0,
       input.fridgeExtraDays ?? 0,
+      input.parcelAllowed === true ? 1 : 0,
     ],
   );
   return result.insertId;
