@@ -79,9 +79,9 @@ export default function MarketScreen(): React.ReactElement {
       ) : null}
       {user !== null && !user.can_buy ? (
         <View style={styles.enableBuyBanner}>
-          <Text style={styles.enableBuyText}>{t.market.enableBuyBrowse}</Text>
-          <Pressable onPress={() => router.push('/profile')}>
-            <Text style={styles.enableBuyLink}>{t.market.goAccount}</Text>
+          <Text style={styles.enableBuyText}>{t.market.enableBuy}</Text>
+          <Pressable style={styles.enableBuyLink} onPress={() => router.push('/profile')}>
+            <Text style={styles.enableBuyLinkText}>{t.market.goAccount}</Text>
           </Pressable>
         </View>
       ) : null}
@@ -520,19 +520,21 @@ const styles = StyleSheet.create({
   enableBuyBanner: {
     marginHorizontal: 16,
     marginBottom: 8,
-    padding: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     backgroundColor: C.soonBg,
     borderRadius: radius.card,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
-  enableBuyText: { color: C.soonFg, fontSize: 13, fontFamily: fonts.body },
+  enableBuyText: { flex: 1, color: C.soonFg, fontSize: 13, fontFamily: fonts.body },
   enableBuyLink: {
-    color: C.leaf,
-    fontWeight: '700',
-    marginTop: 6,
-    fontFamily: fonts.bodySemi,
     minHeight: 44,
-    textAlignVertical: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
   },
+  enableBuyLinkText: { color: C.leaf, fontWeight: '700', fontFamily: fonts.bodySemi, fontSize: 13 },
   searchRow: { flexDirection: 'row', gap: 10, marginBottom: 10 },
   searchBox: {
     flex: 1,
