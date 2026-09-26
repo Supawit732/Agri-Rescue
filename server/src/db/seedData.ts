@@ -457,9 +457,133 @@ export const crops = [
     normalFeaturesTh: 'เปลือกขาวหรือม่วงแห้งแน่น กลีบแน่นไม่งอก ไม่มีรา',
     defectExamplesTh: 'งอกยาว เปลือกเน่าดำ รา เนื้อกลีบเละ กลิ่นเปรี้ยว',
   },
+  {
+    key: 'mangosteen',
+    nameTh: 'มังคุด',
+    nameEn: 'Mangosteen',
+    categoryId: 1,
+    baseShelfDays: 7,
+    marketPricePerKg: 80,
+    parcelAllowed: true,
+    storageTipTh: 'เก็บที่เย็น 10–13°C ห่อด้วยกระดาษ ใช้ภายใน 1 สัปดาห์',
+    storageTipEn: 'Store at 10–13°C wrapped in paper; use within 1 week',
+    fridgeOk: true,
+    fridgeExtraDays: 3,
+    normalFeaturesTh: 'เปลือกสีม่วงเข้มแน่น กลีบสีเขียวสด ไม่มียางเหลืองไหล',
+    defectExamplesTh: 'เปลือกแข็งแน่น ยางเหลืองไหล เนื้อดำน้ำตาล รา',
+  },
+  {
+    key: 'lychee',
+    nameTh: 'ลิ้นจี่',
+    nameEn: 'Lychee',
+    categoryId: 1,
+    baseShelfDays: 5,
+    marketPricePerKg: 70,
+    parcelAllowed: true,
+    storageTipTh: 'แช่เย็น 2–5°C ใส่ถุงผักสด ใช้ภายใน 3–5 วัน',
+    storageTipEn: 'Refrigerate at 2–5°C in a produce bag; use within 3–5 days',
+    fridgeOk: true,
+    fridgeExtraDays: 3,
+    normalFeaturesTh: 'เปลือกสีแดงอมชมพูสด เนื้อใสหวาน เมล็ดเล็ก',
+    defectExamplesTh: 'เปลือกน้ำตาลดำ เนื้อเมือก กลิ่นหมัก',
+  },
 ] as const;
 
 export type CropKey = (typeof crops)[number]['key'];
+
+export interface CropSeasonFactor {
+  cropKey: CropKey;
+  month: number; // 1-12
+  factor: number; // < 1 = peak (cheap), > 1 = off-season (expensive), 1.0 = normal (not stored)
+}
+
+// Seasonal price factors based on OAE production calendar.
+// Direction: peak harvest = high supply = prices DROP (factor < 1).
+// Off-season = low supply = prices RISE (factor > 1).
+// Only non-1.0 months are listed; missing months default to 1.0.
+// Factor magnitudes are team estimates for demo purposes, not official OAE data.
+export const cropSeasonFactors: CropSeasonFactor[] = [
+  // มะม่วง — peak Mar-Jun (Eastern/Central Thailand)
+  { cropKey: 'mango', month: 3, factor: 0.75 },
+  { cropKey: 'mango', month: 4, factor: 0.70 },
+  { cropKey: 'mango', month: 5, factor: 0.70 },
+  { cropKey: 'mango', month: 6, factor: 0.80 },
+  { cropKey: 'mango', month: 10, factor: 1.25 },
+  { cropKey: 'mango', month: 11, factor: 1.30 },
+  { cropKey: 'mango', month: 12, factor: 1.35 },
+  { cropKey: 'mango', month: 1, factor: 1.35 },
+  // ทุเรียน — peak Apr-Jun (Eastern Thailand); Oct = 1.0 (normal, not stored)
+  { cropKey: 'durian', month: 3, factor: 0.85 },
+  { cropKey: 'durian', month: 4, factor: 0.65 },
+  { cropKey: 'durian', month: 5, factor: 0.60 },
+  { cropKey: 'durian', month: 6, factor: 0.65 },
+  { cropKey: 'durian', month: 7, factor: 0.85 },
+  { cropKey: 'durian', month: 11, factor: 1.30 },
+  { cropKey: 'durian', month: 12, factor: 1.40 },
+  { cropKey: 'durian', month: 1, factor: 1.40 },
+  { cropKey: 'durian', month: 2, factor: 1.30 },
+  // ลำไย — peak Jul-Aug (Northern Thailand)
+  { cropKey: 'longan', month: 6, factor: 0.85 },
+  { cropKey: 'longan', month: 7, factor: 0.65 },
+  { cropKey: 'longan', month: 8, factor: 0.65 },
+  { cropKey: 'longan', month: 9, factor: 0.85 },
+  { cropKey: 'longan', month: 1, factor: 1.35 },
+  { cropKey: 'longan', month: 2, factor: 1.40 },
+  { cropKey: 'longan', month: 3, factor: 1.35 },
+  { cropKey: 'longan', month: 4, factor: 1.25 },
+  { cropKey: 'longan', month: 5, factor: 1.15 },
+  // เงาะ — peak May-Jul (Eastern Thailand)
+  { cropKey: 'rambutan', month: 4, factor: 0.85 },
+  { cropKey: 'rambutan', month: 5, factor: 0.70 },
+  { cropKey: 'rambutan', month: 6, factor: 0.65 },
+  { cropKey: 'rambutan', month: 7, factor: 0.70 },
+  { cropKey: 'rambutan', month: 8, factor: 0.85 },
+  { cropKey: 'rambutan', month: 11, factor: 1.25 },
+  { cropKey: 'rambutan', month: 12, factor: 1.30 },
+  { cropKey: 'rambutan', month: 1, factor: 1.35 },
+  { cropKey: 'rambutan', month: 2, factor: 1.30 },
+  { cropKey: 'rambutan', month: 3, factor: 1.25 },
+  // ส้มโอ — peak Aug-Nov (Central Thailand); Oct = 0.75
+  { cropKey: 'pomelo', month: 8, factor: 0.85 },
+  { cropKey: 'pomelo', month: 9, factor: 0.70 },
+  { cropKey: 'pomelo', month: 10, factor: 0.75 },
+  { cropKey: 'pomelo', month: 11, factor: 0.75 },
+  { cropKey: 'pomelo', month: 12, factor: 0.85 },
+  { cropKey: 'pomelo', month: 3, factor: 1.30 },
+  { cropKey: 'pomelo', month: 4, factor: 1.35 },
+  { cropKey: 'pomelo', month: 5, factor: 1.30 },
+  { cropKey: 'pomelo', month: 6, factor: 1.15 },
+  // น้อยหน่า — peak Jul-Oct (Northern Thailand)
+  { cropKey: 'custard-apple', month: 7, factor: 0.85 },
+  { cropKey: 'custard-apple', month: 8, factor: 0.70 },
+  { cropKey: 'custard-apple', month: 9, factor: 0.70 },
+  { cropKey: 'custard-apple', month: 10, factor: 0.75 },
+  { cropKey: 'custard-apple', month: 11, factor: 0.85 },
+  { cropKey: 'custard-apple', month: 1, factor: 1.25 },
+  { cropKey: 'custard-apple', month: 2, factor: 1.30 },
+  { cropKey: 'custard-apple', month: 3, factor: 1.30 },
+  { cropKey: 'custard-apple', month: 4, factor: 1.25 },
+  // มังคุด — peak Apr-Jun (Eastern Thailand)
+  { cropKey: 'mangosteen', month: 3, factor: 0.85 },
+  { cropKey: 'mangosteen', month: 4, factor: 0.65 },
+  { cropKey: 'mangosteen', month: 5, factor: 0.60 },
+  { cropKey: 'mangosteen', month: 6, factor: 0.65 },
+  { cropKey: 'mangosteen', month: 7, factor: 0.85 },
+  { cropKey: 'mangosteen', month: 11, factor: 1.25 },
+  { cropKey: 'mangosteen', month: 12, factor: 1.35 },
+  { cropKey: 'mangosteen', month: 1, factor: 1.40 },
+  { cropKey: 'mangosteen', month: 2, factor: 1.30 },
+  // ลิ้นจี่ — peak Apr-Jun (Northern Thailand)
+  { cropKey: 'lychee', month: 3, factor: 0.80 },
+  { cropKey: 'lychee', month: 4, factor: 0.65 },
+  { cropKey: 'lychee', month: 5, factor: 0.60 },
+  { cropKey: 'lychee', month: 6, factor: 0.70 },
+  { cropKey: 'lychee', month: 10, factor: 1.25 },
+  { cropKey: 'lychee', month: 11, factor: 1.35 },
+  { cropKey: 'lychee', month: 12, factor: 1.40 },
+  { cropKey: 'lychee', month: 1, factor: 1.35 },
+  { cropKey: 'lychee', month: 2, factor: 1.25 },
+];
 
 export const buyers = [
   { name: 'PaDaRed Vendor (รถพุ่มพวงป้าแดง)', buyerType: 'vendor', lat: 13.662, lng: 100.611, phone: '0800000011' },

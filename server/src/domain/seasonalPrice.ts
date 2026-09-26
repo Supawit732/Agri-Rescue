@@ -1,11 +1,17 @@
 export interface SeasonFactor {
   month: number; // 1-12
-  factor: number; // e.g. 1.4 = +40% in peak season
+  /**
+   * Multiplier applied to the base price.
+   * Peak harvest season = high supply = prices DROP → factor < 1 (e.g. 0.6–0.8).
+   * Off-season = low supply = prices RISE → factor > 1 (e.g. 1.2–1.5).
+   * Normal months are not stored; a missing entry defaults to 1.0.
+   */
+  factor: number;
 }
 
 /**
  * Apply seasonal factor to a base price.
- * Returns the base price unchanged when no factor is found for the month.
+ * Returns the base price unchanged (seasonal=false) when no factor is stored for the month.
  */
 export function fallbackReferencePrice(
   basePrice: number,

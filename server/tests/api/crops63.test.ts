@@ -1,6 +1,7 @@
 import request from 'supertest';
 import type { ResultSetHeader, RowDataPacket } from 'mysql2';
 import { pool } from '../../src/db/pool';
+import { seed } from '../../src/db/seed';
 import { bearer, insertCrop, insertLot, insertPlot, loginStaff, registerUser, testApp } from '../helpers';
 
 async function getCategoryId(): Promise<number> {
@@ -197,5 +198,36 @@ describe('6.3 crop catalog', () => {
       .set(bearer(farmer.token))
       .send({ target_id: 2 });
     expect(res.status).toBe(403);
+  });
+
+  it('seed populates crop_season_factors with rows for seasonal fruits', async () => {
+    await seed();
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT COUNT(*) AS cnt FROM crop_season_factors`,
+    );
+    expect(Number(rows[0]?.cnt)).toBeGreaterThan(0);
+  });
+
+  it('pomelo October factor is 0.75 (peak season → cheaper)', async () => {
+    await seed();
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT csf.factor
+       FROM crop_season_factors csf
+       JOIN crops c ON c.id = csf.crop_id
+       WHERE c.name_th = 'ส้มโอ' AND csf.month = 10`,
+    );
+    expect(rows.length).toBe(1);
+    expect(Number(rows[0]?.factor)).toBeCloseTo(0.75, 2);
+  });
+
+  it('durian October has no stored factor (normal month → factor defaults to 1.0)', async () => {
+    await seed();
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT csf.factor
+       FROM crop_season_factors csf
+       JOIN crops c ON c.id = csf.crop_id
+       WHERE c.name_th = 'ทุเรียน' AND csf.month = 10`,
+    );
+    expect(rows.length).toBe(0);
   });
 });

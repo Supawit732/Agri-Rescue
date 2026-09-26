@@ -443,11 +443,19 @@ Mobile: แสดง "Did you mean?" พร้อม chip ให้เลือ�
 
 ### Schema
 Migration 030: `crop_season_factors(id, crop_id INT, month TINYINT, factor DECIMAL(4,3), UNIQUE(crop_id,month))`
+Migration 031: ลบข้อมูลที่ migration 030 insert ผิดทิศทางออก (ดูหัวข้อ "การแก้ไข" ด้านล่าง)
+
+### ทิศทาง factor (แก้ไขจาก commit แรก)
+- **peak harvest season = supply สูง = ราคาลด → factor < 1** (เช่น 0.60–0.85)
+- **off-season = supply ต่ำ = ราคาขึ้น → factor > 1** (เช่น 1.15–1.40)
+- เดือนปกติ = factor 1.0 ไม่เก็บในตาราง
 
 ### Seed
-พืชผลไม้ตามฤดูกาล 6 ชนิด: มะม่วง, ทุเรียน, ลำไย, เงาะ, ส้มโอ, น้อยหน่า
-แหล่ง: OAE (สำนักงานเศรษฐกิจการเกษตร) ปฏิทินผลผลิตหลักของไทย
-เก็บเฉพาะเดือนที่ factor ≠ 1.0
+พืชผลไม้ตามฤดูกาล **8 ชนิด**: มะม่วง, ทุเรียน, ลำไย, เงาะ, ส้มโอ, น้อยหน่า, **มังคุด**, **ลิ้นจี่**
+แหล่ง: OAE (สำนักงานเศรษฐกิจการเกษตร) ปฏิทินผลผลิตหลักของไทย (ช่วงเดือน peak)
+ค่าตัวคูณเป็น **ประมาณการของทีม** เพื่อ demo — ไม่ใช่ข้อมูล OAE อย่างเป็นทางการ
+Data อยู่ใน `server/src/db/seedData.ts` (export `cropSeasonFactors`) และ upsert ใน `seed.ts`
+(idempotent: `ON DUPLICATE KEY UPDATE factor = VALUES(factor)`)
 
 ### Domain Function
 `fallbackReferencePrice(basePrice, factors, month)` ใน `server/src/domain/seasonalPrice.ts`
@@ -457,6 +465,10 @@ Migration 030: `crop_season_factors(id, crop_id INT, month TINYINT, factor DECIM
 ใช้เฉพาะใน `resolveMarketPrice` fallback path (source='crop_fallback') เมื่อไม่มี MOC DIT price ล่าสุด
 เดือนใช้ Asia/Bangkok (UTC+7)
 `label_th` เพิ่ม "(ปรับตามฤดูกาล)" เมื่อ seasonal=true
+
+### การแก้ไข (bug fix หลัง commit แรก)
+Migration 030 ใส่ data ด้วย `INSERT...SELECT FROM crops WHERE name_th=...` แต่ตาราง crops ยังว่างตอน migrate (seed วิ่งหลัง migrate) ทำให้ fresh install ได้ตารางเปล่า นอกจากนี้ยังมี factor ผิดทิศทาง (peak ได้ > 1)
+แก้: Migration 031 `DELETE FROM crop_season_factors` เพื่อล้างข้อมูลเดิม, seed.ts upsert ใหม่ที่ถูก
 
 ### ไม่ทำ
 ไม่ส่งผลต่อ MOC DIT price ที่ดึงมาแล้ว (real-time), ไม่มี admin UI สำหรับแก้ factors
