@@ -6,8 +6,6 @@ import type {
   AppNotification,
   AssessPhotoResponse,
   AuthResponse,
-  Batch,
-  BatchDetail,
   BuyerType,
   Crop,
   CropCategory,
@@ -19,7 +17,6 @@ import type {
   DitSyncJob,
   DonationAudience,
   DonorTermsMeta,
-  Driver,
   EstimateResponse,
   Grade,
   ImpactSummary,
@@ -35,7 +32,6 @@ import type {
   Shop,
   ShopListItem,
   ShopLotRow,
-  Stop,
   SupportCreateInput,
   SupportMessage,
   SupportTicket,
@@ -218,17 +214,6 @@ interface Api {
   suggestDit: (cropId: number) => Promise<DitSuggestion[]>;
   acceptDitSuggestion: (suggestionId: number) => Promise<unknown>;
   rejectDitSuggestion: (suggestionId: number) => Promise<unknown>;
-  getDrivers: () => Promise<Driver[]>;
-  getBatches: () => Promise<Batch[]>;
-  createBatch: (driverId: number) => Promise<BatchDetail>;
-  getBatch: (id: number) => Promise<BatchDetail>;
-  confirmStop: (id: number, body: { weight_kg?: number; otp?: string }) => Promise<{
-    stop: Stop;
-    lot_status: string | null;
-    order_status: string | null;
-    batch_status: Batch['status'];
-  }>;
-  unlockStop: (id: number) => Promise<{ id: number; otp_attempts: number; locked: boolean }>;
   getImpact: () => Promise<ImpactSummary>;
   getDashboard: () => Promise<DashboardPayload>;
   getAdminOverview: () => Promise<AdminOverview>;
@@ -643,17 +628,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
         authed('POST', `/api/admin/dit/suggestions/${suggestionId}/reject`, {}),
       getMyOrders: () => authed<{ orders: Order[] }>('GET', '/api/orders/mine').then((r) => r.orders),
       cancelOrder: (id) => authed('DELETE', `/api/orders/${id}`),
-      getDrivers: () => authed<{ drivers: Driver[] }>('GET', '/api/batches/drivers').then((r) => r.drivers),
-      getBatches: () => authed<{ batches: Batch[] }>('GET', '/api/batches').then((r) => r.batches),
-      createBatch: (driverId) => authed<BatchDetail>('POST', '/api/batches', { driver_id: driverId }),
-      getBatch: (id) => authed<BatchDetail>('GET', `/api/batches/${id}`),
-      confirmStop: (id, body) =>
-        authed<{ stop: Stop; lot_status: string | null; order_status: string | null; batch_status: Batch['status'] }>(
-          'POST',
-          `/api/stops/${id}/confirm`,
-          body,
-        ),
-      unlockStop: (id) => authed<{ id: number; otp_attempts: number; locked: boolean }>('POST', `/api/stops/${id}/unlock`),
       getImpact: () => authed<{ summary: ImpactSummary }>('GET', '/api/impact/summary').then((r) => r.summary),
       getDashboard: () => authed<DashboardPayload>('GET', '/api/dashboard'),
       getAdminOverview: () => authed<AdminOverview>('GET', '/api/admin/overview'),
