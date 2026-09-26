@@ -83,7 +83,7 @@ export async function buildOverview(): Promise<AdminOverview> {
           AND application_kind = 'organization') AS org_pending,
       (SELECT COUNT(*) FROM support_tickets WHERE status = 'open') AS support_open,
       (SELECT COUNT(*) FROM route_stops WHERE weight_flag = 1) AS weight_flags,
-      (SELECT COUNT(*) FROM route_stops WHERE otp_attempts >= 5 AND status <> 'done') AS otp_locked,
+      (SELECT COUNT(*) FROM orders WHERE otp_attempts >= 5 AND status NOT IN ('delivered', 'cancelled')) AS otp_locked,
       (SELECT COUNT(*) FROM donation_proofs
         WHERE status = 'pending' AND due_at < UTC_TIMESTAMP()) AS donation_proof_overdue
   `);

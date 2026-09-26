@@ -13,6 +13,7 @@
     "backfill:location-labels": "tsx scripts/backfillLocationLabels.ts",
     "check:en-api": "tsx scripts/checkEnSystemApi.ts",
     "ai:smoke": "tsx scripts/aiSmoke.ts",
+    "cleanup:demo": "tsx scripts/cleanupDemo.ts",
     "lint": "eslint ."
   },
   "dependencies": {

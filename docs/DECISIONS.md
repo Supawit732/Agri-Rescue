@@ -472,3 +472,7 @@ Migration 030 ใส่ data ด้วย `INSERT...SELECT FROM crops WHERE name
 
 ### ไม่ทำ
 ไม่ส่งผลต่อ MOC DIT price ที่ดึงมาแล้ว (real-time), ไม่มี admin UI สำหรับแก้ factors
+
+## D042 — 6.5 Escrow ย้ายไป Future Work
+
+เวลาไม่พอก่อนเดโม 1 ต.ค. 2026 ใช้เวลาพัฒนามากและทดสอบกรณี edge (ledger สมดุล, หมดเวลาชำระ) ต้องทำให้ถูกต้อง ตัดสินใจย้ายไป Future Work พร้อมหมายเหตุในสไลด์ว่า "planned: sandbox escrow → real payment gateway (Opn/Omise)"

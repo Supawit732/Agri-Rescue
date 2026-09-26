@@ -483,41 +483,6 @@ export interface BuyerRoute {
   total_items: number;
 }
 
-export interface Driver {
-  id: number;
-  name: string;
-  phone: string;
-}
-
-export interface Batch {
-  id: number;
-  driver_id: number | null;
-  status: 'planned' | 'in_progress' | 'completed';
-  planned_km: number;
-  created_at: string;
-}
-
-export interface Stop {
-  id: number;
-  seq: number;
-  stop_type: 'pickup' | 'drop';
-  lot_id: number | null;
-  buyer_id: number | null;
-  lat: number;
-  lng: number;
-  leg_km: number;
-  status: 'pending' | 'done';
-  confirmed_weight_kg: number | null;
-  weight_flag: boolean;
-  otp_attempts: number;
-  locked: boolean;
-}
-
-export interface BatchDetail {
-  batch: Batch;
-  stops: Stop[];
-}
-
 export interface ImpactSummary {
   kg_saved: number;
   co2e_kg: number;

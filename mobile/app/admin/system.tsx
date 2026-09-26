@@ -1,11 +1,12 @@
 import { Feather } from '@expo/vector-icons';
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { DataState, SectionTitle } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
 import { useApiData } from '../../src/hooks/useApiData';
 import { useI18n } from '../../src/i18n';
-import { C, fonts, radius } from '../../src/theme';
+import { formatTemplate } from '../../src/i18n';
+import { C, fonts } from '../../src/theme';
 import { DitMappingPanel } from '../../src/admin/OldAdminPanels';
 
 export default function AdminSystemScreen(): React.ReactElement {
@@ -77,16 +78,52 @@ export default function AdminSystemScreen(): React.ReactElement {
 function UsersOtpHint(): React.ReactElement | null {
   const { api } = useAuth();
   const { t } = useI18n();
-  const { data } = useApiData(() => api.getAdminInbox(), [api]);
+  const [nonce, setNonce] = useState(0);
+  const { data, reload } = useApiData(() => api.getAdminInbox(), [api, nonce]);
   if (!data || data.counts.otp === 0) return <Text style={{ color: C.mute }}>{t.admin.noOtpLocked}</Text>;
+
+  const handleUnlock = (id: number): void => {
+    Alert.alert(
+      t.admin.unlockOtp,
+      formatTemplate(t.admin.unlockOtpConfirm, { id }),
+      [
+        { text: t.common.cancel, style: 'cancel' },
+        {
+          text: t.admin.unlockOtp,
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              await api.unlockAdminOtpOrder(id);
+              Alert.alert(t.admin.unlockOtpSuccess);
+              setNonce((n) => n + 1);
+              reload();
+            })();
+          },
+        },
+      ],
+    );
+  };
+
   return (
     <View style={styles.list}>
       {data.items
         .filter((i) => i.kind === 'otp')
         .map((i) => (
           <View key={`otp-${i.id}`} style={styles.card}>
-            <Text style={styles.name}>{i.title}</Text>
-            <Text style={styles.meta}>{i.subtitle}</Text>
+            <View style={styles.otpRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.name}>{i.title}</Text>
+                <Text style={styles.meta}>{i.subtitle}</Text>
+              </View>
+              <Pressable
+                style={styles.unlockBtn}
+                accessibilityRole="button"
+                onPress={() => handleUnlock(i.id)}
+              >
+                <Feather name="unlock" size={14} color={C.white} />
+                <Text style={styles.unlockText}>{t.admin.unlockOtp}</Text>
+              </Pressable>
+            </View>
           </View>
         ))}
     </View>
@@ -140,4 +177,15 @@ const styles = StyleSheet.create({
   name: { fontSize: 15, fontWeight: '700', color: C.ink, fontFamily: fonts.bodySemi },
   meta: { fontSize: 13, color: C.mute, fontFamily: fonts.body },
   hint: { fontSize: 12, color: C.mute, fontFamily: fonts.body },
+  otpRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  unlockBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: C.urgentFg,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+  },
+  unlockText: { fontSize: 12, color: C.white, fontFamily: fonts.bodySemi },
 });

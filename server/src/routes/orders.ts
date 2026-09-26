@@ -4,6 +4,7 @@ import type { ResultSetHeader, RowDataPacket } from 'mysql2';
 import { z } from 'zod';
 import { pool } from '../db/pool';
 import { CO2E_PER_KG } from '../db/seedData';
+import { isOtpLocked, OTP_MAX_ATTEMPTS } from '../domain/otpLock';
 import { round2 } from '../delivery/depot';
 import { haversineKm } from '../domain/geo';
 import type { LotStatus } from '../domain/lotStateMachine';
@@ -744,13 +745,14 @@ ordersRouter.post(
     }
     const sellerId = req.auth?.id ?? 0;
     const connection = await pool.getConnection();
+    let committed = false;
     try {
       await connection.beginTransaction();
       const [rows] = await connection.query<
-        (OrderRow & { farmer_id: number; is_donation: number })[]
+        (OrderRow & { farmer_id: number; is_donation: number; otp_attempts: number })[]
       >(
         `SELECT o.id, o.lot_id, o.buyer_id, o.quantity_kg, o.agreed_price_per_kg, o.is_donation,
-                o.status, o.batch_id, o.drop_otp, p.farmer_id
+                o.status, o.batch_id, o.drop_otp, o.otp_attempts, p.farmer_id
          FROM orders o
          JOIN harvest_lots h ON h.id = o.lot_id
          JOIN plots p ON p.id = h.plot_id
@@ -768,7 +770,21 @@ ordersRouter.post(
       if (order.status !== 'reserved') {
         throw new HttpError(409, 'CONFLICT', 'ยืนยันได้เฉพาะออเดอร์ที่จองไว้');
       }
+      if (isOtpLocked(Number(order.otp_attempts))) {
+        await connection.rollback();
+        throw new HttpError(
+          423,
+          'OTP_LOCKED',
+          `ล็อกเพราะกรอกรหัสผิดครบ ${OTP_MAX_ATTEMPTS} ครั้ง — ติดต่อผู้ดูแลระบบเพื่อปลดล็อก`,
+        );
+      }
       if (order.drop_otp !== body.otp) {
+        await connection.query(
+          'UPDATE orders SET otp_attempts = otp_attempts + 1 WHERE id = ?',
+          [orderId],
+        );
+        await connection.commit();
+        committed = true;
         throw new HttpError(400, 'OTP_MISMATCH', 'รหัสยืนยันไม่ถูกต้อง', {
           otp: 'รหัสยืนยันไม่ถูกต้อง',
         });
@@ -785,6 +801,7 @@ ordersRouter.post(
       }
       const lotStatus = await finalizeLotIfComplete(connection, Number(order.lot_id));
       await connection.commit();
+      committed = true;
       res.json({
         order: {
           id: Number(order.id),
@@ -823,7 +840,7 @@ ordersRouter.post(
         // ignore notify failure
       }
     } catch (error) {
-      await connection.rollback();
+      if (!committed) await connection.rollback();
       throw error;
     } finally {
       connection.release();

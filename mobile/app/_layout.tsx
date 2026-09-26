@@ -52,12 +52,6 @@ function AuthGate(): React.ReactElement {
     }
     const root = String(segments[0] ?? 'index');
 
-    // Hide driver/coordinator from navigation; keep screens for later phases.
-    if (root === 'driver' || root === 'coordinator') {
-      router.replace('/(tabs)' as never);
-      return;
-    }
-
     if (user === null) {
       if (!openRoots.has(root)) {
         const returnTo = `/${segments.join('/')}`;
@@ -124,8 +118,6 @@ function AuthGate(): React.ReactElement {
       <Stack.Screen name="orders/[id]" />
       <Stack.Screen name="route" />
       <Stack.Screen name="sell/success" />
-      <Stack.Screen name="driver" />
-      <Stack.Screen name="coordinator" />
       <Stack.Screen name="impact" />
       <Stack.Screen name="shops/[userId]" />
       <Stack.Screen name="followed-shops" />
