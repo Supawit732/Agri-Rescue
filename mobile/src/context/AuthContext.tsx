@@ -222,6 +222,7 @@ interface Api {
   hideAdminLot: (id: number, reason: string) => Promise<{ ok: boolean }>;
   unhideAdminLot: (id: number) => Promise<{ ok: boolean }>;
   listAdminUsers: (query?: { q?: string }) => Promise<{ users: AdminUserRow[] }>;
+  unlockAdminOtpOrder: (id: number) => Promise<{ ok: boolean; id: number }>;
   deleteLot: (id: number) => Promise<{ ok: boolean }>;
   sellerConfirmOrder: (
     id: number,
@@ -654,6 +655,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
           `/api/admin/users${qs !== '' ? `?${qs}` : ''}`,
         );
       },
+      unlockAdminOtpOrder: (id) =>
+        authed<{ ok: boolean; id: number }>('POST', `/api/admin/orders/${id}/unlock-otp`),
       deleteLot: (id) => authed<{ ok: boolean }>('DELETE', `/api/lots/${id}`),
       sellerConfirmOrder: (id, body) =>
         authed<{ order: Order; lot_status: string }>('POST', `/api/orders/${id}/seller-confirm`, body),

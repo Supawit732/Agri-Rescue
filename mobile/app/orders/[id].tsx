@@ -123,11 +123,15 @@ export default function OrderDetailScreen(): React.ReactElement {
                 Alert.alert(t.orderDetail.deliverySuccessTitle, t.orderDetail.deliverySuccessBody);
                 reload();
               } catch (err) {
-                setBanner(
-                  err instanceof ApiError
-                    ? translateError(err.code, err.message)
-                    : t.orderDetail.confirmFailed,
-                );
+                if (err instanceof ApiError && err.code === 'OTP_MISMATCH') {
+                  setFieldError('otp', translateError(err.code, err.message));
+                } else {
+                  setBanner(
+                    err instanceof ApiError
+                      ? translateError(err.code, err.message)
+                      : t.orderDetail.confirmFailed,
+                  );
+                }
               } finally {
                 setBusy(false);
               }
