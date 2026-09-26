@@ -242,7 +242,7 @@ export default function RegisterScreen(): React.ReactElement {
           />
           <View style={styles.footer}>
             <Text style={styles.footerText}>{t.register.haveAccount}</Text>
-            <Pressable accessibilityRole="button" onPress={() => router.push('/login')}>
+            <Pressable accessibilityRole="button" onPress={() => router.push('/login')} style={styles.linkBtn}>
               <Text style={styles.link}>{t.common.login}</Text>
             </Pressable>
           </View>
@@ -280,5 +280,6 @@ const styles = StyleSheet.create({
   missingItem: { color: C.soonFg, fontFamily: fonts.body, fontSize: 13 },
   footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 20 },
   footerText: { color: C.mute, fontFamily: fonts.body },
-  link: { color: C.leaf, fontWeight: '700', fontFamily: fonts.bodySemi, minHeight: 44, textAlignVertical: 'center' },
+  linkBtn: { minHeight: 44, justifyContent: 'center' },
+  link: { color: C.leaf, fontWeight: '700', fontFamily: fonts.bodySemi },
 });
