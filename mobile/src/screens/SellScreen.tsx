@@ -353,7 +353,8 @@ function NewLotForm({
   onCancelEdit: () => void;
   onDirtyChange: (dirty: boolean) => void;
 }): React.ReactElement {
-  const { t, locale, formatNumber, cropName, translateError, translateFieldError } = useI18n();
+  const { t, locale, formatNumber, formatDate, cropName, translateError, translateFieldError } =
+    useI18n();
   const insets = useSafeAreaInsets();
   const { scrollRef, registerY, scrollToField } = useFieldScroll();
   const isEditing = editingLot !== null;
@@ -383,7 +384,9 @@ function NewLotForm({
       ? String(editingLot.floor_price_per_kg)
       : '',
   );
-  const [pricesSeeded, setPricesSeeded] = useState(
+  // true once the seller typed a price (or the lot being edited already has prices);
+  // until then suggested prices follow the estimate (e.g. re-seed on grade change).
+  const [pricesEdited, setPricesEdited] = useState(
     editingLot?.start_price_per_kg !== null && editingLot?.start_price_per_kg !== undefined,
   );
   const [estimate, setEstimate] = useState<EstimateResponse | null>(null);
@@ -481,7 +484,7 @@ function NewLotForm({
         ? String(editingLot.floor_price_per_kg)
         : '',
     );
-    setPricesSeeded(
+    setPricesEdited(
       editingLot.start_price_per_kg !== null && editingLot.start_price_per_kg !== undefined,
     );
     setAiResult(null);
@@ -497,7 +500,9 @@ function NewLotForm({
     setAiMessage(null);
     setPhotoPreview(null);
     if (!isEditing) {
-      setPricesSeeded(false);
+      setPricesEdited(false);
+      setStartPrice('');
+      setFloorPrice('');
       setRipeness(null);
       setRipenessSource(null);
       setEstimate(null);
@@ -507,6 +512,17 @@ function NewLotForm({
   const startNum = Number(startPrice);
   const floorNum = Number(floorPrice);
   const hasCustomPrices = modeHasPrice(saleMode) && startNum > 0 && floorNum > 0;
+
+  const seedPrices = useCallback((result: EstimateResponse) => {
+    setStartPrice(String(result.suggested_start_price_per_kg));
+    setFloorPrice(String(result.suggested_floor_price_per_kg));
+    setFieldErrors((prev) => {
+      const cleared = { ...prev };
+      delete cleared.start_price_per_kg;
+      delete cleared.floor_price_per_kg;
+      return cleared;
+    });
+  }, []);
 
   // Debounced 400ms shelf-life + price preview from the API (no local pricing).
   useEffect(() => {
@@ -531,10 +547,8 @@ function NewLotForm({
           });
           if (active) {
             setEstimate(result);
-            if (modeHasPrice(saleMode) && !pricesSeeded) {
-              setStartPrice(String(result.suggested_start_price_per_kg));
-              setFloorPrice(String(result.suggested_floor_price_per_kg));
-              setPricesSeeded(true);
+            if (modeHasPrice(saleMode) && !pricesEdited) {
+              seedPrices(result);
             }
           }
         } catch (err) {
@@ -564,7 +578,8 @@ function NewLotForm({
     hasCustomPrices,
     startNum,
     floorNum,
-    pricesSeeded,
+    pricesEdited,
+    seedPrices,
     t,
     translateError,
   ]);
@@ -574,6 +589,8 @@ function NewLotForm({
   const displayPrice =
     estimate !== null && modeHasPrice(saleMode) ? estimate.price_per_kg : null;
   const totalPrice = displayPrice !== null && weightNum > 0 ? Math.round(displayPrice * weightNum) : null;
+  // Price fields wait for the API suggestion; unlocked if the estimate failed so the seller is not stuck.
+  const pricesLocked = estimate === null && !pricesEdited && estimateError === null;
   const tone = estimate !== null ? urgency(estimate.shelf_hours) : null;
   const previewUrgency =
     estimate !== null ? urgencyLabel(estimate.shelf_hours, t) : null;
@@ -726,10 +743,8 @@ function NewLotForm({
       delete cleared.sale_mode;
       return cleared;
     });
-    if (modeHasPrice(next) && !pricesSeeded && estimate !== null) {
-      setStartPrice(String(estimate.suggested_start_price_per_kg));
-      setFloorPrice(String(estimate.suggested_floor_price_per_kg));
-      setPricesSeeded(true);
+    if (modeHasPrice(next) && !pricesEdited && estimate !== null) {
+      seedPrices(estimate);
     }
   };
 
@@ -1213,140 +1228,6 @@ function NewLotForm({
         </Card>
       ) : null}
 
-      <SectionTitle>{t.sell.gradeSection}</SectionTitle>
-      <View style={styles.row}>
-        {gradeOptions.map((option) => (
-          <Chip
-            key={option.key}
-            label={option.label}
-            selected={grade === option.key}
-            onPress={() => setGrade(option.key)}
-          />
-        ))}
-      </View>
-
-      <ChipGroup
-        label={t.sell.saleMode}
-        name="sale_mode"
-        options={saleModeOptions}
-        value={saleMode}
-        onChange={(next) => {
-          const value = (Array.isArray(next) ? next[0] : next) as SaleMode;
-          onChangeSaleMode(value);
-        }}
-        error={fieldErrors.sale_mode}
-      />
-
-      {modeHasDonation(saleMode) ? (
-        <>
-          <SectionTitle>{t.sell.donationAudience}</SectionTitle>
-          <View style={styles.row}>
-            <Chip
-              label={t.donationAudience.verified_org_only}
-              selected={donationAudience === 'verified_org_only'}
-              onPress={() => setDonationAudience('verified_org_only')}
-            />
-            <Chip
-              label={t.donationAudience.any_registered}
-              selected={donationAudience === 'all_donors'}
-              onPress={() => setDonationAudience('all_donors')}
-            />
-          </View>
-        </>
-      ) : null}
-
-      {modeHasPrice(saleMode) ? (
-        <>
-          {estimate?.market_quote !== undefined ? (
-            <Card>
-              <Text style={styles.marketLabel}>{estimate.market_quote.label_th}</Text>
-              <Text style={styles.previewPrice}>
-                {formatTemplate(t.sell.marketPrice, {
-                  price: formatNumber(estimate.market_quote.price_per_kg),
-                })}
-                {estimate.market_quote.is_estimate ? t.sell.marketEstimate : ''}
-              </Text>
-              {estimate.nearby_median_price_per_kg !== null ? (
-                <Text style={styles.previewMuted}>
-                  {formatTemplate(t.sell.nearbyMedian, {
-                    price: formatNumber(estimate.nearby_median_price_per_kg),
-                  })}
-                </Text>
-              ) : null}
-            </Card>
-          ) : null}
-          <Field
-            label={t.sell.startPrice}
-            value={startPrice}
-            onChangeText={(text) => {
-              setStartPrice(text);
-              setPricesSeeded(true);
-              setFieldErrors((prev) => {
-                const cleared = { ...prev };
-                delete cleared.start_price_per_kg;
-                return cleared;
-              });
-            }}
-            onBlur={() => {
-              const n = Number(startPrice);
-              setFieldErrors((prev) => {
-                const next = { ...prev };
-                if (!(n > 0)) {
-                  next.start_price_per_kg = t.sell.needStartPrice;
-                } else {
-                  delete next.start_price_per_kg;
-                }
-                return next;
-              });
-            }}
-            error={fieldErrors.start_price_per_kg}
-            keyboardType="numeric"
-            placeholder={t.sell.startPricePlaceholder}
-          />
-          <Field
-            label={t.sell.floorPrice}
-            value={floorPrice}
-            onChangeText={(text) => {
-              setFloorPrice(text);
-              setPricesSeeded(true);
-              setFieldErrors((prev) => {
-                const cleared = { ...prev };
-                delete cleared.floor_price_per_kg;
-                return cleared;
-              });
-            }}
-            onBlur={() => {
-              const n = Number(floorPrice);
-              setFieldErrors((prev) => {
-                const next = { ...prev };
-                if (!(n > 0)) {
-                  next.floor_price_per_kg = t.sell.needFloorPrice;
-                } else {
-                  delete next.floor_price_per_kg;
-                }
-                return next;
-              });
-            }}
-            error={fieldErrors.floor_price_per_kg}
-            keyboardType="numeric"
-            placeholder={t.sell.floorPricePlaceholder}
-          />
-          {estimate !== null && estimate.forecast.length > 0 ? (
-            <Card>
-              <Text style={styles.forecastTitle}>{t.sell.priceForecast}</Text>
-              {estimate.forecast.map((row) => (
-                <Text key={row.hours} style={styles.forecastLine}>
-                  {formatTemplate(t.sell.forecastRow, {
-                    hours: formatNumber(row.hours),
-                    price: formatNumber(row.price_per_kg),
-                  })}
-                </Text>
-              ))}
-            </Card>
-          ) : null}
-        </>
-      ) : null}
-
       <Card style={tone !== null ? { borderColor: tone.fg, backgroundColor: tone.bg } : undefined}>
         {estimateError !== null ? (
           <Text style={styles.previewError}>{estimateError}</Text>
@@ -1393,6 +1274,177 @@ function NewLotForm({
           </>
         )}
       </Card>
+
+      <SectionTitle>{t.sell.gradeSection}</SectionTitle>
+      <View style={styles.row}>
+        {gradeOptions.map((option) => (
+          <Chip
+            key={option.key}
+            label={option.label}
+            selected={grade === option.key}
+            onPress={() => setGrade(option.key)}
+          />
+        ))}
+      </View>
+
+      <ChipGroup
+        label={t.sell.saleMode}
+        name="sale_mode"
+        options={saleModeOptions}
+        value={saleMode}
+        onChange={(next) => {
+          const value = (Array.isArray(next) ? next[0] : next) as SaleMode;
+          onChangeSaleMode(value);
+        }}
+        error={fieldErrors.sale_mode}
+      />
+
+      {modeHasDonation(saleMode) ? (
+        <>
+          <SectionTitle>{t.sell.donationAudience}</SectionTitle>
+          <View style={styles.row}>
+            <Chip
+              label={t.donationAudience.verified_org_only}
+              selected={donationAudience === 'verified_org_only'}
+              onPress={() => setDonationAudience('verified_org_only')}
+            />
+            <Chip
+              label={t.donationAudience.any_registered}
+              selected={donationAudience === 'all_donors'}
+              onPress={() => setDonationAudience('all_donors')}
+            />
+          </View>
+        </>
+      ) : null}
+
+      {modeHasPrice(saleMode) ? (
+        <>
+          {pricesLocked ? (
+            <Text style={styles.priceLockedHint}>{t.sell.pricesLockedHint}</Text>
+          ) : null}
+          <View style={pricesLocked ? styles.priceFieldLocked : undefined}>
+            <Field
+              label={t.sell.startPrice}
+              value={startPrice}
+              editable={!pricesLocked}
+              onChangeText={(text) => {
+                setStartPrice(text);
+                setPricesEdited(true);
+                setFieldErrors((prev) => {
+                  const cleared = { ...prev };
+                  delete cleared.start_price_per_kg;
+                  return cleared;
+                });
+              }}
+              onBlur={() => {
+                if (estimate === null) {
+                  return;
+                }
+                const n = Number(startPrice);
+                setFieldErrors((prev) => {
+                  const next = { ...prev };
+                  if (!(n > 0)) {
+                    next.start_price_per_kg = t.sell.needStartPrice;
+                  } else {
+                    delete next.start_price_per_kg;
+                  }
+                  return next;
+                });
+              }}
+              error={fieldErrors.start_price_per_kg}
+              keyboardType="numeric"
+              placeholder={t.sell.startPricePlaceholder}
+            />
+          </View>
+          {estimate !== null ? (
+            <View style={styles.priceHelp}>
+              <Text style={styles.priceHelpText}>
+                {estimate.market_quote.is_estimate
+                  ? formatTemplate(t.sell.priceRefEstimate, {
+                      price: formatNumber(estimate.market_quote.price_per_kg),
+                    }) + (estimate.market_quote.seasonal_adjusted ? t.sell.priceRefSeasonal : '')
+                  : formatTemplate(t.sell.priceRefMoc, {
+                      price: formatNumber(estimate.market_quote.price_per_kg),
+                      date:
+                        estimate.market_quote.as_of !== null
+                          ? formatDate(estimate.market_quote.as_of)
+                          : '',
+                    })}
+              </Text>
+              <Text style={styles.priceHelpStrong}>
+                {formatTemplate(t.sell.startPriceMax, {
+                  price: formatNumber(estimate.max_start_price_per_kg),
+                })}
+              </Text>
+              {estimate.nearby_median_price_per_kg !== null ? (
+                <Text style={styles.priceHelpText}>
+                  {formatTemplate(t.sell.nearbyMedian, {
+                    price: formatNumber(estimate.nearby_median_price_per_kg),
+                  })}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
+          <View style={pricesLocked ? styles.priceFieldLocked : undefined}>
+            <Field
+              label={t.sell.floorPrice}
+              value={floorPrice}
+              editable={!pricesLocked}
+              onChangeText={(text) => {
+                setFloorPrice(text);
+                setPricesEdited(true);
+                setFieldErrors((prev) => {
+                  const cleared = { ...prev };
+                  delete cleared.floor_price_per_kg;
+                  return cleared;
+                });
+              }}
+              onBlur={() => {
+                if (estimate === null) {
+                  return;
+                }
+                const n = Number(floorPrice);
+                setFieldErrors((prev) => {
+                  const next = { ...prev };
+                  if (!(n > 0)) {
+                    next.floor_price_per_kg = t.sell.needFloorPrice;
+                  } else {
+                    delete next.floor_price_per_kg;
+                  }
+                  return next;
+                });
+              }}
+              error={fieldErrors.floor_price_per_kg}
+              keyboardType="numeric"
+              placeholder={t.sell.floorPricePlaceholder}
+            />
+          </View>
+          {estimate !== null ? (
+            <View style={styles.priceHelp}>
+              <Text style={styles.priceHelpStrong}>
+                {formatTemplate(t.sell.floorPriceMin, {
+                  price: formatNumber(estimate.min_floor_price_per_kg),
+                  pct: formatNumber(estimate.min_floor_pct_of_market),
+                })}
+              </Text>
+            </View>
+          ) : null}
+          {estimate !== null && estimate.forecast.length > 0 ? (
+            <Card>
+              <Text style={styles.forecastTitle}>{t.sell.priceForecast}</Text>
+              {estimate.forecast.map((row) => (
+                <Text key={row.hours} style={styles.forecastLine}>
+                  {formatTemplate(t.sell.forecastRow, {
+                    hours: formatNumber(row.hours),
+                    price: formatNumber(row.price_per_kg),
+                  })}
+                </Text>
+              ))}
+            </Card>
+          ) : null}
+        </>
+      ) : null}
+
     </Body>
     <View style={[styles.stickyFooter, { paddingBottom: insets.bottom + 12 }]}>
       {submitError !== null ? <Text style={styles.previewError}>{submitError}</Text> : null}
@@ -1597,7 +1649,18 @@ const styles = StyleSheet.create({
   editHint: { color: C.turmeric, fontWeight: '700', marginBottom: 8 },
   aiWarn: { color: C.turmeric, marginBottom: 8, marginTop: 4 },
   aiLine: { color: C.ink, marginTop: 6 },
-  marketLabel: { fontSize: 15, fontWeight: '700', color: C.ink, marginBottom: 4 },
+  priceLockedHint: {
+    color: C.ink,
+    backgroundColor: C.leafSoft,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 12,
+  },
+  priceFieldLocked: { opacity: 0.5 },
+  priceHelp: { marginTop: -6, marginBottom: 12 },
+  priceHelpText: { color: C.mute, fontSize: 13, marginTop: 2 },
+  priceHelpStrong: { color: C.ink, fontSize: 13, fontWeight: '600', marginTop: 2 },
   forecastTitle: { fontSize: 15, fontWeight: '700', color: C.ink, marginBottom: 4 },
   forecastLine: { color: C.ink, marginTop: 2 },
   previewUrgency: { fontSize: 18, fontWeight: '800', marginBottom: 4 },

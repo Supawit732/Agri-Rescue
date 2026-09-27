@@ -2,7 +2,12 @@ import request from 'supertest';
 import type { RowDataPacket } from 'mysql2';
 import { PLAN_WEATHER_FALLBACK } from '../../src/db/seedData';
 import { pool } from '../../src/db/pool';
-import { lotPricePerKg, suggestedFloorPrice, suggestedStartPrice } from '../../src/domain/sellerPricing';
+import {
+  lotPricePerKg,
+  minAllowedFloor,
+  suggestedFloorPrice,
+  suggestedStartPrice,
+} from '../../src/domain/sellerPricing';
 import { predictShelfHours } from '../../src/domain/shelfLife';
 import { bearer, insertCrop, insertLot, insertPlot, registerUser, testApp, pickAvailablePickupSlot } from '../helpers';
 import { installWeatherFailure, installWeatherSuccess } from '../weatherMock';
@@ -48,6 +53,11 @@ describe('lots and plots', () => {
     expect(estimate.body.suggested_start_price_per_kg).toBe(start);
     expect(estimate.body.suggested_floor_price_per_kg).toBe(floor);
     expect(estimate.body.market_quote.label_th).toContain('บาท');
+    expect(estimate.body.market_quote.is_estimate).toBe(true);
+    expect(estimate.body.market_quote.seasonal_adjusted).toBe(false);
+    expect(estimate.body.max_start_price_per_kg).toBe(40);
+    expect(estimate.body.min_floor_price_per_kg).toBe(minAllowedFloor(40));
+    expect(estimate.body.min_floor_pct_of_market).toBe(20);
     expect(estimate.body.forecast).toHaveLength(3);
     expect(estimate.body.temp_c).toBe(34);
     expect(estimate.body.humidity).toBe(78);

@@ -30,6 +30,8 @@ export interface MarketPriceQuote {
   product_code: string | null;
   source_url: string | null;
   label_th: string;
+  /** True when the crop fallback price was adjusted by a seasonal factor. */
+  seasonal_adjusted: boolean;
 }
 
 interface CropPriceRow extends RowDataPacket {
@@ -80,6 +82,7 @@ export async function resolveMarketPrice(cropId: number, today = new Date()): Pr
         product_code: String(ref.product_code),
         source_url: String(ref.source_url),
         label_th: `ราคาตลาด${dayLabel === 'วันนี้' ? 'วันนี้' : ''} ${perKg} บาท (กรมการค้าภายใน, ${dayLabel})`,
+        seasonal_adjusted: false,
       };
     }
   }
@@ -102,6 +105,7 @@ export async function resolveMarketPrice(cropId: number, today = new Date()): Pr
     product_code: crop.dit_product_code,
     source_url: null,
     label_th: `ราคาประมาณ ${price} บาท/กก.${adjNote}`,
+    seasonal_adjusted: seasonal,
   };
 }
 
