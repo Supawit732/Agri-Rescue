@@ -2007,7 +2007,7 @@ const styles = StyleSheet.create({
   previewTotal: { fontSize: 15, color: C.ink, marginTop: 2 },
   previewMuted: { color: C.mute, marginTop: 4 },
   previewError: { color: C.chili, marginBottom: 8 },
-  myLotTopRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  myLotTopRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
   myLotThumb: { width: 56, height: 56, borderRadius: 10, backgroundColor: C.leafSoft },
   myLotThumbPlaceholder: { backgroundColor: C.line },
   myLotDescription: { color: C.mute, fontSize: 13, marginTop: 4, marginBottom: 4 },
