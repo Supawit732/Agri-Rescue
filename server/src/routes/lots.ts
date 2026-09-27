@@ -235,13 +235,10 @@ lotsRouter.post(
       normalFeaturesTh: crop.normal_features_th,
       defectExamplesTh: crop.defect_examples_th,
     });
-    // Persist assess photo as a lot photo candidate (linked on create/patch via photo_url).
-    if (result.available === true && result.subject_match === true) {
-      const saved = await savePublicLotPhoto({ base64: body.image_base64, mime: body.mime });
-      res.json({ ...result, photo_url: saved.url });
-      return;
-    }
-    res.json(result);
+    // Photo is always saved so the farmer never loses it, even when the AI
+    // check fails, is unavailable, or flags a subject mismatch.
+    const saved = await savePublicLotPhoto({ base64: body.image_base64, mime: body.mime });
+    res.json({ ...result, photo_url: saved.url });
   }),
 );
 

@@ -424,6 +424,11 @@ function NewLotForm({
   const [assessElapsedSec, setAssessElapsedSec] = useState(0);
   const assessRequestIdRef = useRef(0);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  // Kept separate from aiResult: the photo is always saved server-side (even when the AI
+  // check is unavailable or reports a subject mismatch), so it must survive a null aiResult.
+  const [uploadedPhotoUrl, setUploadedPhotoUrl] = useState<string | null>(
+    editingLot?.photo_url ?? null,
+  );
   const [aiResult, setAiResult] = useState<
     Extract<AssessPhotoResponse, { available: true; subject_match: true }> | null
   >(null);
@@ -537,12 +542,14 @@ function NewLotForm({
         setAiEdited(false);
         setAiMessage(null);
         setPhotoPreview(mediaUri(editingLot.photo_url));
+        setUploadedPhotoUrl(editingLot.photo_url ?? null);
         setSubmitError(null);
       } else {
         setAiResult(null);
         setAiEdited(false);
         setAiMessage(null);
         setPhotoPreview(null);
+        setUploadedPhotoUrl(null);
         setPricesEdited(false);
         setFloorEdited(false);
         setStartPrice('');
@@ -561,6 +568,7 @@ function NewLotForm({
       // In edit mode: restore original photo if switching back to original crop, else clear on change.
       if (cropId === editingLot.crop_id) {
         setPhotoPreview(mediaUri(editingLot.photo_url));
+        setUploadedPhotoUrl(editingLot.photo_url ?? null);
         setAiResult(null);
         setAiEdited(false);
         setAiMessage(null);
@@ -569,6 +577,7 @@ function NewLotForm({
         setAiEdited(false);
         setAiMessage(null);
         setPhotoPreview(null);
+        setUploadedPhotoUrl(null);
       }
     } else if (!isEditing) {
       // Create mode: clear photo/AI on any crop change.
@@ -576,6 +585,7 @@ function NewLotForm({
       setAiEdited(false);
       setAiMessage(null);
       setPhotoPreview(null);
+      setUploadedPhotoUrl(null);
       setPricesEdited(false);
       setFloorEdited(false);
       setStartPrice('');
@@ -738,6 +748,8 @@ function NewLotForm({
       if (assessRequestIdRef.current !== requestId) {
         return;
       }
+      // Photo is always saved server-side even when the AI check fails or is unavailable.
+      setUploadedPhotoUrl(result.photo_url);
       if (!result.available) {
         setAiResult(null);
         setAiEdited(false);
@@ -777,6 +789,7 @@ function NewLotForm({
 
   const clearPhoto = (): void => {
     setPhotoPreview(null);
+    setUploadedPhotoUrl(null);
     setAiResult(null);
     setAiEdited(false);
     setAiMessage(null);
@@ -898,8 +911,9 @@ function NewLotForm({
           ...splitFields,
           description: descriptionValue,
           ...(aiResult !== null ? { ai_ripeness: aiResult.ripeness } : {}),
-          ...(aiResult?.photo_url !== undefined ? { photo_url: aiResult.photo_url } : {}),
-          ...(cropChanged && aiResult === null ? { photo_url: null } : {}),
+          ...(uploadedPhotoUrl !== (editingLot.photo_url ?? null)
+            ? { photo_url: uploadedPhotoUrl }
+            : {}),
           ...(loweringRipeness ? { confirm_ripeness_photo: aiResult !== null } : {}),
         });
       } else {
@@ -914,7 +928,7 @@ function NewLotForm({
           ...priceFields,
           ...splitFields,
           description: descriptionValue,
-          photo_url: aiResult?.photo_url ?? null,
+          photo_url: uploadedPhotoUrl,
           ai_ripeness: aiResult?.ripeness ?? null,
           ai_confidence: aiResult?.confidence ?? null,
           ai_model: aiResult?.model ?? null,

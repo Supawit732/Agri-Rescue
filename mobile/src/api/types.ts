@@ -218,6 +218,8 @@ export interface EstimateResponse {
   weather_basis: 'forecast_72h_daytime_avg';
 }
 
+// The photo is always saved server-side and photo_url returned, regardless of
+// whether the AI check succeeded, so the farmer never loses the photo they took.
 export type AssessPhotoResponse =
   | {
       available: true;
@@ -230,15 +232,17 @@ export type AssessPhotoResponse =
       note_en: string;
       low_confidence: boolean;
       model: string;
-      photo_url?: string;
+      photo_url: string;
     }
   | {
       available: true;
       subject_match: false;
+      photo_url: string;
     }
   | {
       available: false;
       reason: string;
+      photo_url: string;
     };
 
 export interface MyLotBooking {
