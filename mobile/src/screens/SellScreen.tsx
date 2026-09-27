@@ -554,10 +554,14 @@ function NewLotForm({
     }
     // editingLot identity is unchanged — a dependency change here means the seller picked
     // a different crop (create flow, or an in-place crop change while editing).
-    setAiResult(null);
-    setAiEdited(false);
-    setAiMessage(null);
-    setPhotoPreview(null);
+    // Only clear photo/AI on a real crop change in edit mode, or anytime in create mode.
+    const isRealCropChange = isEditing && cropId !== editingLot?.crop_id;
+    if (isRealCropChange || !isEditing) {
+      setAiResult(null);
+      setAiEdited(false);
+      setAiMessage(null);
+      setPhotoPreview(null);
+    }
     if (!isEditing) {
       setPricesEdited(false);
       setFloorEdited(false);
@@ -989,7 +993,7 @@ function NewLotForm({
               clearButtonMode="while-editing"
             />
           ) : null}
-          {!isEditing && frequentCrops.length > 0 && cropSearch.trim() === '' ? (
+          {canChangeCrop && frequentCrops.length > 0 && cropSearch.trim() === '' ? (
             <>
               <Text style={styles.cropSubheading}>{t.sell.frequentCropsSection}</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
@@ -1005,33 +1009,33 @@ function NewLotForm({
               <Text style={styles.cropSubheading}>{t.sell.allCropsSection}</Text>
             </>
           ) : null}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
-            {(cropSearch.trim() === ''
-              ? crops
-              : crops.filter((c) => {
-                  const q = cropSearch.trim().toLowerCase();
-                  return c.name_th.toLowerCase().includes(q) ||
-                    (c.name_en ?? '').toLowerCase().includes(q);
-                })
-            ).map((crop) => (
-              <Chip
-                key={crop.id}
-                label={cropName(crop)}
-                selected={crop.id === cropId}
-                onPress={() => {
-                  if (canChangeCrop) {
+          {canChangeCrop ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
+              {(cropSearch.trim() === ''
+                ? crops
+                : crops.filter((c) => {
+                    const q = cropSearch.trim().toLowerCase();
+                    return c.name_th.toLowerCase().includes(q) ||
+                      (c.name_en ?? '').toLowerCase().includes(q);
+                  })
+              ).map((crop) => (
+                <Chip
+                  key={crop.id}
+                  label={cropName(crop)}
+                  selected={crop.id === cropId}
+                  onPress={() => {
                     setCropId(crop.id);
-                  }
-                }}
-              />
-            ))}
-          </ScrollView>
+                  }}
+                />
+              ))}
+            </ScrollView>
+          ) : null}
           {isEditing && cropId !== editingLot!.crop_id ? (
             <Text style={styles.cropChangeHint}>{t.sell.cropChangeHint}</Text>
           ) : null}
         </>
       )}
-      {!isEditing ? (
+      {canChangeCrop ? (
         <Pressable
           style={styles.addCropButton}
           onPress={() => { setShowProposeForm((v) => !v); }}
@@ -1618,26 +1622,47 @@ function NewLotForm({
       ) : null}
 
     </Body>
-    <View style={[styles.stickyFooter, { paddingBottom: insets.bottom + 12 }]}>
+    <View style={[styles.stickyFooter, { paddingBottom: 12 }]}>
       {submitError !== null ? <Text style={styles.previewError}>{submitError}</Text> : null}
-      <PrimaryButton
-        label={isEditing ? t.sell.saveEdit : t.sell.publish}
-        block
-        onPress={() => {
-          if (ripeness === null) {
-            setFieldErrors((prev) => ({ ...prev, ripeness: t.sell.ripenessRequired }));
-            setSubmitError(t.sell.ripenessRequired);
-            scrollToField('ripeness');
-            return;
-          }
-          void onSubmit();
-        }}
-        loading={submitting}
-        disabled={!(weightNum > 0) || ripeness === null || assessing}
-      />
       {isEditing ? (
-        <SecondaryButton label={t.sell.cancelEdit} block onPress={onCancelEdit} />
-      ) : null}
+        <View style={styles.footerButtonRow}>
+          <View style={{ flex: 1 }}>
+            <PrimaryButton
+              label={t.sell.saveEdit}
+              onPress={() => {
+                if (ripeness === null) {
+                  setFieldErrors((prev) => ({ ...prev, ripeness: t.sell.ripenessRequired }));
+                  setSubmitError(t.sell.ripenessRequired);
+                  scrollToField('ripeness');
+                  return;
+                }
+                void onSubmit();
+              }}
+              loading={submitting}
+              disabled={!(weightNum > 0) || ripeness === null || assessing}
+            />
+          </View>
+          <View style={{ flex: 1, marginLeft: 8 }}>
+            <SecondaryButton label={t.sell.cancelEdit} onPress={onCancelEdit} />
+          </View>
+        </View>
+      ) : (
+        <PrimaryButton
+          label={t.sell.publish}
+          block
+          onPress={() => {
+            if (ripeness === null) {
+              setFieldErrors((prev) => ({ ...prev, ripeness: t.sell.ripenessRequired }));
+              setSubmitError(t.sell.ripenessRequired);
+              scrollToField('ripeness');
+              return;
+            }
+            void onSubmit();
+          }}
+          loading={submitting}
+          disabled={!(weightNum > 0) || ripeness === null || assessing}
+        />
+      )}
     </View>
     </KeyboardAvoidingView>
   );
@@ -1884,6 +1909,7 @@ const styles = StyleSheet.create({
     backgroundColor: C.surface,
     gap: 8,
   },
+  footerButtonRow: { flexDirection: 'row', gap: 8 },
   row: { flexDirection: 'row', flexWrap: 'wrap' },
   badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 6 },
   plotName: { color: C.ink, fontSize: 16, fontWeight: '400', marginBottom: 12 },
