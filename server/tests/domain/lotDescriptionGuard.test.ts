@@ -6,6 +6,11 @@ describe('lot description contact-info guard', () => {
     expect(hasContactInfo('Slightly bruised skin, sweet, great for juicing')).toBe(false);
   });
 
+  it('allows ordinary English words containing "line" as a substring', () => {
+    expect(hasContactInfo('sold online')).toBe(false);
+    expect(hasContactInfo('deadline friday')).toBe(false);
+  });
+
   it('flags a Thai mobile phone number without separators', () => {
     expect(findContactInfoInDescription('โทร 0812345678 นะครับ')).toBe('phone');
   });
@@ -46,11 +51,24 @@ describe('lot description contact-info guard', () => {
     expect(findContactInfoInDescription('แอด LINE ได้เลย')).toBe('line');
   });
 
+  it('flags "line:" followed by a handle', () => {
+    expect(findContactInfoInDescription('line: abc')).toBe('line');
+  });
+
+  it('flags "Line ID" (mixed case, with space)', () => {
+    expect(findContactInfoInDescription('Line ID abc')).toBe('line');
+  });
+
   it('flags the Thai word ไลน์', () => {
     expect(findContactInfoInDescription('ทักไลน์มาคุยกันได้')).toBe('line');
+    expect(findContactInfoInDescription('ไลน์ abc')).toBe('line');
   });
 
   it('flags an @id-style handle', () => {
     expect(findContactInfoInDescription('ไอดี @somefarm')).toBe('line');
+  });
+
+  it('flags a Thai phone number separated by dots', () => {
+    expect(findContactInfoInDescription('โทร 081.234.5678')).toBe('phone');
   });
 });

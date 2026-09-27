@@ -8,11 +8,14 @@ const URL_RE = /(https?:\/\/|www\.)\S+/i;
 const BARE_DOMAIN_RE = /\b[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.(com|net|org|co|io|me|app|shop|store|link|page)\b/i;
 const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
 const LINE_AT_ID_RE = /@[a-zA-Z0-9._-]{2,}/;
+/** "line" as a standalone word (or "line id"/"lineid") — avoids matching "online", "deadline", "linear". */
+const LINE_WORD_RE = /\bline\b/i;
+const LINE_ID_COMPACT_RE = /line\s*id/i;
 /** A run of digits and separators long enough to hide a Thai phone number once separators are stripped. */
-const DIGIT_RUN_RE = /[0-9][0-9\s-]{7,}[0-9]/g;
+const DIGIT_RUN_RE = /[0-9][0-9\s.-]{7,}[0-9]/g;
 
 function stripsToThaiPhone(run: string): boolean {
-  const digits = run.replace(/[\s-]/g, '');
+  const digits = run.replace(/[\s.-]/g, '');
   if (/^0\d{8,9}$/.test(digits)) {
     return true;
   }
@@ -39,8 +42,12 @@ function containsEmail(text: string): boolean {
 }
 
 function containsLineId(text: string): boolean {
-  const lower = text.toLowerCase();
-  return lower.includes('line') || text.includes('ไลน์') || LINE_AT_ID_RE.test(text);
+  return (
+    LINE_WORD_RE.test(text) ||
+    LINE_ID_COMPACT_RE.test(text) ||
+    text.includes('ไลน์') ||
+    LINE_AT_ID_RE.test(text)
+  );
 }
 
 /** Returns the first kind of contact info found, or null if the text is clean. */
