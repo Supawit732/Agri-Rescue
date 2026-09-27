@@ -267,6 +267,12 @@ export type Messages = {
     editTab: string;
     mineTab: string;
     myLotsEmpty: string;
+    myLotsSearchPlaceholder: string;
+    myLotsFilterEmpty: string;
+    filterAll: string;
+    filterOpen: string;
+    filterBooked: string;
+    filterExpired: string;
     noCrops: string;
     unsavedTitle: string;
     unsavedLeave: string;
@@ -349,7 +355,9 @@ export type Messages = {
     saveEdit: string;
     cancelEdit: string;
     assessing: string;
-    editingLot: string;
+    editSummary: string;
+    cropLockedHasOrders: string;
+    cropChangeHint: string;
     deleteLot: string;
     confirmDeleteTitle: string;
     confirmDeleteBody: string;
@@ -363,6 +371,7 @@ export type Messages = {
     minOrderInvalid: string;
     needStartPrice: string;
     needFloorPrice: string;
+    floorBelowMinimum: string;
     lotMeta: string;
     plotLine: string;
     remainingOf: string;

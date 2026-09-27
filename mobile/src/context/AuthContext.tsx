@@ -113,6 +113,7 @@ interface Api {
   patchLot: (
     id: number,
     body: {
+      crop_id?: number;
       weight_kg?: number;
       grade?: Grade;
       photo_url?: string | null;

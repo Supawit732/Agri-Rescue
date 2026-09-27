@@ -24,7 +24,7 @@ import { HttpError } from '../http/errors';
 import { requestLocale } from '../http/locale';
 import { requireAuth, requireCapability } from '../middleware/auth';
 import { sumReservedQuantityKg } from '../orders/lotInventoryService';
-import { defaultLotPrices, resolveMarketPrice } from '../pricing/referencePrices';
+import { defaultLotPrices, resolveMarketPrice, type MarketPriceQuote } from '../pricing/referencePrices';
 import { lotPhotoStoragePath, savePublicLotPhoto } from '../storage/publicUploads';
 import { fetchWeather, WEATHER_BASIS } from '../weather/openMeteo';
 import { ensureShop, followerIds } from '../shops/shopService';
@@ -84,6 +84,7 @@ const createSchema = z.object({
 });
 
 const patchSchema = z.object({
+  crop_id: z.number().int().positive().optional(),
   weight_kg: z.number().positive().optional(),
   split_allowed: z.boolean().optional(),
   min_order_kg: z.number().positive().optional(),
@@ -114,6 +115,11 @@ function assertNoContactInfo(description: string | null | undefined, locale: 'th
     throw new HttpError(400, 'VALIDATION', message, { description: message });
   }
 }
+
+const CROP_LOCKED_MESSAGE = {
+  th: 'เปลี่ยนพืชไม่ได้เพราะมีผู้จองแล้ว',
+  en: 'The crop cannot be changed because this lot already has bookings.',
+} as const;
 
 interface CropRow extends RowDataPacket {
   id: number;
@@ -466,6 +472,42 @@ lotsRouter.patch(
         logs.push({ field, oldValue: oldStr, newValue: newStr });
       };
 
+      const cropChanged = body.crop_id !== undefined && body.crop_id !== Number(lot.crop_id);
+      let newCropMarket: MarketPriceQuote | null = null;
+      if (cropChanged) {
+        const [activeOrders] = await connection.query<RowDataPacket[]>(
+          `SELECT COUNT(*) AS total FROM orders WHERE lot_id = ? AND status <> 'cancelled'`,
+          [lotId],
+        );
+        if (Number(activeOrders[0]?.total ?? 0) > 0) {
+          throw new HttpError(409, 'CROP_LOCKED', CROP_LOCKED_MESSAGE[locale], {
+            crop_id: CROP_LOCKED_MESSAGE[locale],
+          });
+        }
+        const newCropRow = await findCrop(body.crop_id as number);
+        newCropMarket = await resolveMarketPrice(body.crop_id as number);
+        noteChange('crop_id', lot.crop_id, body.crop_id);
+        updates.crop_id = body.crop_id;
+        noteChange('market_price_snapshot', lot.market_price_snapshot, newCropMarket.price_per_kg);
+        updates.market_price_snapshot = newCropMarket.price_per_kg;
+        updates.market_price_is_estimate = newCropMarket.is_estimate ? 1 : 0;
+        updates.market_price_as_of = newCropMarket.as_of;
+
+        const finalRipeness = body.ripeness !== undefined ? body.ripeness : Number(lot.ripeness);
+        const weather = await fetchWeather(Number(lot.plot_lat), Number(lot.plot_lng));
+        const shelfHours = predictShelfHours(
+          newCropRow.base_shelf_days,
+          finalRipeness,
+          weather.tempC,
+          weather.humidity,
+        );
+        const newExpires = new Date(Date.now() + shelfHours * 60 * 60 * 1000);
+        noteChange('predicted_shelf_hours', lot.predicted_shelf_hours, shelfHours);
+        noteChange('expires_at', lot.expires_at, newExpires.toISOString());
+        updates.predicted_shelf_hours = shelfHours;
+        updates.expires_at = newExpires;
+      }
+
       if (body.weight_kg !== undefined) {
         if (body.weight_kg > Number(lot.weight_kg) + 1e-9) {
           throw new HttpError(400, 'VALIDATION', 'น้ำหนักลดได้เท่านั้น', {
@@ -522,13 +564,13 @@ lotsRouter.patch(
       let nextStart =
         body.start_price_per_kg !== undefined
           ? body.start_price_per_kg
-          : lot.start_price_per_kg === null
+          : cropChanged || lot.start_price_per_kg === null
             ? null
             : Number(lot.start_price_per_kg);
       let nextFloor =
         body.floor_price_per_kg !== undefined
           ? body.floor_price_per_kg
-          : lot.floor_price_per_kg === null
+          : cropChanged || lot.floor_price_per_kg === null
             ? null
             : Number(lot.floor_price_per_kg);
 
@@ -542,9 +584,11 @@ lotsRouter.patch(
           noteChange('allow_donation', lot.allow_donation, 1);
         } else {
           const marketPrice =
-            lot.market_price_snapshot === null
-              ? (await resolveMarketPrice(Number(lot.crop_id))).price_per_kg
-              : Number(lot.market_price_snapshot);
+            newCropMarket !== null
+              ? newCropMarket.price_per_kg
+              : lot.market_price_snapshot === null
+                ? (await resolveMarketPrice(Number(lot.crop_id))).price_per_kg
+                : Number(lot.market_price_snapshot);
           if (nextStart === null || nextFloor === null) {
             const defaults = defaultLotPrices(marketPrice, nextGrade);
             nextStart = nextStart ?? defaults.start;
@@ -559,21 +603,29 @@ lotsRouter.patch(
 
       if (nextSaleMode !== 'donate') {
         const marketPrice =
-          lot.market_price_snapshot === null
-            ? (await resolveMarketPrice(Number(lot.crop_id))).price_per_kg
-            : Number(lot.market_price_snapshot);
+          newCropMarket !== null
+            ? newCropMarket.price_per_kg
+            : lot.market_price_snapshot === null
+              ? (await resolveMarketPrice(Number(lot.crop_id))).price_per_kg
+              : Number(lot.market_price_snapshot);
         if (nextStart === null || nextFloor === null) {
-          throw new HttpError(400, 'VALIDATION', 'กรุณาระบุราคาเริ่มและราคาต่ำสุด', {
-            start_price_per_kg: 'กรุณาระบุราคาเริ่ม',
-            floor_price_per_kg: 'กรุณาระบุราคาต่ำสุด',
-          });
+          if (cropChanged) {
+            const defaults = defaultLotPrices(marketPrice, nextGrade);
+            nextStart = nextStart ?? defaults.start;
+            nextFloor = nextFloor ?? defaults.floor;
+          } else {
+            throw new HttpError(400, 'VALIDATION', 'กรุณาระบุราคาเริ่มและราคาต่ำสุด', {
+              start_price_per_kg: 'กรุณาระบุราคาเริ่ม',
+              floor_price_per_kg: 'กรุณาระบุราคาต่ำสุด',
+            });
+          }
         }
         assertValidPrices(marketPrice, nextStart, nextFloor);
-        if (body.start_price_per_kg !== undefined || body.sale_mode !== undefined) {
+        if (body.start_price_per_kg !== undefined || body.sale_mode !== undefined || cropChanged) {
           noteChange('start_price_per_kg', lot.start_price_per_kg, nextStart);
           updates.start_price_per_kg = nextStart;
         }
-        if (body.floor_price_per_kg !== undefined || body.sale_mode !== undefined) {
+        if (body.floor_price_per_kg !== undefined || body.sale_mode !== undefined || cropChanged) {
           noteChange('floor_price_per_kg', lot.floor_price_per_kg, nextFloor);
           updates.floor_price_per_kg = nextFloor;
         }
@@ -600,24 +652,28 @@ lotsRouter.patch(
               ripeness: 'ค่าความสุกต้องตรงกับผลการประเมินจากรูปใหม่',
             });
           }
-          const weather = await fetchWeather(Number(lot.plot_lat), Number(lot.plot_lng));
-          const shelfHours = predictShelfHours(
-            Number(lot.base_shelf_days),
-            newRipe,
-            weather.tempC,
-            weather.humidity,
-          );
-          const oldExpires = new Date(lot.expires_at);
-          let newExpires = new Date(Date.now() + shelfHours * 60 * 60 * 1000);
-          if (newExpires.getTime() > oldExpires.getTime()) {
-            newExpires = oldExpires;
-          }
           noteChange('ripeness', oldRipe, newRipe);
-          noteChange('expires_at', oldExpires.toISOString(), newExpires.toISOString());
-          noteChange('predicted_shelf_hours', lot.predicted_shelf_hours, shelfHours);
           updates.ripeness = newRipe;
-          updates.expires_at = newExpires;
-          updates.predicted_shelf_hours = shelfHours;
+          // When the crop also changed, shelf life was already recomputed above with the
+          // new crop's base shelf days and this (lowered) ripeness value.
+          if (!cropChanged) {
+            const weather = await fetchWeather(Number(lot.plot_lat), Number(lot.plot_lng));
+            const shelfHours = predictShelfHours(
+              Number(lot.base_shelf_days),
+              newRipe,
+              weather.tempC,
+              weather.humidity,
+            );
+            const oldExpires = new Date(lot.expires_at);
+            let newExpires = new Date(Date.now() + shelfHours * 60 * 60 * 1000);
+            if (newExpires.getTime() > oldExpires.getTime()) {
+              newExpires = oldExpires;
+            }
+            noteChange('expires_at', oldExpires.toISOString(), newExpires.toISOString());
+            noteChange('predicted_shelf_hours', lot.predicted_shelf_hours, shelfHours);
+            updates.expires_at = newExpires;
+            updates.predicted_shelf_hours = shelfHours;
+          }
         } else {
           noteChange('ripeness', oldRipe, newRipe);
           updates.ripeness = newRipe;
