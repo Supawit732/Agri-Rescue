@@ -1,6 +1,18 @@
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
@@ -25,6 +37,7 @@ import { useAuth } from '../context/AuthContext';
 import { useApiData } from '../hooks/useApiData';
 import { hoursLeftFrom, useNow } from '../hooks/useNow';
 import { formatTemplate, useI18n, type Messages } from '../i18n';
+import { mediaUri } from '../lib/media';
 import { C, urgency } from '../theme';
 import type {
   AssessPhotoResponse,
@@ -41,6 +54,9 @@ import type {
 function modeHasDonation(mode: SaleMode): boolean {
   return mode === 'donate' || mode === 'sell_then_donate';
 }
+
+const DESCRIPTION_MIN_HEIGHT = 84; // ~3 lines
+const DESCRIPTION_MAX_HEIGHT = 156; // ~6 lines
 
 function modeHasPrice(mode: SaleMode): boolean {
   return mode === 'sell' || mode === 'sell_then_donate';
@@ -356,8 +372,13 @@ function NewLotForm({
   const { t, locale, formatNumber, formatDate, cropName, translateError, translateFieldError } =
     useI18n();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const isWide = width >= 900;
   const { scrollRef, registerY, scrollToField } = useFieldScroll();
   const isEditing = editingLot !== null;
+  const cropLockedByOrders =
+    isEditing && editingLot !== null && editingLot.bookings !== undefined && editingLot.bookings.length > 0;
+  const canChangeCrop = !cropLockedByOrders;
   const [cropId, setCropId] = useState<number>(editingLot?.crop_id ?? crops[0]?.id ?? 0);
   const [plotId, setPlotId] = useState<number>(editingLot?.plot_id ?? plots[0]?.id ?? 0);
   const [weight, setWeight] = useState(editingLot !== null ? String(editingLot.weight_kg) : '');
@@ -367,6 +388,7 @@ function NewLotForm({
   );
   const [grade, setGrade] = useState<Grade>(editingLot?.grade ?? 'substandard');
   const [description, setDescription] = useState(editingLot?.description ?? '');
+  const [descriptionHeight, setDescriptionHeight] = useState(DESCRIPTION_MIN_HEIGHT);
   const [saleMode, setSaleMode] = useState<SaleMode>(editingLot?.sale_mode ?? 'sell');
   const [donationAudience, setDonationAudience] = useState<DonationAudience>(
     editingLot?.donation_audience ?? 'verified_org_only',
@@ -390,6 +412,9 @@ function NewLotForm({
   const [pricesEdited, setPricesEdited] = useState(
     editingLot?.start_price_per_kg !== null && editingLot?.start_price_per_kg !== undefined,
   );
+  // true once the seller has typed into the floor field THIS session; until then, changing
+  // the start price keeps re-suggesting the floor (30% of start, not below the market minimum).
+  const [floorEdited, setFloorEdited] = useState(false);
   const [estimate, setEstimate] = useState<EstimateResponse | null>(null);
   const [estimateError, setEstimateError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -416,6 +441,7 @@ function NewLotForm({
     Array<{ id: number; name_th: string; name_en: string | null }>
   >([]);
   const primedDirty = useRef(false);
+  const editingLotRef = useRef<MyLot | null>(null);
 
   const saleModeOptions = useMemo(
     () =>
@@ -473,54 +499,92 @@ function NewLotForm({
     onDirtyChange,
   ]);
 
+  // Single effect for both "sync form to the lot being edited" and "user changed the crop"
+  // (merged to avoid a two-effect race: cropId and editingLot can both change in one commit
+  // when entering edit mode, and a photo/price reset from the crop-change branch would
+  // otherwise clobber the just-synced photo before the sync effect's state settles).
   useEffect(() => {
-    if (editingLot === null) {
+    if (editingLot !== editingLotRef.current) {
+      editingLotRef.current = editingLot;
+      if (editingLot !== null) {
+        setCropId(editingLot.crop_id);
+        setPlotId(editingLot.plot_id);
+        setWeight(String(editingLot.weight_kg));
+        setRipeness(editingLot.ripeness);
+        setRipenessSource('user');
+        setGrade(editingLot.grade);
+        setSaleMode(editingLot.sale_mode);
+        setDonationAudience(editingLot.donation_audience ?? 'verified_org_only');
+        setSplitAllowed(editingLot.split_allowed !== false);
+        setMinOrderKg(editingLot.min_order_kg !== undefined ? String(editingLot.min_order_kg) : '1');
+        setStartPrice(
+          editingLot.start_price_per_kg !== null && editingLot.start_price_per_kg !== undefined
+            ? String(editingLot.start_price_per_kg)
+            : '',
+        );
+        setFloorPrice(
+          editingLot.floor_price_per_kg !== null && editingLot.floor_price_per_kg !== undefined
+            ? String(editingLot.floor_price_per_kg)
+            : '',
+        );
+        setPricesEdited(
+          editingLot.start_price_per_kg !== null && editingLot.start_price_per_kg !== undefined,
+        );
+        setFloorEdited(false);
+        setDescription(editingLot.description ?? '');
+        setDescriptionHeight(DESCRIPTION_MIN_HEIGHT);
+        setAiResult(null);
+        setAiEdited(false);
+        setAiMessage(null);
+        setPhotoPreview(mediaUri(editingLot.photo_url));
+        setSubmitError(null);
+      } else {
+        setAiResult(null);
+        setAiEdited(false);
+        setAiMessage(null);
+        setPhotoPreview(null);
+        setPricesEdited(false);
+        setFloorEdited(false);
+        setStartPrice('');
+        setFloorPrice('');
+        setDescription('');
+        setDescriptionHeight(DESCRIPTION_MIN_HEIGHT);
+        setRipeness(null);
+        setRipenessSource(null);
+        setEstimate(null);
+      }
       return;
     }
-    setCropId(editingLot.crop_id);
-    setPlotId(editingLot.plot_id);
-    setWeight(String(editingLot.weight_kg));
-    setRipeness(editingLot.ripeness);
-    setRipenessSource('user');
-    setGrade(editingLot.grade);
-    setSaleMode(editingLot.sale_mode);
-    setDonationAudience(editingLot.donation_audience ?? 'verified_org_only');
-    setSplitAllowed(editingLot.split_allowed !== false);
-    setMinOrderKg(editingLot.min_order_kg !== undefined ? String(editingLot.min_order_kg) : '1');
-    setStartPrice(
-      editingLot.start_price_per_kg !== null && editingLot.start_price_per_kg !== undefined
-        ? String(editingLot.start_price_per_kg)
-        : '',
-    );
-    setFloorPrice(
-      editingLot.floor_price_per_kg !== null && editingLot.floor_price_per_kg !== undefined
-        ? String(editingLot.floor_price_per_kg)
-        : '',
-    );
-    setPricesEdited(
-      editingLot.start_price_per_kg !== null && editingLot.start_price_per_kg !== undefined,
-    );
-    setAiResult(null);
-    setAiEdited(false);
-    setAiMessage(null);
-    setPhotoPreview(null);
-    setSubmitError(null);
-  }, [editingLot]);
-
-  useEffect(() => {
-    setAiResult(null);
-    setAiEdited(false);
-    setAiMessage(null);
-    setPhotoPreview(null);
-    if (!isEditing) {
+    // editingLot identity is unchanged — a dependency change here means the seller picked
+    // a different crop (create flow, or an in-place crop change while editing).
+    if (isEditing && editingLot !== null) {
+      // In edit mode: restore original photo if switching back to original crop, else clear on change.
+      if (cropId === editingLot.crop_id) {
+        setPhotoPreview(mediaUri(editingLot.photo_url));
+        setAiResult(null);
+        setAiEdited(false);
+        setAiMessage(null);
+      } else {
+        setAiResult(null);
+        setAiEdited(false);
+        setAiMessage(null);
+        setPhotoPreview(null);
+      }
+    } else if (!isEditing) {
+      // Create mode: clear photo/AI on any crop change.
+      setAiResult(null);
+      setAiEdited(false);
+      setAiMessage(null);
+      setPhotoPreview(null);
       setPricesEdited(false);
+      setFloorEdited(false);
       setStartPrice('');
       setFloorPrice('');
       setRipeness(null);
       setRipenessSource(null);
       setEstimate(null);
     }
-  }, [cropId, isEditing]);
+  }, [editingLot, cropId, isEditing]);
 
   const startNum = Number(startPrice);
   const floorNum = Number(floorPrice);
@@ -822,7 +886,9 @@ function NewLotForm({
       const descriptionValue = description.trim() === '' ? null : description.trim();
       if (isEditing && editingLot !== null) {
         const loweringRipeness = ripeness !== null && ripeness < editingLot.ripeness;
+        const cropChanged = cropId !== editingLot.crop_id;
         await api.patchLot(editingLot.id, {
+          ...(cropChanged ? { crop_id: cropId } : {}),
           weight_kg: weightNum,
           grade,
           ripeness: ripeness as number,
@@ -833,6 +899,7 @@ function NewLotForm({
           description: descriptionValue,
           ...(aiResult !== null ? { ai_ripeness: aiResult.ripeness } : {}),
           ...(aiResult?.photo_url !== undefined ? { photo_url: aiResult.photo_url } : {}),
+          ...(cropChanged && aiResult === null ? { photo_url: null } : {}),
           ...(loweringRipeness ? { confirm_ripeness_photo: aiResult !== null } : {}),
         });
       } else {
@@ -879,6 +946,16 @@ function NewLotForm({
     }
   };
 
+  const handleSubmitPress = (): void => {
+    if (ripeness === null) {
+      setFieldErrors((prev) => ({ ...prev, ripeness: t.sell.ripenessRequired }));
+      setSubmitError(t.sell.ripenessRequired);
+      scrollToField('ripeness');
+      return;
+    }
+    void onSubmit();
+  };
+
   const aiDefects =
     aiResult === null
       ? []
@@ -893,64 +970,93 @@ function NewLotForm({
         : aiResult.note_th;
 
   return (
-    <View style={styles.formWrap}>
+    <KeyboardAvoidingView
+      style={styles.formWrap}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={insets.top}
+    >
       <Body scrollRef={scrollRef}>
         {isEditing ? (
-          <Text style={styles.editHint}>
-            {formatTemplate(t.sell.editingLot, { id: editingLot.id })}
-          </Text>
+          <View style={styles.editSummaryCard}>
+            {mediaUri(editingLot.photo_url) !== null ? (
+              <Image source={{ uri: mediaUri(editingLot.photo_url)! }} style={styles.editSummaryThumb} />
+            ) : (
+              <View style={[styles.editSummaryThumb, styles.editSummaryThumbPlaceholder]} />
+            )}
+            <Text style={styles.editSummaryText} numberOfLines={2}>
+              {formatTemplate(t.sell.editSummary, {
+                crop: cropName({ name_th: editingLot.crop_name_th, name_en: editingLot.crop_name_en }),
+                weight: formatNumber(editingLot.weight_kg),
+                date: formatDate(editingLot.created_at),
+              })}
+            </Text>
+          </View>
         ) : null}
 
       <SectionTitle>{t.sell.selectCrop}</SectionTitle>
-      {!isEditing ? (
-        <TextInput
-          style={styles.cropSearchInput}
-          value={cropSearch}
-          onChangeText={setCropSearch}
-          placeholder={t.sell.searchCropPlaceholder}
-          placeholderTextColor={C.mute}
-          returnKeyType="search"
-          clearButtonMode="while-editing"
-        />
-      ) : null}
-      {!isEditing && frequentCrops.length > 0 && cropSearch.trim() === '' ? (
+      {isEditing && cropLockedByOrders ? (
         <>
-          <Text style={styles.cropSubheading}>{t.sell.frequentCropsSection}</Text>
+          <View style={styles.cropLockedRow}>
+            <Badge
+              text={cropName({ name_th: editingLot!.crop_name_th, name_en: editingLot!.crop_name_en })}
+              fg={C.leafDeep}
+              bg={C.leafSoft}
+            />
+          </View>
+          <Text style={styles.cropLockedHint}>{t.sell.cropLockedHasOrders}</Text>
+        </>
+      ) : (
+        <>
+          <TextInput
+            style={styles.cropSearchInput}
+            value={cropSearch}
+            onChangeText={setCropSearch}
+            placeholder={t.sell.searchCropPlaceholder}
+            placeholderTextColor={C.mute}
+            returnKeyType="search"
+            clearButtonMode="while-editing"
+          />
+          {frequentCrops.length > 0 && cropSearch.trim() === '' ? (
+            <>
+              <Text style={styles.cropSubheading}>{t.sell.frequentCropsSection}</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
+                {frequentCrops.map((crop) => (
+                  <Chip
+                    key={crop.id}
+                    label={cropName(crop)}
+                    selected={crop.id === cropId}
+                    onPress={() => { setCropId(crop.id); }}
+                  />
+                ))}
+              </ScrollView>
+              <Text style={styles.cropSubheading}>{t.sell.allCropsSection}</Text>
+            </>
+          ) : null}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
-            {frequentCrops.map((crop) => (
+            {(cropSearch.trim() === ''
+              ? crops
+              : crops.filter((c) => {
+                  const q = cropSearch.trim().toLowerCase();
+                  return c.name_th.toLowerCase().includes(q) ||
+                    (c.name_en ?? '').toLowerCase().includes(q);
+                })
+            ).map((crop) => (
               <Chip
                 key={crop.id}
                 label={cropName(crop)}
                 selected={crop.id === cropId}
-                onPress={() => { setCropId(crop.id); }}
+                onPress={() => {
+                  setCropId(crop.id);
+                }}
               />
             ))}
           </ScrollView>
-          <Text style={styles.cropSubheading}>{t.sell.allCropsSection}</Text>
+          {isEditing && cropId !== editingLot!.crop_id ? (
+            <Text style={styles.cropChangeHint}>{t.sell.cropChangeHint}</Text>
+          ) : null}
         </>
-      ) : null}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
-        {(cropSearch.trim() === ''
-          ? crops
-          : crops.filter((c) => {
-              const q = cropSearch.trim().toLowerCase();
-              return c.name_th.toLowerCase().includes(q) ||
-                (c.name_en ?? '').toLowerCase().includes(q);
-            })
-        ).map((crop) => (
-          <Chip
-            key={crop.id}
-            label={cropName(crop)}
-            selected={crop.id === cropId}
-            onPress={() => {
-              if (!isEditing) {
-                setCropId(crop.id);
-              }
-            }}
-          />
-        ))}
-      </ScrollView>
-      {!isEditing ? (
+      )}
+      {canChangeCrop ? (
         <Pressable
           style={styles.addCropButton}
           onPress={() => { setShowProposeForm((v) => !v); }}
@@ -1334,7 +1440,15 @@ function NewLotForm({
         multiline
         numberOfLines={3}
         maxLength={500}
-        style={styles.descriptionInput}
+        style={[styles.descriptionInput, { height: descriptionHeight }]}
+        onContentSizeChange={(e: { nativeEvent: { contentSize: { height: number } } }) => {
+          setDescriptionHeight(
+            Math.max(
+              DESCRIPTION_MIN_HEIGHT,
+              Math.min(DESCRIPTION_MAX_HEIGHT, e.nativeEvent.contentSize.height + 24),
+            ),
+          );
+        }}
       />
       <Text style={styles.descriptionCounter}>
         {formatTemplate(t.sell.descriptionCounter, { n: description.length, max: 500 })}
@@ -1388,6 +1502,21 @@ function NewLotForm({
                   delete cleared.start_price_per_kg;
                   return cleared;
                 });
+                if (!floorEdited && estimate !== null) {
+                  const startVal = Number(text);
+                  if (startVal > 0) {
+                    const suggested = Math.max(
+                      Math.round(startVal * 0.3 * 100) / 100,
+                      estimate.min_floor_price_per_kg,
+                    );
+                    setFloorPrice(String(suggested));
+                    setFieldErrors((prev) => {
+                      const cleared = { ...prev };
+                      delete cleared.floor_price_per_kg;
+                      return cleared;
+                    });
+                  }
+                }
               }}
               onBlur={() => {
                 if (estimate === null) {
@@ -1450,9 +1579,16 @@ function NewLotForm({
               onChangeText={(text) => {
                 setFloorPrice(text);
                 setPricesEdited(true);
+                setFloorEdited(true);
                 setFieldErrors((prev) => {
                   const cleared = { ...prev };
                   delete cleared.floor_price_per_kg;
+                  const n = Number(text);
+                  if (estimate !== null && n > 0 && n < estimate.min_floor_price_per_kg) {
+                    cleared.floor_price_per_kg = formatTemplate(t.sell.floorBelowMinimum, {
+                      price: formatNumber(estimate.min_floor_price_per_kg),
+                    });
+                  }
                   return cleared;
                 });
               }}
@@ -1465,6 +1601,10 @@ function NewLotForm({
                   const next = { ...prev };
                   if (!(n > 0)) {
                     next.floor_price_per_kg = t.sell.needFloorPrice;
+                  } else if (n < estimate.min_floor_price_per_kg) {
+                    next.floor_price_per_kg = formatTemplate(t.sell.floorBelowMinimum, {
+                      price: formatNumber(estimate.min_floor_price_per_kg),
+                    });
                   } else {
                     delete next.floor_price_per_kg;
                   }
@@ -1503,28 +1643,33 @@ function NewLotForm({
       ) : null}
 
     </Body>
-    <View style={[styles.stickyFooter, { paddingBottom: insets.bottom + 12 }]}>
+    <View style={[styles.stickyFooter, { paddingBottom: isWide ? insets.bottom + 12 : 12 }]}>
       {submitError !== null ? <Text style={styles.previewError}>{submitError}</Text> : null}
-      <PrimaryButton
-        label={isEditing ? t.sell.saveEdit : t.sell.publish}
-        block
-        onPress={() => {
-          if (ripeness === null) {
-            setFieldErrors((prev) => ({ ...prev, ripeness: t.sell.ripenessRequired }));
-            setSubmitError(t.sell.ripenessRequired);
-            scrollToField('ripeness');
-            return;
-          }
-          void onSubmit();
-        }}
-        loading={submitting}
-        disabled={!(weightNum > 0) || ripeness === null || assessing}
-      />
       {isEditing ? (
-        <SecondaryButton label={t.sell.cancelEdit} block onPress={onCancelEdit} />
-      ) : null}
+        <View style={styles.footerButtonRow}>
+          <View style={{ flex: 1 }}>
+            <PrimaryButton
+              label={t.sell.saveEdit}
+              onPress={handleSubmitPress}
+              loading={submitting}
+              disabled={!(weightNum > 0) || ripeness === null || assessing}
+            />
+          </View>
+          <View style={{ flex: 1, marginLeft: 8 }}>
+            <SecondaryButton label={t.sell.cancelEdit} onPress={onCancelEdit} />
+          </View>
+        </View>
+      ) : (
+        <PrimaryButton
+          label={t.sell.publish}
+          block
+          onPress={handleSubmitPress}
+          loading={submitting}
+          disabled={!(weightNum > 0) || ripeness === null || assessing}
+        />
+      )}
     </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -1541,6 +1686,15 @@ function MyLots({
   const { data, loading, error, reload } = useApiData(() => api.getMyLots(), [refreshKey]);
   const now = useNow();
   const router = useRouter();
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'booked' | 'expired'>('all');
+
+  const statusOptions: Array<{ key: typeof statusFilter; label: string }> = [
+    { key: 'all', label: t.sell.filterAll },
+    { key: 'open', label: t.sell.filterOpen },
+    { key: 'booked', label: t.sell.filterBooked },
+    { key: 'expired', label: t.sell.filterExpired },
+  ];
 
   return (
     <DataState
@@ -1551,9 +1705,57 @@ function MyLots({
       isEmpty={(lots) => lots.length === 0}
       emptyText={t.sell.myLotsEmpty}
     >
-      {(lots) => (
+      {(lots) => {
+        const filtered = lots.filter((lot) => {
+          const q = search.trim().toLowerCase();
+          const matchesSearch =
+            q === '' ||
+            lot.crop_name_th.toLowerCase().includes(q) ||
+            (lot.crop_name_en ?? '').toLowerCase().includes(q) ||
+            (lot.description ?? '').toLowerCase().includes(q);
+          if (!matchesSearch) {
+            return false;
+          }
+          if (statusFilter === 'all') {
+            return true;
+          }
+          const hours = hoursLeftFrom(lot.expires_at, now);
+          const expired = lot.status === 'expired' || hours <= 0;
+          if (statusFilter === 'expired') {
+            return expired;
+          }
+          const booked = lot.bookings !== undefined && lot.bookings.length > 0;
+          if (statusFilter === 'booked') {
+            return booked;
+          }
+          return (lot.status === 'open' || lot.status === 'partially_reserved') && !expired;
+        });
+
+        return (
         <Body>
-          {lots.map((lot: MyLot) => {
+          <TextInput
+            style={styles.myLotsSearchInput}
+            value={search}
+            onChangeText={setSearch}
+            placeholder={t.sell.myLotsSearchPlaceholder}
+            placeholderTextColor={C.mute}
+            returnKeyType="search"
+            clearButtonMode="while-editing"
+          />
+          <View style={styles.myLotsFilterRow}>
+            {statusOptions.map((opt) => (
+              <Chip
+                key={opt.key}
+                label={opt.label}
+                selected={statusFilter === opt.key}
+                onPress={() => setStatusFilter(opt.key)}
+              />
+            ))}
+          </View>
+          {filtered.length === 0 ? (
+            <Text style={styles.myLotsFilterEmpty}>{t.sell.myLotsFilterEmpty}</Text>
+          ) : null}
+          {filtered.map((lot: MyLot) => {
             const hours = hoursLeftFrom(lot.expires_at, now);
             const tone = urgency(hours);
             const canEdit = lot.status === 'open' || lot.status === 'partially_reserved';
@@ -1561,19 +1763,31 @@ function MyLots({
             const statusLabel = t.status[lot.status] ?? lot.status;
             return (
               <Card key={lot.id}>
-                <View style={styles.lotHeader}>
-                  <Text style={styles.lotTitle}>
-                    {formatTemplate(t.sell.remainingOf, {
-                      crop: cropName({
-                        name_th: lot.crop_name_th,
-                        name_en: lot.crop_name_en,
-                      }),
-                      remaining: formatNumber(remaining),
-                      total: formatNumber(lot.weight_kg),
-                    })}
-                  </Text>
-                  <Badge text={statusLabel} fg={C.leaf} bg={C.leafSoft} />
+                <View style={styles.myLotTopRow}>
+                  {mediaUri(lot.photo_url) !== null ? (
+                    <Image source={{ uri: mediaUri(lot.photo_url)! }} style={styles.myLotThumb} />
+                  ) : (
+                    <View style={[styles.myLotThumb, styles.myLotThumbPlaceholder]} />
+                  )}
+                  <View style={styles.lotHeader}>
+                    <Text style={styles.lotTitle}>
+                      {formatTemplate(t.sell.remainingOf, {
+                        crop: cropName({
+                          name_th: lot.crop_name_th,
+                          name_en: lot.crop_name_en,
+                        }),
+                        remaining: formatNumber(remaining),
+                        total: formatNumber(lot.weight_kg),
+                      })}
+                    </Text>
+                    <Badge text={statusLabel} fg={C.leaf} bg={C.leafSoft} />
+                  </View>
                 </View>
+                {lot.description !== null && lot.description !== undefined && lot.description !== '' ? (
+                  <Text style={styles.myLotDescription} numberOfLines={2}>
+                    {lot.description}
+                  </Text>
+                ) : null}
                 <View style={styles.badgeRow}>
                   <Badge
                     text={t.saleMode[lot.sale_mode] ?? lot.sale_mode}
@@ -1684,7 +1898,8 @@ function MyLots({
             );
           })}
         </Body>
-      )}
+        );
+      }}
     </DataState>
   );
 }
@@ -1699,14 +1914,26 @@ const styles = StyleSheet.create({
     backgroundColor: C.surface,
     gap: 8,
   },
+  footerButtonRow: { flexDirection: 'row', gap: 8 },
   row: { flexDirection: 'row', flexWrap: 'wrap' },
   badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 6 },
   plotName: { color: C.ink, fontSize: 16, fontWeight: '400', marginBottom: 12 },
   addPlotHint: { color: C.mute, marginBottom: 12 },
-  editHint: { color: C.turmeric, fontWeight: '700', marginBottom: 8 },
+  editSummaryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: C.turmericSoft,
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 12,
+  },
+  editSummaryThumb: { width: 48, height: 48, borderRadius: 8, backgroundColor: C.leafSoft },
+  editSummaryThumbPlaceholder: { backgroundColor: C.line },
+  editSummaryText: { flex: 1, color: C.ink, fontWeight: '600' },
   aiWarn: { color: C.turmeric, marginBottom: 8, marginTop: 4 },
   aiLine: { color: C.ink, marginTop: 6 },
-  descriptionInput: { height: 84, alignItems: 'flex-start', paddingTop: 12 },
+  descriptionInput: { alignItems: 'flex-start', paddingTop: 12 },
   descriptionCounter: { color: C.mute, fontSize: 12, textAlign: 'right', marginTop: -4, marginBottom: 8 },
   priceLockedHint: {
     color: C.ink,
@@ -1728,7 +1955,24 @@ const styles = StyleSheet.create({
   previewTotal: { fontSize: 15, color: C.ink, marginTop: 2 },
   previewMuted: { color: C.mute, marginTop: 4 },
   previewError: { color: C.chili, marginBottom: 8 },
-  lotHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  myLotTopRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  myLotThumb: { width: 56, height: 56, borderRadius: 10, backgroundColor: C.leafSoft },
+  myLotThumbPlaceholder: { backgroundColor: C.line },
+  myLotDescription: { color: C.mute, fontSize: 13, marginTop: 4, marginBottom: 4 },
+  myLotsSearchInput: {
+    height: 44,
+    borderWidth: 1,
+    borderColor: C.line,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    fontSize: 15,
+    color: C.ink,
+    backgroundColor: C.white,
+    marginBottom: 10,
+  },
+  myLotsFilterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  myLotsFilterEmpty: { color: C.mute, textAlign: 'center', marginTop: 16, marginBottom: 8 },
+  lotHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4, flex: 1 },
   lotTitle: { fontSize: 16, fontWeight: '700', color: C.ink, flex: 1, marginRight: 8 },
   lotMeta: { color: C.mute, fontSize: 12, marginBottom: 6 },
   lotLine: { color: C.ink, marginBottom: 4 },
@@ -1747,6 +1991,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   cropSubheading: { fontSize: 13, color: C.mute, fontWeight: '600', marginBottom: 4, marginTop: 4 },
+  cropLockedRow: { flexDirection: 'row', marginBottom: 4 },
+  cropLockedHint: { fontSize: 12, color: C.mute, marginBottom: 4 },
+  cropChangeHint: { fontSize: 12, color: C.turmeric, fontWeight: '600', marginTop: 2, marginBottom: 4 },
   chipScroll: { marginBottom: 4 },
   addCropButton: { paddingVertical: 6, paddingHorizontal: 2, marginBottom: 8 },
   addCropButtonText: { color: C.leaf, fontWeight: '600', fontSize: 14 },

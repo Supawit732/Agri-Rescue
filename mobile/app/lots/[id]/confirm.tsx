@@ -1,7 +1,9 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, Text, View } from 'react-native';
 import { ApiError } from '../../../src/api/client';
+import { API_BASE_URL } from '../../../src/api/config';
+import type { MarketLot } from '../../../src/api/types';
 import {
   Body,
   Card,
@@ -17,6 +19,17 @@ import { formatCountdown, hoursLeftFrom, useNow } from '../../../src/hooks/useNo
 import { formatTemplate, useI18n } from '../../../src/i18n';
 import { remainingOf } from '../../../src/lot/helpers';
 import { C } from '../../../src/theme';
+
+function photoUri(lot: MarketLot): string | null {
+  const raw = lot.photos?.[0] ?? lot.photo_url ?? null;
+  if (raw === null || raw === '') {
+    return null;
+  }
+  if (raw.startsWith('http://') || raw.startsWith('https://')) {
+    return raw;
+  }
+  return `${API_BASE_URL}${raw.startsWith('/') ? raw : `/${raw}`}`;
+}
 
 export default function LotConfirmScreen(): React.ReactElement {
   const { id, intent, qty } = useLocalSearchParams<{ id: string; intent?: string; qty?: string }>();
@@ -129,9 +142,15 @@ export default function LotConfirmScreen(): React.ReactElement {
             <Body>
               {banner !== null ? <Text style={styles.banner}>{banner}</Text> : null}
               <Card>
+                {photoUri(lot) !== null ? (
+                  <Image source={{ uri: photoUri(lot)! }} style={styles.photo} resizeMode="cover" />
+                ) : null}
                 <Text style={styles.title}>
                   {cropName({ name_th: lot.crop_name_th, name_en: lot.crop_name_en })}
                 </Text>
+                {lot.description !== null && lot.description !== undefined && lot.description !== '' ? (
+                  <Text style={styles.description}>{lot.description}</Text>
+                ) : null}
                 <Text style={styles.line}>
                   {formatTemplate(t.confirmBooking.qtyRemaining, {
                     qty: formatNumber(quantityKg),
@@ -232,7 +251,9 @@ export default function LotConfirmScreen(): React.ReactElement {
 
 const styles = StyleSheet.create({
   banner: { color: C.chili, marginBottom: 10, fontWeight: '600' },
+  photo: { width: '100%', height: 160, borderRadius: 12, marginBottom: 8, backgroundColor: C.leafSoft },
   title: { fontSize: 20, fontWeight: '800', color: C.ink, marginBottom: 8 },
+  description: { color: C.mute, marginBottom: 8, lineHeight: 20 },
   line: { color: C.ink, marginBottom: 4 },
   total: { fontSize: 16, fontWeight: '700', color: C.leaf, marginVertical: 6 },
   terms: { color: C.mute, marginTop: 10, lineHeight: 20 },
