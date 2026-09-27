@@ -6,6 +6,7 @@ import {
   lotAcceptsDonation,
   lotPricePerKg,
   minAllowedFloor,
+  priceComparison,
   priceForecastRows,
   suggestedFloorPrice,
   suggestedStartPrice,
@@ -39,13 +40,25 @@ describe('sellerPricing', () => {
     expect(suggestedFloorPrice(40)).toBe(12);
     expect(minAllowedFloor(40)).toBe(8);
     expect(validateSellerPrices({ marketPricePerKg: 40, startPricePerKg: 40, floorPricePerKg: 12 }).ok).toBe(true);
-    expect(validateSellerPrices({ marketPricePerKg: 40, startPricePerKg: 41, floorPricePerKg: 12 }).ok).toBe(false);
+    // Start price above reference market price is allowed (D024 — seller price transparency).
+    expect(validateSellerPrices({ marketPricePerKg: 40, startPricePerKg: 41, floorPricePerKg: 12 }).ok).toBe(true);
     const low = validateSellerPrices({ marketPricePerKg: 40, startPricePerKg: 40, floorPricePerKg: 5 });
     expect(low.ok).toBe(false);
     if (!low.ok) {
       expect(low.error).toBe('suggest_donate');
     }
     expect(validateSellerPrices({ marketPricePerKg: 40, startPricePerKg: 20, floorPricePerKg: 25 }).ok).toBe(false);
+  });
+
+  it('computes the price comparison badge tone against the reference market price', () => {
+    expect(priceComparison(null, 40)).toBeNull();
+    expect(priceComparison(40, null)).toBeNull();
+    expect(priceComparison(40, 0)).toBeNull();
+    expect(priceComparison(35, 40)).toEqual({ tone: 'cheaper', percentDiff: 13 });
+    expect(priceComparison(38, 40)).toEqual({ tone: 'cheaper', percentDiff: 5 });
+    expect(priceComparison(40, 40)).toEqual({ tone: 'near', percentDiff: 0 });
+    expect(priceComparison(42, 40)).toEqual({ tone: 'near', percentDiff: -5 });
+    expect(priceComparison(45, 40)).toEqual({ tone: 'higher', percentDiff: -12 });
   });
 
   it('computes lot price and forecast from start/floor + freshness', () => {

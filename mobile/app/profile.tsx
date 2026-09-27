@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
@@ -20,6 +20,7 @@ export default function ProfileScreen(): React.ReactElement {
   const { user, api, refreshUser, logout } = useAuth();
   const { t, formatDate, translateError, locale, setLocale } = useI18n();
   const router = useRouter();
+  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -70,6 +71,10 @@ export default function ProfileScreen(): React.ReactElement {
         ...(user.buyer_type === null ? { buyer_type: 'vendor' as const } : {}),
       });
       await refreshUser();
+      if (typeof returnTo === 'string' && returnTo.length > 0 && returnTo.startsWith('/')) {
+        router.replace(returnTo as never);
+        return;
+      }
       setMessage(t.account.buyEnabled);
     } catch (err) {
       setError(err instanceof ApiError ? translateError(err.code, err.message) : t.account.updateFailed);

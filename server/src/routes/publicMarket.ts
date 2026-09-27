@@ -6,7 +6,13 @@ import { evaluateDonationRequest, type DonationAudience, type DonorTier, type Or
 import { haversineKm } from '../domain/geo';
 import { remainingLotKg } from '../domain/lotInventory';
 import type { ProduceGrade } from '../domain/pricing';
-import { availableAs, lotAcceptsDonation, lotPricePerKg } from '../domain/sellerPricing';
+import {
+  availableAs,
+  lotAcceptsDonation,
+  lotPricePerKg,
+  priceComparison,
+  type PriceComparison,
+} from '../domain/sellerPricing';
 import { usedDonationKgThisWeek } from '../donors/donationService';
 import { locationDisplayLabelFor } from '../geo/locationLabel';
 import { asyncHandler } from '../http/asyncHandler';
@@ -32,6 +38,7 @@ const querySchema = z.object({
   max_hours: z.coerce.number().positive().optional(),
   q: z.string().trim().max(80).optional(),
   sort: z.enum(['near', 'urgent', 'cheap']).optional(),
+  cheaper_only: z.enum(['1', 'true']).optional(),
 });
 
 interface PublicMarketRow extends RowDataPacket {
@@ -92,7 +99,6 @@ export function roundDistanceKm(km: number): number {
 export interface PublicLotView {
   id: number;
   crop_id: number;
-  farmer_id: number;
   shop_name: string | null;
   crop_name_th: string;
   crop_name_en: string | null;
@@ -115,6 +121,7 @@ export interface PublicLotView {
   available_as: ReturnType<typeof availableAs>;
   price_per_kg: number | null;
   market_price_per_kg: number | null;
+  price_comparison?: PriceComparison | null;
   expires_at: string;
   hours_left: number;
   distance_km: number | null;
@@ -122,6 +129,7 @@ export interface PublicLotView {
   donation_audience?: DonationAudience;
   can_request_donation?: boolean;
   reason?: string | null;
+  is_mine?: boolean;
 }
 
 interface ViewerDonorHints {
@@ -179,6 +187,7 @@ function presentPublicLot(
   now: number,
   donor: ViewerDonorHints | null,
   locale: 'th' | 'en',
+  viewerUserId: number | null,
 ): PublicLotView {
   const hoursLeft = (new Date(row.expires_at).getTime() - now) / (60 * 60 * 1000);
   const saleMode = String(row.sale_mode);
@@ -215,7 +224,6 @@ function presentPublicLot(
   const view: PublicLotView = {
     id: Number(row.id),
     crop_id: Number(row.crop_id),
-    farmer_id: Number(row.farmer_id),
     shop_name: row.shop_name === null || row.shop_name === undefined || row.shop_name === ''
       ? null
       : String(row.shop_name),
@@ -246,6 +254,7 @@ function presentPublicLot(
     available_as: available,
     price_per_kg: pricePerKg,
     market_price_per_kg: marketPrice,
+    price_comparison: isDonateOnly ? null : priceComparison(pricePerKg, marketPrice),
     expires_at: new Date(row.expires_at).toISOString(),
     hours_left: hoursLeft,
     distance_km: distanceKm,
@@ -253,6 +262,10 @@ function presentPublicLot(
 
   if (String(row.crop_status) === 'pending') {
     view.crop_pending = true;
+  }
+
+  if (viewerUserId !== null) {
+    view.is_mine = viewerUserId === Number(row.farmer_id);
   }
 
   if (donor !== null && available.includes('donate')) {
@@ -393,8 +406,11 @@ publicMarketRouter.get(
       req.auth !== undefined ? await loadViewerDonor(req.auth.id) : null;
     const photoMap = await loadPhotosByLotIds(rows.map((r) => Number(r.id)));
     const locale = requestLocale(req.headers['accept-language'], req.query.lang);
+    const viewerUserId = req.auth?.id ?? null;
     let lots = rows
-      .map((row) => presentPublicLot(row, photoMap.get(Number(row.id)), viewer, now, donor, locale))
+      .map((row) =>
+        presentPublicLot(row, photoMap.get(Number(row.id)), viewer, now, donor, locale, viewerUserId),
+      )
       .filter((lot) => lot.hours_left > 0 && lot.remaining_kg > 0);
     if (hasCoords) {
       lots = lots.filter((lot) => lot.distance_km !== null && lot.distance_km <= radiusKm);
@@ -419,6 +435,9 @@ publicMarketRouter.get(
         const shop = (lot.shop_name ?? '').toLowerCase();
         return cropTh.includes(q) || cropEn.includes(q) || (q.length > 0 && shop.includes(q));
       });
+    }
+    if (query.cheaper_only !== undefined) {
+      lots = lots.filter((lot) => lot.price_comparison?.tone === 'cheaper');
     }
     lots = sortLots(lots, sort, hasCoords);
     res.json({ lots });
@@ -455,7 +474,7 @@ publicMarketRouter.get(
     const donor = req.auth !== undefined ? await loadViewerDonor(req.auth.id) : null;
     const photoMap = await loadPhotosByLotIds([lotId]);
     const locale = requestLocale(req.headers['accept-language'], req.query.lang);
-    const lot = presentPublicLot(row, photoMap.get(lotId), viewer, Date.now(), donor, locale);
+    const lot = presentPublicLot(row, photoMap.get(lotId), viewer, Date.now(), donor, locale, req.auth?.id ?? null);
     if (lot.remaining_kg <= 0 || lot.hours_left <= 0) {
       throw new HttpError(404, 'NOT_FOUND', 'ไม่พบล็อต');
     }

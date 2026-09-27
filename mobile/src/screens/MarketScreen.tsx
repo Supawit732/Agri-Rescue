@@ -41,6 +41,7 @@ import {
   lotLocationLabel,
   marketSaleBadge,
   minOrderOf,
+  priceComparisonBadge,
   remainingOf,
   splitAllowedOf,
 } from '../lot/helpers';
@@ -96,7 +97,11 @@ function MarketCatalog(): React.ReactElement {
   const router = useRouter();
   const now = useNow();
   const { width } = useWindowDimensions();
-  const columns = width >= 720 ? 3 : 2;
+  const columns = width >= 720 ? 3 : width < 340 ? 1 : 2;
+  const gridGap = 12;
+  const [gridWidth, setGridWidth] = useState(0);
+  const cardWidth =
+    gridWidth > 0 ? Math.floor((gridWidth - gridGap * (columns - 1)) / columns) : undefined;
 
   const [coords, setCoords] = useState<LatLng | null>(
     user?.lat != null && user?.lng != null ? { lat: user.lat, lng: user.lng } : null,
@@ -187,6 +192,7 @@ function MarketCatalog(): React.ReactElement {
       ...(priceMax !== undefined && !Number.isNaN(priceMax) ? { price_max: priceMax } : {}),
       ...(filters.maxHours !== null ? { max_hours: filters.maxHours } : {}),
       ...(cropQuery.trim() !== '' ? { q: cropQuery.trim() } : {}),
+      ...(filters.cheaperOnly ? { cheaper_only: true } : {}),
       sort,
     });
   }, [api, coords, filters, selectedCropId, cropQuery]);
@@ -200,6 +206,7 @@ function MarketCatalog(): React.ReactElement {
     filters.priceMax,
     filters.maxHours,
     filters.sort,
+    filters.cheaperOnly,
     selectedCropId,
     cropQuery,
   ]);
@@ -221,7 +228,6 @@ function MarketCatalog(): React.ReactElement {
   const activeCount = countActiveFilters(filters, selectedCropId);
   const sortLabel =
     filters.sort === 'near' ? t.market.sortNear : filters.sort === 'cheap' ? t.market.sortCheap : t.market.sortUrgent;
-  const cardWidth = `${100 / columns - 1.5}%` as `${number}%`;
 
   return (
     <Body>
@@ -365,8 +371,10 @@ function MarketCatalog(): React.ReactElement {
         emptyText={t.market.empty}
       >
         {(lots) => (
-          <View style={styles.grid}>
-            {lots.map((lot) => {
+          <View style={styles.grid} onLayout={(e) => setGridWidth(e.nativeEvent.layout.width)}>
+            {cardWidth === undefined
+              ? null
+              : lots.map((lot) => {
               const hours = hoursLeftFrom(lot.expires_at, now);
               const tone = urgency(hours);
               const remaining = remainingOf(lot);
@@ -378,12 +386,22 @@ function MarketCatalog(): React.ReactElement {
                 donate: t.market.badgeDonate,
                 donateOk: t.market.badgeDonateOk,
               });
+              const priceCompare = priceComparisonBadge(
+                lot,
+                {
+                  cheaper: t.market.priceCompareCheaper,
+                  near: t.market.priceCompareNear,
+                  higher: t.market.priceCompareHigher,
+                },
+                formatTemplate,
+              );
               const dist =
                 lot.distance_km !== null && lot.distance_km !== undefined
                   ? `${lot.distance_km.toFixed(1)} ${t.market.km}`
                   : null;
               const uri = photoUri(lot);
-              const bookingEnabled = user === null || user.can_buy;
+              const isMine = lot.is_mine === true;
+              const bookingEnabled = !isMine && (user === null || user.can_buy);
               const title = cropName({ name_th: lot.crop_name_th, name_en: lot.crop_name_en });
               const meta = [
                 lot.grade === 'substandard' ? t.market.gradeSub : t.market.gradeNormal,
@@ -396,7 +414,7 @@ function MarketCatalog(): React.ReactElement {
               return (
                 <Pressable
                   key={lot.id}
-                  style={[styles.card, { width: cardWidth }]}
+                  style={[styles.card, { width: cardWidth }, isMine ? styles.cardMine : null]}
                   onPress={() => router.push({ pathname: '/lots/[id]', params: { id: String(lot.id) } })}
                 >
                   <View style={styles.photoWrap}>
@@ -436,13 +454,18 @@ function MarketCatalog(): React.ReactElement {
                         {lot.description}
                       </Text>
                     ) : null}
-                    {saleBadge !== null ? (
+                    {saleBadge !== null || isMine ? (
                       <View style={styles.badgeRow}>
-                        <Badge
-                          text={saleBadge.text}
-                          fg={saleBadge.donate ? C.soonFg : C.leafDeep}
-                          bg={saleBadge.donate ? C.soonBg : C.leafSoft}
-                        />
+                        {saleBadge !== null ? (
+                          <Badge
+                            text={saleBadge.text}
+                            fg={saleBadge.donate ? C.soonFg : C.leafDeep}
+                            bg={saleBadge.donate ? C.soonBg : C.leafSoft}
+                          />
+                        ) : null}
+                        {isMine ? (
+                          <Badge text={t.market.ownLotBadge} fg={C.leafDeep} bg={C.leafSoft} />
+                        ) : null}
                       </View>
                     ) : null}
                     {lot.price_per_kg !== null ? (
@@ -455,6 +478,16 @@ function MarketCatalog(): React.ReactElement {
                     ) : (
                       <Text style={styles.priceDonate}>{t.market.badgeDonate}</Text>
                     )}
+                    {priceCompare !== null ? (
+                      <Text
+                        style={[
+                          styles.priceCompare,
+                          priceCompare.tone === 'cheaper' ? styles.priceCompareCheaper : null,
+                        ]}
+                      >
+                        {priceCompare.text}
+                      </Text>
+                    ) : null}
                     <Text style={styles.cardMeta}>
                       {t.market.remaining} {formatNumber(remaining)}/{formatNumber(lot.weight_kg)}{' '}
                       {t.dashboard.unitKg}
@@ -663,10 +696,13 @@ const styles = StyleSheet.create({
   cardMeta: { fontSize: 12, color: C.mute, fontFamily: fonts.body },
   cardShop: { fontSize: 12, color: C.leaf, fontWeight: '600', fontFamily: fonts.bodySemi },
   cardDescription: { fontSize: 12, color: C.mute, fontFamily: fonts.body, marginTop: 2 },
-  badgeRow: { flexDirection: 'row', marginTop: 2 },
+  badgeRow: { flexDirection: 'row', marginTop: 2, gap: 4 },
+  cardMine: { borderColor: C.leaf, borderWidth: 1.5 },
   priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 2, marginTop: 6 },
   price: { fontSize: 20, fontWeight: '700', color: C.ink, fontFamily: fonts.titleBold },
   priceUnit: { fontSize: 12, color: C.mute, fontFamily: fonts.body },
+  priceCompare: { fontSize: 11, color: C.mute, fontFamily: fonts.body, marginTop: 1 },
+  priceCompareCheaper: { color: C.leafDeep, fontWeight: '600', fontFamily: fonts.bodySemi },
   priceDonate: {
     marginTop: 6,
     fontSize: 16,

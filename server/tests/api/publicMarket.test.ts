@@ -44,6 +44,8 @@ describe('public market', () => {
     expect(lot.lat).toBeUndefined();
     expect(lot.lng).toBeUndefined();
     expect(lot.can_request_donation).toBeUndefined();
+    expect(lot.farmer_id).toBeUndefined();
+    expect(lot.is_mine).toBeUndefined();
 
     const raw = JSON.stringify(response.body);
     expect(raw).not.toContain('sale_mode');
@@ -51,6 +53,64 @@ describe('public market', () => {
     expect(raw).not.toContain('"phone"');
     expect(raw).not.toContain('"lat"');
     expect(raw).not.toContain('"lng"');
+    expect(raw).not.toContain('farmer_id');
+  });
+
+  it('flags is_mine only for the lot owner, and computes the price comparison badge', async () => {
+    const farmer = await registerUser(app, { role: 'farmer' });
+    const otherFarmer = await registerUser(app, { role: 'farmer', name: 'อีกคน' });
+    const cropId = await insertCrop('พืชเทียบราคา', 5, 40);
+    const plotId = await insertPlot(farmer.user.id, 13.663, 100.612, 'แปลงเทียบราคา');
+    const cheaperId = await insertLot({
+      plotId,
+      cropId,
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      startPricePerKg: 34,
+      floorPricePerKg: 34,
+    });
+    const higherId = await insertLot({
+      plotId,
+      cropId,
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      startPricePerKg: 44,
+      floorPricePerKg: 44,
+    });
+    const donateId = await insertLot({
+      plotId,
+      cropId,
+      saleMode: 'donate',
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    });
+
+    const anon = await request(app).get('/api/public/market');
+    const anonLots = anon.body.lots as Array<{ id: number; is_mine?: boolean }>;
+    expect(anonLots.find((l) => l.id === cheaperId)?.is_mine).toBeUndefined();
+
+    const asOwner = await request(app).get('/api/public/market').set(bearer(farmer.token));
+    const ownerLots = asOwner.body.lots as Array<{
+      id: number;
+      is_mine: boolean;
+      price_comparison: { tone: string; percentDiff: number } | null;
+    }>;
+    const cheaperAsOwner = ownerLots.find((l) => l.id === cheaperId);
+    expect(cheaperAsOwner?.is_mine).toBe(true);
+    expect(cheaperAsOwner?.price_comparison).toEqual({ tone: 'cheaper', percentDiff: 15 });
+    const higherAsOwner = ownerLots.find((l) => l.id === higherId);
+    expect(higherAsOwner?.price_comparison).toEqual({ tone: 'higher', percentDiff: -10 });
+    const donateAsOwner = ownerLots.find((l) => l.id === donateId);
+    expect(donateAsOwner?.price_comparison ?? null).toBeNull();
+
+    const asOther = await request(app).get('/api/public/market').set(bearer(otherFarmer.token));
+    const otherLots = asOther.body.lots as Array<{ id: number; is_mine: boolean }>;
+    expect(otherLots.find((l) => l.id === cheaperId)?.is_mine).toBe(false);
+
+    const cheaperOnly = await request(app)
+      .get('/api/public/market')
+      .query({ crop_id: cropId, cheaper_only: 1 });
+    const cheaperOnlyIds = (cheaperOnly.body.lots as Array<{ id: number }>).map((l) => l.id);
+    expect(cheaperOnlyIds).toContain(cheaperId);
+    expect(cheaperOnlyIds).not.toContain(higherId);
+    expect(cheaperOnlyIds).not.toContain(donateId);
   });
 
   it('hides donate wording for sell_then_donate before open; donate-only has null price', async () => {

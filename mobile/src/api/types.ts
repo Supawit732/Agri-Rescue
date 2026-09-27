@@ -308,6 +308,7 @@ export interface MarketLot {
   price_per_kg: number | null;
   market_price_per_kg?: number | null;
   market_price_label?: string | null;
+  price_comparison?: { tone: 'cheaper' | 'near' | 'higher'; percentDiff: number } | null;
   start_price_per_kg?: number | null;
   floor_price_per_kg?: number | null;
   /** Present on authenticated market; omitted on public API. */
@@ -321,13 +322,14 @@ export interface MarketLot {
   location_label?: string | null;
   area_rai?: number;
   shop_name?: string | null;
-  farmer_id?: number;
   photo_url?: string | null;
   photos?: string[];
   can_request_donation?: boolean;
   reason?: string | null;
   crop_pending?: boolean;
   description?: string | null;
+  /** True when the viewer is the lot's own seller. Present only on authenticated responses. */
+  is_mine?: boolean;
 }
 
 export interface DitCropRefPrice {

@@ -104,6 +104,20 @@ export default function LotConfirmScreen(): React.ReactElement {
     >
       <DataState loading={loading} error={error} data={data} onRetry={reload}>
         {(lot) => {
+          if (lot.is_mine === true) {
+            return (
+              <Body>
+                <Card>
+                  <Text style={styles.title}>{t.lot.ownLotTitle}</Text>
+                </Card>
+                <SecondaryButton
+                  label={t.confirmBooking.goBack}
+                  block
+                  onPress={() => router.replace({ pathname: '/lots/[id]', params: { id: String(lotId) } })}
+                />
+              </Body>
+            );
+          }
           const hours = hoursLeftFrom(lot.expires_at, now);
           const total =
             !donation && lot.price_per_kg !== null

@@ -137,7 +137,7 @@ describe('6.3 crop catalog', () => {
     expect(res.body.status).toBe('approved');
   });
 
-  it('price sanity check rejects outlier price (>3× category median)', async () => {
+  it('price sanity check allows price above category median (D024 — no upper bound)', async () => {
     const catId = await getCategoryId();
     // Ensure category has enough approved crops to compute median
     await pool.query<ResultSetHeader>(
@@ -149,9 +149,27 @@ describe('6.3 crop catalog', () => {
     const farmer = await registerUser(app, { role: 'farmer' });
     const res = await request(app)
       .post('/api/crops/propose')
+      // median ~22.5; premium variety priced well above median is now allowed
       .set(bearer(farmer.token))
-      // median ~22.5; >3× = >67.5 → 200 should fail
-      .send({ name_th: 'พืชราคาแพงมากผิดปกติ', category_id: catId, market_price_per_kg: 999 });
+      .send({ name_th: 'พืชราคาแพงพรีเมียม63', category_id: catId, market_price_per_kg: 999 });
+    expect(res.status).toBe(201);
+    expect(res.body.status).toBe('approved');
+  });
+
+  it('price sanity check rejects outlier price (<1/3 category median)', async () => {
+    const catId = await getCategoryId();
+    await pool.query<ResultSetHeader>(
+      `INSERT INTO crops (name_th, base_shelf_days, market_price_per_kg, category_id, status)
+       VALUES ('พืชราคาฐาน-c', 5, 20, ?, 'approved'),
+              ('พืชราคาฐาน-d', 5, 25, ?, 'approved')`,
+      [catId, catId],
+    );
+    const farmer = await registerUser(app, { role: 'farmer' });
+    const res = await request(app)
+      .post('/api/crops/propose')
+      // median ~22.5; <1/3 = <7.5 → 1 should fail
+      .set(bearer(farmer.token))
+      .send({ name_th: 'พืชราคาถูกผิดปกติ63', category_id: catId, market_price_per_kg: 1 });
     expect(res.status).toBe(422);
     expect(res.body.error.code).toBe('PRICE_SANITY');
   });

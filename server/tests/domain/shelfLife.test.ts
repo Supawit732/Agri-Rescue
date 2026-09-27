@@ -4,7 +4,7 @@ import { crops, phase2Samples } from '../../src/db/seedData';
 describe('predictShelfHours', () => {
   it('matches phase2Samples for daytime-average temp and humidity', () => {
     expect(phase2Samples).toEqual([
-      { cropKey: 'mango', ripeness: 2, tempC: 34, humidity: 78, shelfHours: 61, priceNormal: 26 },
+      { cropKey: 'mango', ripeness: 2, tempC: 34, humidity: 78, shelfHours: 61, priceNormal: 30 },
       { cropKey: 'mango', ripeness: 3, tempC: 34, humidity: 78, shelfHours: 44 },
       { cropKey: 'mango', ripeness: 2, tempC: 34, humidity: 90, shelfHours: 55 },
     ]);

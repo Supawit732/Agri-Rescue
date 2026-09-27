@@ -758,9 +758,7 @@ function assertValidPrices(marketPricePerKg: number, start: number, floor: numbe
   });
   if (!result.ok) {
     const fields: Record<string, string> = {};
-    if (result.error === 'start_above_market') {
-      fields.start_price_per_kg = result.message;
-    } else if (result.error === 'floor_above_start') {
+    if (result.error === 'floor_above_start') {
       fields.floor_price_per_kg = result.message;
     } else {
       fields.floor_price_per_kg = result.message;

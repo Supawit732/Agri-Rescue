@@ -184,6 +184,7 @@ describe('shops & follows', () => {
     expect(byShop.status).toBe(200);
     expect(byShop.body.lots.length).toBeGreaterThan(0);
     expect(byShop.body.lots[0].shop_name).toBe('สวนX สุดพิเศษ');
-    expect(byShop.body.lots[0].farmer_id).toBe(farmer.user.id);
+    // Public API never exposes seller ids (D047) — is_mine is the sanctioned per-viewer signal instead.
+    expect(byShop.body.lots[0].farmer_id).toBeUndefined();
   });
 });

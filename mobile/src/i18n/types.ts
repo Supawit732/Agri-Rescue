@@ -136,6 +136,11 @@ export type Messages = {
     ripeness: string;
     shop: string;
     cropPendingBadge: string;
+    ownLotBadge: string;
+    priceCompareCheaper: string;
+    priceCompareNear: string;
+    priceCompareHigher: string;
+    cheaperOnlyFilter: string;
   };
   lot: {
     title: string;
@@ -160,6 +165,14 @@ export type Messages = {
     orgOnlyNotRegistered: string;
     orgOnlyVerifiedRequired: string;
     orgOnlyCap: string;
+    ownLotTitle: string;
+    ownLotEdit: string;
+    ownLotBookers: string;
+  };
+  buyGate: {
+    title: string;
+    body: string;
+    enableBuy: string;
   };
   dashboard: {
     title: string;
@@ -322,7 +335,7 @@ export type Messages = {
     priceRefMoc: string;
     priceRefEstimate: string;
     priceRefSeasonal: string;
-    startPriceMax: string;
+    priceAboveMarketWarning: string;
     floorPriceMin: string;
     priceForecast: string;
     flashPrice: string;

@@ -55,7 +55,7 @@ describe('lots patch and pricing 6.1c', () => {
     expect([400, 409]).toContain(afterBook.status);
   });
 
-  it('rejects out-of-bounds seller prices with 400', async () => {
+  it('rejects out-of-bounds seller prices with 400 (floor below 20% of market)', async () => {
     const farmer = await registerUser(app, { role: 'farmer' });
     const cropId = await insertCrop('พืชราคา', 5, 40);
     const plotId = await insertPlot(farmer.user.id, 13.7, 100.7);
@@ -70,9 +70,30 @@ describe('lots patch and pricing 6.1c', () => {
         ripeness: 2,
         sale_mode: 'sell',
         start_price_per_kg: 50,
-        floor_price_per_kg: 10,
+        floor_price_per_kg: 5,
       });
     expect(bad.status).toBe(400);
+  });
+
+  it('allows a start price above the reference market price (D024)', async () => {
+    const farmer = await registerUser(app, { role: 'farmer' });
+    const cropId = await insertCrop('พืชราคาสูงกว่าตลาด', 5, 40);
+    const plotId = await insertPlot(farmer.user.id, 13.7, 100.7);
+    const ok = await request(app)
+      .post('/api/lots')
+      .set(bearer(farmer.token))
+      .send({
+        plot_id: plotId,
+        crop_id: cropId,
+        weight_kg: 10,
+        grade: 'normal',
+        ripeness: 2,
+        sale_mode: 'sell',
+        start_price_per_kg: 50,
+        floor_price_per_kg: 10,
+      });
+    expect(ok.status).toBe(201);
+    expect(ok.body.lot.start_price_per_kg).toBe(50);
   });
 
   it('blocks paid booking of donate-only lots', async () => {
