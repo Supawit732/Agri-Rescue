@@ -91,7 +91,7 @@ export function MarketFilterSheet({
         <View style={styles.handle} />
         <View style={styles.sheetHeader}>
           <Text style={styles.sheetTitle}>{t.market.filterTitle}</Text>
-          <Pressable accessibilityRole="button" onPress={onReset} hitSlop={8}>
+          <Pressable accessibilityRole="button" onPress={onReset} hitSlop={8} style={styles.resetBtn}>
             <Text style={styles.reset}>{t.market.filterReset}</Text>
           </Pressable>
         </View>
@@ -284,13 +284,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: C.ink,
   },
+  resetBtn: { minHeight: 44, justifyContent: 'center' },
   reset: {
     color: C.leaf,
     fontWeight: '600',
     fontSize: 14,
     fontFamily: fonts.bodySemi,
-    minHeight: 44,
-    textAlignVertical: 'center',
   },
   body: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 8, gap: 10 },
   sectionLabel: {
