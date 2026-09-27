@@ -521,6 +521,12 @@ Migration 030 ใส่ data ด้วย `INSERT...SELECT FROM crops WHERE name
 - ตัวกรองตลาดใหม่ "เฉพาะที่ถูกกว่าตลาด" ใน `MarketFilterSheet`
 - เอกสารที่เคยระบุเพดานราคาเป็น internal control (`docs/bpdd/`) ให้เปลี่ยนไปอธิบายป้ายความโปร่งใสแทนตอนอัปเดตรอบถัดไป
 
-## D048 — เปลี่ยนสูตร decay ราคาล็อตเป็น √freshness (คงราคาสูงไว้นานขึ้น)
+## D048 — เปลี่ยนสูตร decay ราคาล็อตเป็น "คงราคาเต็มถึงกลางอายุ แล้วลดเชิงเส้น"
 
-สูตรเดิม (D020) เป็นเส้นตรง `start × (0.3 + 0.7 × freshness)` ทำให้ราคาลดฮวบตั้งแต่ชั่วโมงแรก ๆ ทั้งที่ยังไม่ใกล้หมดอายุ เปลี่ยนเป็น `max(floor, round(floor + (start - floor) × √freshness))` — คงราคาใกล้ `start` ไว้นานขึ้นเมื่อ freshness ยังสูง แล้วค่อยลดฮวบเมื่อใกล้หมดอายุจริง (`server/src/domain/sellerPricing.ts` — `lotPricePerKg`, `priceForecastRows`). `floor` ยังเป็นค่าต่ำสุดเหมือนเดิม ไม่กระทบ `suggestedStartPrice`/`suggestedFloorPrice`/`validateSellerPrices`. ลบ `freshnessBase`/`freshnessSpan` ออกจาก `PRICING_CONFIG` เพราะไม่ใช้แล้ว (สูตรใหม่ไม่มีค่าคงที่สองตัวนี้).
+สูตรเดิม (D020) เป็นเส้นตรง `start × (0.3 + 0.7 × freshness)` ทำให้ราคาลดฮวบตั้งแต่ชั่วโมงแรก ๆ ทั้งที่ยังไม่ใกล้หมดอายุ ลองเปลี่ยนเป็น √freshness ก่อน (คงราคาไว้นานขึ้นแต่ยังลดตั้งแต่ freshness สูง ๆ) แล้วพิจารณา f^0.3 ด้วย แต่ตัดสินใจใช้สูตรขั้นบันได-เชิงเส้นแทน เพราะ:
+
+- **คุ้มครองผู้ขายในครึ่งแรก**: freshness ≥ `holdFullPriceUntilFreshness` (0.5) → ราคา = `start` เต็ม ไม่มีการลดเลยในครึ่งแรกของอายุขาย
+- **เตือนผู้ซื้อชัดเจนในครึ่งหลัง**: freshness < 0.5 → ราคาลดเชิงเส้นจาก `start` ลงสู่ `floor` ตามสัดส่วน `freshness / 0.5` — ลดแบบสม่ำเสมอคาดเดาได้ ให้ผู้ซื้อมีเวลาตัดสินใจก่อนหมดอายุจริง
+- **ปฏิเสธ f^0.3**: เส้นโค้ง f^0.3 ลดราคาช้าเกินไปในช่วงท้าย (ที่ freshness 0.1 ยังเหลือ ~50% ของช่วง start→floor) ทำให้แรงจูงใจให้ผู้ซื้อรีบตัดสินใจอ่อนเกินไปเมื่อใกล้หมดอายุจริง
+
+สูตร: `price = max(floor, round(freshness >= 0.5 ? start : floor + (start - floor) × (freshness / 0.5)))` (`server/src/domain/sellerPricing.ts` — `lotPricePerKg`, `priceForecastRows`). ค่าเกณฑ์ 0.5 อยู่ใน `PRICING_CONFIG.holdFullPriceUntilFreshness` ปรับได้ง่าย `floor` ยังเป็นค่าต่ำสุดเหมือนเดิม ไม่กระทบ `suggestedStartPrice`/`suggestedFloorPrice`/`validateSellerPrices`. ลบ `freshnessBase`/`freshnessSpan` ออกจาก `PRICING_CONFIG` เพราะไม่ใช้แล้ว (สูตรใหม่ไม่มีค่าคงที่สองตัวนี้).
