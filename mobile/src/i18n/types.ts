@@ -358,6 +358,7 @@ export type Messages = {
     editSummary: string;
     cropLockedHasOrders: string;
     cropChangeHint: string;
+    substandardPriceHint: string;
     deleteLot: string;
     confirmDeleteTitle: string;
     confirmDeleteBody: string;

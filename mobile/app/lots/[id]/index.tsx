@@ -220,13 +220,18 @@ export default function LotDetailScreen(): React.ReactElement {
                   <Text style={styles.title}>{cropTitle}</Text>
                   <Badge text={formatCountdown(hours, t.countdown)} fg={tone.fg} bg={tone.bg} />
                 </View>
-                {saleBadge !== null ? (
-                  <Badge
-                    text={saleBadge.text}
-                    fg={saleBadge.donate ? C.turmeric : C.leaf}
-                    bg={saleBadge.donate ? C.turmericSoft : C.leafSoft}
-                  />
-                ) : null}
+                <View style={styles.badgeRow}>
+                  {lot.grade === 'substandard' ? (
+                    <Badge text={t.market.gradeSub} fg={C.turmeric} bg={C.turmericSoft} />
+                  ) : null}
+                  {saleBadge !== null ? (
+                    <Badge
+                      text={saleBadge.text}
+                      fg={saleBadge.donate ? C.turmeric : C.leaf}
+                      bg={saleBadge.donate ? C.turmericSoft : C.leafSoft}
+                    />
+                  ) : null}
+                </View>
                 {lot.farmer_name !== undefined && lot.farmer_name !== '' ? (
                   <Text style={styles.line}>
                     {t.market.byFarmer} {lot.farmer_name}
@@ -377,6 +382,7 @@ export default function LotDetailScreen(): React.ReactElement {
 const styles = StyleSheet.create({
   hero: { width: '100%', height: 200, borderRadius: 16, marginBottom: 12, backgroundColor: C.leafSoft },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 },
   title: { fontSize: 20, fontWeight: '800', color: C.ink, flex: 1, marginRight: 8 },
   priceCompare: { fontSize: 12, color: C.mute, marginTop: 2 },
   priceCompareCheaper: { color: C.leafDeep, fontWeight: '700' },

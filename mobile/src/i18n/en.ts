@@ -353,6 +353,7 @@ const en: Messages = {
     editSummary: 'Editing: {crop} · {weight} kg · listed {date}',
     cropLockedHasOrders: "The crop can't be changed because this lot already has bookings.",
     cropChangeHint: 'Crop changed — shelf life and suggested prices will be recomputed when you save.',
+    substandardPriceHint: 'Substandard produce is usually priced about 30% cheaper — your prices were not changed automatically since you edited them.',
     deleteLot: 'Delete / close lot',
     confirmDeleteTitle: 'Delete or close this lot?',
     confirmDeleteBody: 'The lot will be hidden from the market (history kept). Confirm?',

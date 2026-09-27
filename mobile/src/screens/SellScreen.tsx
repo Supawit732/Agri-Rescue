@@ -598,7 +598,10 @@ function NewLotForm({
 
   const startNum = Number(startPrice);
   const floorNum = Number(floorPrice);
-  const hasCustomPrices = modeHasPrice(saleMode) && startNum > 0 && floorNum > 0;
+  // Only treat the price fields as a seller override once pricesEdited is true — otherwise a
+  // grade change would re-send the previous grade's auto-seeded price as an "override" for one
+  // debounce cycle, computing price_per_kg from the stale value before it self-corrects.
+  const hasCustomPrices = modeHasPrice(saleMode) && pricesEdited && startNum > 0 && floorNum > 0;
 
   const seedPrices = useCallback((result: EstimateResponse) => {
     setStartPrice(String(result.suggested_start_price_per_kg));
@@ -1444,6 +1447,9 @@ function NewLotForm({
           />
         ))}
       </View>
+      {grade === 'substandard' && pricesEdited ? (
+        <Text style={styles.cropChangeHint}>{t.sell.substandardPriceHint}</Text>
+      ) : null}
 
       <FormField
         label={t.sell.descriptionLabel}
