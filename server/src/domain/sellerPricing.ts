@@ -106,7 +106,15 @@ export function validateSellerPrices(input: {
 
 /**
  * Lot price from seller start/floor and remaining freshness.
- * price = max(floor, round(start × (0.3 + 0.7 × freshness)))
+ *
+ * price = max(floor, round(floor + (start - floor) × √freshness))
+ *
+ * A straight line from start to floor drops noticeably in the first few hours, well before
+ * the produce is actually near expiry. Using √freshness instead holds the price close to
+ * `start` while freshness is high and only drops sharply as freshness approaches 0 (i.e. near
+ * expiry) — e.g. at freshness 0.5 the old linear curve paid out 65% of the start→floor range,
+ * the square-root curve pays out ~71%; at freshness 0.1 linear pays 37% vs √ paying 32%.
+ * `floor` remains a hard minimum regardless of the curve shape.
  */
 export function lotPricePerKg(input: {
   startPricePerKg: number;
@@ -117,7 +125,7 @@ export function lotPricePerKg(input: {
   const freshness =
     input.baseShelfHours <= 0 ? 0 : clamp(input.hoursLeft / input.baseShelfHours, 0, 1);
   const raw = Math.round(
-    input.startPricePerKg * (PRICING_CONFIG.freshnessBase + PRICING_CONFIG.freshnessSpan * freshness),
+    input.floorPricePerKg + (input.startPricePerKg - input.floorPricePerKg) * Math.sqrt(freshness),
   );
   return Math.max(Math.round(input.floorPricePerKg), raw);
 }

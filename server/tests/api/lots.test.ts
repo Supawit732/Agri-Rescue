@@ -64,7 +64,7 @@ describe('lots and plots', () => {
     expect(estimate.body.weather_source).toBe('live');
     expect(estimate.body.weather_basis).toBe('forecast_72h_daytime_avg');
     expect(estimate.body.shelf_hours).toBe(61);
-    expect(estimate.body.price_per_kg).toBe(26);
+    expect(estimate.body.price_per_kg).toBe(32);
 
     const [before] = await pool.query<RowDataPacket[]>('SELECT COUNT(*) AS total FROM harvest_lots');
     expect(Number(before[0]?.total)).toBe(0);

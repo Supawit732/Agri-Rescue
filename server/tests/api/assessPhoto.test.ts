@@ -61,8 +61,11 @@ describe('POST /api/lots/assess-photo and AI lot creation', () => {
         mime: 'image/jpeg',
       });
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ available: true, subject_match: false });
+    expect(response.body.available).toBe(true);
+    expect(response.body.subject_match).toBe(false);
     expect(response.body.ripeness).toBeUndefined();
+    expect(typeof response.body.photo_url).toBe('string');
+    expect(response.body.photo_url).toMatch(/^\/uploads\/lots\//);
   });
 
   it('stores method model when the farmer keeps the AI ripeness', async () => {

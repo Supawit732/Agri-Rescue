@@ -69,7 +69,7 @@ describe('sellerPricing', () => {
         baseShelfHours: 120,
         hoursLeft: 61,
       }),
-    ).toBe(26);
+    ).toBe(32);
     expect(
       lotPricePerKg({
         startPricePerKg: 28,
@@ -77,7 +77,7 @@ describe('sellerPricing', () => {
         baseShelfHours: 120,
         hoursLeft: 61,
       }),
-    ).toBe(18);
+    ).toBe(22);
     const rows = priceForecastRows({
       startPricePerKg: 40,
       floorPricePerKg: 12,
