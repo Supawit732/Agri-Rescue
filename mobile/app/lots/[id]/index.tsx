@@ -242,6 +242,9 @@ export default function LotDetailScreen(): React.ReactElement {
                 ) : (
                   <Text style={styles.line}>{t.lot.donateNoPrice}</Text>
                 )}
+                {lot.description !== null && lot.description !== undefined && lot.description !== '' ? (
+                  <Text style={styles.description}>{lot.description}</Text>
+                ) : null}
               </Card>
 
               {user === null ? (
@@ -311,6 +314,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   title: { fontSize: 20, fontWeight: '800', color: C.ink, flex: 1, marginRight: 8 },
   line: { color: C.ink, marginTop: 4 },
+  description: { color: C.mute, marginTop: 8, lineHeight: 20 },
   qtyLabel: { color: C.mute, marginBottom: 6 },
   stepper: { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 6 },
   stepBtn: {

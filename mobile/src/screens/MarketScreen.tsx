@@ -431,6 +431,11 @@ function MarketCatalog(): React.ReactElement {
                         {lot.shop_name}
                       </Text>
                     ) : null}
+                    {lot.description != null && lot.description !== '' ? (
+                      <Text style={styles.cardDescription} numberOfLines={2}>
+                        {lot.description}
+                      </Text>
+                    ) : null}
                     {saleBadge !== null ? (
                       <View style={styles.badgeRow}>
                         <Badge
@@ -657,6 +662,7 @@ const styles = StyleSheet.create({
   },
   cardMeta: { fontSize: 12, color: C.mute, fontFamily: fonts.body },
   cardShop: { fontSize: 12, color: C.leaf, fontWeight: '600', fontFamily: fonts.bodySemi },
+  cardDescription: { fontSize: 12, color: C.mute, fontFamily: fonts.body, marginTop: 2 },
   badgeRow: { flexDirection: 'row', marginTop: 2 },
   priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 2, marginTop: 6 },
   price: { fontSize: 20, fontWeight: '700', color: C.ink, fontFamily: fonts.titleBold },

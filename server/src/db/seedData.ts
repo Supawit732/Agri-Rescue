@@ -612,6 +612,7 @@ export const farmers = [
       ripeness: 3,
       hoursLeft: 20,
       allowDonation: true,
+      description: 'ผิวมีรอยเล็กน้อย รสหวาน เหมาะทำน้ำผลไม้',
     },
   },
   {
@@ -646,6 +647,7 @@ export const farmers = [
       ripeness: 3,
       hoursLeft: 70,
       allowDonation: true,
+      description: 'มีตำหนิเล็กน้อยที่ขั้ว เนื้อแน่น เหมาะทำซอส',
     },
   },
 ] as const;

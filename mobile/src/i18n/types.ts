@@ -281,6 +281,9 @@ export type Messages = {
     minOrder: string;
     minOrderPlaceholder: string;
     gradeSection: string;
+    descriptionLabel: string;
+    descriptionPlaceholder: string;
+    descriptionCounter: string;
     saleMode: string;
     donationAudience: string;
     audienceVerifiedOnly: string;

@@ -108,6 +108,7 @@ interface Api {
     ai_ripeness?: number | null;
     ai_confidence?: number | null;
     ai_model?: string | null;
+    description?: string | null;
   }) => Promise<unknown>;
   patchLot: (
     id: number,
@@ -125,6 +126,7 @@ interface Api {
       ripeness?: number;
       ai_ripeness?: number | null;
       confirm_ripeness_photo?: boolean;
+      description?: string | null;
     },
   ) => Promise<unknown>;
   getMyLots: () => Promise<MyLot[]>;

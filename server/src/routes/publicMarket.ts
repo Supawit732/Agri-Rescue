@@ -48,6 +48,7 @@ interface PublicMarketRow extends RowDataPacket {
   ripeness: number;
   donation_audience: DonationAudience;
   photo_url: string | null;
+  description: string | null;
   start_price_per_kg: number | null;
   floor_price_per_kg: number | null;
   sale_mode: string;
@@ -69,7 +70,7 @@ interface PublicMarketRow extends RowDataPacket {
 
 const PUBLIC_LOT_SELECT = `SELECT h.id, h.crop_id, p.farmer_id, s.name AS shop_name,
               h.weight_kg, h.split_allowed, h.min_order_kg, h.order_step_kg,
-              h.grade, h.ripeness, h.donation_audience, h.photo_url,
+              h.grade, h.ripeness, h.donation_audience, h.photo_url, h.description,
               h.start_price_per_kg, h.floor_price_per_kg, h.sale_mode, h.donation_opened,
               h.market_price_snapshot, h.expires_at,
               c.name_th AS crop_name_th, c.name_en AS crop_name_en, c.status AS crop_status, c.base_shelf_days,
@@ -103,6 +104,7 @@ export interface PublicLotView {
   location_label: string | null;
   photos: string[];
   photo_url: string | null;
+  description: string | null;
   weight_kg: number;
   remaining_kg: number;
   split_allowed: boolean;
@@ -233,6 +235,7 @@ function presentPublicLot(
     }),
     photos: photoList,
     photo_url: photoList[0] ?? row.photo_url,
+    description: row.description,
     weight_kg: weightKg,
     remaining_kg: remaining,
     split_allowed: Number(row.split_allowed) === 1,

@@ -19,6 +19,7 @@ describe('public market', () => {
       plotId,
       cropId,
       expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
+      description: 'ผิวมีรอยเล็กน้อย รสหวาน เหมาะทำน้ำผลไม้',
     });
 
     const response = await request(app).get('/api/public/market').query({ sort: 'urgent' });
@@ -29,6 +30,11 @@ describe('public market', () => {
     expect(lot.crop_name_en).toBe('Public Mango');
     expect(lot.plot_name).toBe('แปลงชุมชน');
     expect(lot.location_label).toBe('แปลงชุมชน');
+    expect(lot.description).toBe('ผิวมีรอยเล็กน้อย รสหวาน เหมาะทำน้ำผลไม้');
+
+    const detail = await request(app).get(`/api/public/lots/${lotId}`);
+    expect(detail.status).toBe(200);
+    expect(detail.body.lot.description).toBe('ผิวมีรอยเล็กน้อย รสหวาน เหมาะทำน้ำผลไม้');
     expect(lot.available_as).toEqual(['buy']);
     expect(lot.distance_km).toBeNull();
     expect(lot.photos).toEqual([]);

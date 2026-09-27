@@ -6,7 +6,7 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { ApiError } from '../api/client';
 import { AiPhotoInput } from '../components/AiPhotoInput';
-import { ChipGroup, useFieldScroll } from '../components/form';
+import { ChipGroup, FormField, useFieldScroll } from '../components/form';
 import {
   Badge,
   Body,
@@ -366,6 +366,7 @@ function NewLotForm({
     editingLot !== null ? 'user' : null,
   );
   const [grade, setGrade] = useState<Grade>(editingLot?.grade ?? 'substandard');
+  const [description, setDescription] = useState(editingLot?.description ?? '');
   const [saleMode, setSaleMode] = useState<SaleMode>(editingLot?.sale_mode ?? 'sell');
   const [donationAudience, setDonationAudience] = useState<DonationAudience>(
     editingLot?.donation_audience ?? 'verified_org_only',
@@ -818,6 +819,7 @@ function NewLotForm({
         split_allowed: splitAllowed,
         min_order_kg: minOrderNum,
       };
+      const descriptionValue = description.trim() === '' ? null : description.trim();
       if (isEditing && editingLot !== null) {
         const loweringRipeness = ripeness !== null && ripeness < editingLot.ripeness;
         await api.patchLot(editingLot.id, {
@@ -828,6 +830,7 @@ function NewLotForm({
           donation_audience: audience,
           ...priceFields,
           ...splitFields,
+          description: descriptionValue,
           ...(aiResult !== null ? { ai_ripeness: aiResult.ripeness } : {}),
           ...(aiResult?.photo_url !== undefined ? { photo_url: aiResult.photo_url } : {}),
           ...(loweringRipeness ? { confirm_ripeness_photo: aiResult !== null } : {}),
@@ -843,6 +846,7 @@ function NewLotForm({
           donation_audience: audience,
           ...priceFields,
           ...splitFields,
+          description: descriptionValue,
           photo_url: aiResult?.photo_url ?? null,
           ai_ripeness: aiResult?.ripeness ?? null,
           ai_confidence: aiResult?.confidence ?? null,
@@ -1321,6 +1325,21 @@ function NewLotForm({
         ))}
       </View>
 
+      <FormField
+        label={t.sell.descriptionLabel}
+        name="description"
+        value={description}
+        onChangeText={(text) => setDescription(text.slice(0, 500))}
+        placeholder={t.sell.descriptionPlaceholder}
+        multiline
+        numberOfLines={3}
+        maxLength={500}
+        style={styles.descriptionInput}
+      />
+      <Text style={styles.descriptionCounter}>
+        {formatTemplate(t.sell.descriptionCounter, { n: description.length, max: 500 })}
+      </Text>
+
       <ChipGroup
         label={t.sell.saleMode}
         name="sale_mode"
@@ -1683,6 +1702,8 @@ const styles = StyleSheet.create({
   editHint: { color: C.turmeric, fontWeight: '700', marginBottom: 8 },
   aiWarn: { color: C.turmeric, marginBottom: 8, marginTop: 4 },
   aiLine: { color: C.ink, marginTop: 6 },
+  descriptionInput: { height: 84, alignItems: 'flex-start', paddingTop: 12 },
+  descriptionCounter: { color: C.mute, fontSize: 12, textAlign: 'right', marginTop: -4, marginBottom: 8 },
   priceLockedHint: {
     color: C.ink,
     backgroundColor: C.leafSoft,
