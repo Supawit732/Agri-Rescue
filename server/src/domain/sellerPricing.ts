@@ -5,8 +5,6 @@ export const PRICING_CONFIG = {
   substandardStartFactor: 0.7,
   suggestedFloorOfStart: 0.3,
   minFloorOfMarket: 0.2,
-  freshnessBase: 0.3,
-  freshnessSpan: 0.7,
   referenceMaxAgeDays: 30,
   sellThenDonateHours: 12,
   medianRadiusKm: 15,

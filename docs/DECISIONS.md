@@ -145,7 +145,7 @@ JWT เก็บ `sub`, `role`, `can_sell`, `can_buy`, `is_admin` (อายุ 
 | ตัวคูณเกรดตก | start = ตลาด × 0.7 |
 | floor แนะนำ | 30% ของ start |
 | floor ขั้นต่ำ | ≥ 20% ของราคาตลาด; ต่ำกว่านี้แนะนำโหมดบริจาค |
-| สูตรราคาล็อต | `max(floor, round(start × (0.3 + 0.7 × freshness)))` |
+| สูตรราคาล็อต | ~~`max(floor, round(start × (0.3 + 0.7 × freshness)))`~~ เปลี่ยนเป็นสูตร √freshness แล้ว ดู D048 |
 | เปิดบริจาค sell_then_donate | เมื่อเหลือ &lt; 12 ชม. (job 10 นาที) |
 | มัธยฐานใกล้เคียง | รัศมี 15 กม. และ ≥ 3 ล็อตพืชเดียวกัน |
 
@@ -520,3 +520,7 @@ Migration 030 ใส่ data ด้วย `INSERT...SELECT FROM crops WHERE name
 - ป้ายเทียบราคาใหม่ (`priceComparison` pure function): เทียบราคาปัจจุบัน (หลัง freshness decay) กับราคาตลาดอ้างอิง — "ถูกกว่าตลาด N%" (เขียว) เมื่อถูกกว่า ≥5%, "ใกล้เคียงราคาตลาด" ในช่วง ±5%, "สูงกว่าราคาตลาด" (เทากลาง) เมื่อแพงกว่า >5% คำนวณที่ server ส่งใน API ตลาด/รายละเอียดล็อต (ทั้งสาธารณะและ login) ซ่อนสำหรับล็อตโหมดบริจาคล้วน (`price_per_kg === null`)
 - ตัวกรองตลาดใหม่ "เฉพาะที่ถูกกว่าตลาด" ใน `MarketFilterSheet`
 - เอกสารที่เคยระบุเพดานราคาเป็น internal control (`docs/bpdd/`) ให้เปลี่ยนไปอธิบายป้ายความโปร่งใสแทนตอนอัปเดตรอบถัดไป
+
+## D048 — เปลี่ยนสูตร decay ราคาล็อตเป็น √freshness (คงราคาสูงไว้นานขึ้น)
+
+สูตรเดิม (D020) เป็นเส้นตรง `start × (0.3 + 0.7 × freshness)` ทำให้ราคาลดฮวบตั้งแต่ชั่วโมงแรก ๆ ทั้งที่ยังไม่ใกล้หมดอายุ เปลี่ยนเป็น `max(floor, round(floor + (start - floor) × √freshness))` — คงราคาใกล้ `start` ไว้นานขึ้นเมื่อ freshness ยังสูง แล้วค่อยลดฮวบเมื่อใกล้หมดอายุจริง (`server/src/domain/sellerPricing.ts` — `lotPricePerKg`, `priceForecastRows`). `floor` ยังเป็นค่าต่ำสุดเหมือนเดิม ไม่กระทบ `suggestedStartPrice`/`suggestedFloorPrice`/`validateSellerPrices`. ลบ `freshnessBase`/`freshnessSpan` ออกจาก `PRICING_CONFIG` เพราะไม่ใช้แล้ว (สูตรใหม่ไม่มีค่าคงที่สองตัวนี้).
