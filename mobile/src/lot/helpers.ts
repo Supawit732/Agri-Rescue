@@ -70,6 +70,24 @@ export function marketSaleBadge(
   return null;
 }
 
+export function priceComparisonBadge(
+  lot: MarketLot,
+  labels: { cheaper: string; near: string; higher: string },
+  formatTemplate: (template: string, vars: Record<string, string | number>) => string,
+): { text: string; tone: 'cheaper' | 'near' | 'higher' } | null {
+  const comparison = lot.price_comparison ?? null;
+  if (comparison === null) {
+    return null;
+  }
+  if (comparison.tone === 'cheaper') {
+    return { text: formatTemplate(labels.cheaper, { percent: Math.abs(comparison.percentDiff) }), tone: 'cheaper' };
+  }
+  if (comparison.tone === 'higher') {
+    return { text: labels.higher, tone: 'higher' };
+  }
+  return { text: labels.near, tone: 'near' };
+}
+
 export type DonationEligibilityLabels = Pick<
   Messages['lot'],
   | 'orgOnlyBadge'

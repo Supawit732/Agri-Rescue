@@ -22,6 +22,7 @@ export interface MarketFilters {
   priceMax: string;
   maxHours: number | null;
   sort: SortKey;
+  cheaperOnly: boolean;
 }
 
 export const defaultMarketFilters: MarketFilters = {
@@ -31,6 +32,7 @@ export const defaultMarketFilters: MarketFilters = {
   priceMax: '',
   maxHours: null,
   sort: 'urgent',
+  cheaperOnly: false,
 };
 
 export function countActiveFilters(f: MarketFilters, selectedCropId: number | null = null): number {
@@ -39,6 +41,7 @@ export function countActiveFilters(f: MarketFilters, selectedCropId: number | nu
   if (selectedCropId !== null) n += 1;
   if (f.priceMin !== '' || f.priceMax !== '') n += 1;
   if (f.maxHours !== null) n += 1;
+  if (f.cheaperOnly) n += 1;
   // Default radius is not an active filter; changing it away from default counts.
   if (f.radiusKm !== defaultMarketFilters.radiusKm) n += 1;
   // Sort is never counted on the badge.
@@ -170,6 +173,17 @@ export function MarketFilterSheet({
             </View>
           </View>
           {priceInvalid ? <Text style={styles.priceError}>{t.market.priceInvalid}</Text> : null}
+
+          <Pressable
+            accessibilityRole="switch"
+            accessibilityState={{ checked: filters.cheaperOnly }}
+            onPress={() => onChange({ ...filters, cheaperOnly: !filters.cheaperOnly })}
+            style={[styles.chip, filters.cheaperOnly ? styles.chipActive : null, styles.cheaperOnlyChip]}
+          >
+            <Text style={[styles.chipText, filters.cheaperOnly ? styles.chipTextActive : null]}>
+              {t.market.cheaperOnlyFilter}
+            </Text>
+          </Pressable>
 
           <Text style={styles.sectionLabel}>{t.market.filterTimeLeft}</Text>
           <View style={styles.chipWrap}>
@@ -315,6 +329,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     backgroundColor: C.leafSoft,
   },
+  cheaperOnlyChip: { alignSelf: 'flex-start', marginTop: 4 },
   chipText: { fontSize: 14, color: C.ink, fontFamily: fonts.body },
   chipTextActive: { color: C.leafDeep, fontWeight: '600', fontFamily: fonts.bodySemi },
   segment: {

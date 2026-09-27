@@ -1424,11 +1424,15 @@ function NewLotForm({
                           : '',
                     })}
               </Text>
-              <Text style={styles.priceHelpStrong}>
-                {formatTemplate(t.sell.startPriceMax, {
-                  price: formatNumber(estimate.max_start_price_per_kg),
-                })}
-              </Text>
+              {startNum > 0 && estimate.max_start_price_per_kg > 0 && startNum > estimate.max_start_price_per_kg ? (
+                <Text style={styles.priceWarning}>
+                  {formatTemplate(t.sell.priceAboveMarketWarning, {
+                    percent: Math.round(
+                      ((startNum - estimate.max_start_price_per_kg) / estimate.max_start_price_per_kg) * 100,
+                    ),
+                  })}
+                </Text>
+              ) : null}
               {estimate.nearby_median_price_per_kg !== null ? (
                 <Text style={styles.priceHelpText}>
                   {formatTemplate(t.sell.nearbyMedian, {
@@ -1716,6 +1720,7 @@ const styles = StyleSheet.create({
   priceHelp: { marginTop: -6, marginBottom: 12 },
   priceHelpText: { color: C.mute, fontSize: 13, marginTop: 2 },
   priceHelpStrong: { color: C.ink, fontSize: 13, fontWeight: '600', marginTop: 2 },
+  priceWarning: { color: C.turmeric, fontSize: 13, fontWeight: '600', marginTop: 2 },
   forecastTitle: { fontSize: 15, fontWeight: '700', color: C.ink, marginBottom: 4 },
   forecastLine: { color: C.ink, marginTop: 2 },
   previewUrgency: { fontSize: 18, fontWeight: '800', marginBottom: 4 },

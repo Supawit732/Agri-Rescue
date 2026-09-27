@@ -160,4 +160,47 @@ describe('market', () => {
       .set(bearer(buyer.token));
     expect(detail.body.lot.description).toBe('ผิวมีรอยเล็กน้อย รสหวาน เหมาะทำน้ำผลไม้');
   });
+
+  it('flags is_mine for a seller who also has buying enabled, with price_comparison alongside', async () => {
+    const sellerBuyer = await registerUser(app, {
+      role: 'farmer',
+      can_buy: true,
+      buyer_type: 'vendor',
+      lat: 13.662,
+      lng: 100.611,
+    });
+    const otherBuyer = await registerUser(app, { role: 'buyer', lat: 13.662, lng: 100.611 });
+    const cropId = await insertCrop('พืชเทียบราคา (auth)', 5, 40);
+    const plotId = await insertPlot(sellerBuyer.user.id, 13.662, 100.611, 'แปลงเทียบราคา');
+    const lotId = await insertLot({
+      plotId,
+      cropId,
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      startPricePerKg: 34,
+      floorPricePerKg: 34,
+    });
+
+    const asOwner = await request(app)
+      .get('/api/market')
+      .query({ lat: 13.662, lng: 100.611, radius_km: 15 })
+      .set(bearer(sellerBuyer.token));
+    const ownLot = (
+      asOwner.body.lots as Array<{
+        id: number;
+        is_mine: boolean;
+        price_comparison: { tone: string; percentDiff: number } | null;
+      }>
+    ).find((lot) => lot.id === lotId);
+    expect(ownLot?.is_mine).toBe(true);
+    expect(ownLot?.price_comparison).toEqual({ tone: 'cheaper', percentDiff: 15 });
+
+    const asOther = await request(app)
+      .get('/api/market')
+      .query({ lat: 13.662, lng: 100.611, radius_km: 15 })
+      .set(bearer(otherBuyer.token));
+    const otherViewLot = (asOther.body.lots as Array<{ id: number; is_mine: boolean }>).find(
+      (lot) => lot.id === lotId,
+    );
+    expect(otherViewLot?.is_mine).toBe(false);
+  });
 });

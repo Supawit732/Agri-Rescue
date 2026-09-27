@@ -3,7 +3,7 @@ import type { RowDataPacket } from 'mysql2';
 import { z } from 'zod';
 import { pool } from '../db/pool';
 import { findNearMatches, normalizeNameTh } from '../domain/cropNormalize';
-import { isPriceOutlier } from '../domain/priceSanity';
+import { isPriceTooLowForCategory } from '../domain/priceSanity';
 import { asyncHandler } from '../http/asyncHandler';
 import { HttpError } from '../http/errors';
 import { requireAuth, requireCapability } from '../middleware/auth';
@@ -196,7 +196,7 @@ cropsRouter.post(
         prices.length % 2 === 0
           ? ((prices[mid - 1] ?? 0) + (prices[mid] ?? 0)) / 2
           : (prices[mid] ?? 0);
-      if (isPriceOutlier(market_price_per_kg, median)) {
+      if (isPriceTooLowForCategory(market_price_per_kg, median)) {
         throw new HttpError(422, 'PRICE_SANITY', 'ราคาผิดปกติจากหมวดหมู่', {
           market_price_per_kg: `ราคาของหมวดนี้โดยทั่วไปอยู่ที่ประมาณ ${median} บาท/กก.`,
         });

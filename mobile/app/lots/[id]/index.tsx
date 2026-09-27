@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as Location from 'expo-location';
 import { API_BASE_URL } from '../../../src/api/config';
 import type { MarketLot } from '../../../src/api/types';
@@ -25,6 +25,7 @@ import {
   lotLocationLabel,
   marketSaleBadge,
   minOrderOf,
+  priceComparisonBadge,
   remainingOf,
   roundQty,
   splitAllowedOf,
@@ -111,6 +112,7 @@ export default function LotDetailScreen(): React.ReactElement {
 
   const [quantityKg, setQuantityKg] = useState(1);
   const [quantityError, setQuantityError] = useState<string | null>(null);
+  const [showBuyGate, setShowBuyGate] = useState(false);
 
   useEffect(() => {
     if (data !== null) {
@@ -145,7 +147,7 @@ export default function LotDetailScreen(): React.ReactElement {
       return;
     }
     if (!user.can_buy) {
-      router.push('/profile');
+      setShowBuyGate(true);
       return;
     }
     const remaining = remainingOf(lot);
@@ -191,11 +193,22 @@ export default function LotDetailScreen(): React.ReactElement {
             donate: t.market.badgeDonate,
             donateOk: t.market.badgeDonateOk,
           });
-          const canDonate = donationIntent && elig.canDonate && available.includes('donate');
-          const canBuy = !donationIntent && available.includes('buy') && lot.price_per_kg !== null;
+          const isMine = lot.is_mine === true;
+          const canDonate = !isMine && donationIntent && elig.canDonate && available.includes('donate');
+          const canBuy =
+            !isMine && !donationIntent && available.includes('buy') && lot.price_per_kg !== null;
           const area = lotLocationLabel(lot, t.market.plotFallback);
           const cropTitle = cropName({ name_th: lot.crop_name_th, name_en: lot.crop_name_en });
           const uri = photoUri(lot);
+          const priceCompare = priceComparisonBadge(
+            lot,
+            {
+              cheaper: t.market.priceCompareCheaper,
+              near: t.market.priceCompareNear,
+              higher: t.market.priceCompareHigher,
+            },
+            formatTemplate,
+          );
 
           return (
             <Body>
@@ -242,6 +255,16 @@ export default function LotDetailScreen(): React.ReactElement {
                 ) : (
                   <Text style={styles.line}>{t.lot.donateNoPrice}</Text>
                 )}
+                {priceCompare !== null ? (
+                  <Text
+                    style={[
+                      styles.priceCompare,
+                      priceCompare.tone === 'cheaper' ? styles.priceCompareCheaper : null,
+                    ]}
+                  >
+                    {priceCompare.text}
+                  </Text>
+                ) : null}
                 {lot.description !== null && lot.description !== undefined && lot.description !== '' ? (
                   <Text style={styles.description}>{lot.description}</Text>
                 ) : null}
@@ -255,6 +278,26 @@ export default function LotDetailScreen(): React.ReactElement {
                     tone={donationIntent ? 'turmeric' : undefined}
                     onPress={goLogin}
                   />
+                </Card>
+              ) : isMine ? (
+                <Card>
+                  <Text style={styles.line}>{t.lot.ownLotTitle}</Text>
+                  <View style={styles.ownLotActions}>
+                    <View style={styles.ownLotActionItem}>
+                      <SecondaryButton
+                        label={t.lot.ownLotEdit}
+                        block
+                        onPress={() => router.push('/(tabs)/sell?tab=mine')}
+                      />
+                    </View>
+                    <View style={styles.ownLotActionItem}>
+                      <SecondaryButton
+                        label={t.lot.ownLotBookers}
+                        block
+                        onPress={() => router.push('/(tabs)/sell?tab=mine')}
+                      />
+                    </View>
+                  </View>
                 </Card>
               ) : (
                 <>
@@ -305,6 +348,28 @@ export default function LotDetailScreen(): React.ReactElement {
           );
         }}
       </DataState>
+      <Modal visible={showBuyGate} transparent animationType="fade" onRequestClose={() => setShowBuyGate(false)}>
+        <Pressable
+          style={styles.buyGateBackdrop}
+          onPress={() => setShowBuyGate(false)}
+          accessibilityLabel={t.common.close}
+        >
+          <View style={{ flex: 1 }} />
+        </Pressable>
+        <View style={styles.buyGateSheet}>
+          <Text style={styles.buyGateTitle}>{t.buyGate.title}</Text>
+          <Text style={styles.buyGateBody}>{t.buyGate.body}</Text>
+          <PrimaryButton
+            label={t.buyGate.enableBuy}
+            block
+            onPress={() => {
+              setShowBuyGate(false);
+              router.push({ pathname: '/profile', params: { returnTo } });
+            }}
+          />
+          <SecondaryButton label={t.common.cancel} block onPress={() => setShowBuyGate(false)} />
+        </View>
+      </Modal>
     </SubScreen>
   );
 }
@@ -313,6 +378,30 @@ const styles = StyleSheet.create({
   hero: { width: '100%', height: 200, borderRadius: 16, marginBottom: 12, backgroundColor: C.leafSoft },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   title: { fontSize: 20, fontWeight: '800', color: C.ink, flex: 1, marginRight: 8 },
+  priceCompare: { fontSize: 12, color: C.mute, marginTop: 2 },
+  priceCompareCheaper: { color: C.leafDeep, fontWeight: '700' },
+  ownLotActions: { flexDirection: 'row', gap: 10, marginTop: 8 },
+  ownLotActionItem: { flex: 1 },
+  buyGateBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(20, 28, 22, 0.4)',
+  },
+  buyGateSheet: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    bottom: 24,
+    backgroundColor: C.white,
+    borderRadius: 20,
+    padding: 20,
+    gap: 10,
+  },
+  buyGateTitle: { fontSize: 18, fontWeight: '800', color: C.ink },
+  buyGateBody: { color: C.mute, marginBottom: 4, lineHeight: 20 },
   line: { color: C.ink, marginTop: 4 },
   description: { color: C.mute, marginTop: 8, lineHeight: 20 },
   qtyLabel: { color: C.mute, marginBottom: 6 },

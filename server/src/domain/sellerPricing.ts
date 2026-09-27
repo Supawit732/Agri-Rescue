@@ -80,11 +80,7 @@ export function minAllowedFloor(marketPricePerKg: number): number {
   return round2(marketPricePerKg * PRICING_CONFIG.minFloorOfMarket);
 }
 
-export type PriceBoundsError =
-  | 'start_above_market'
-  | 'floor_below_min'
-  | 'floor_above_start'
-  | 'suggest_donate';
+export type PriceBoundsError = 'floor_below_min' | 'floor_above_start' | 'suggest_donate';
 
 export function validateSellerPrices(input: {
   marketPricePerKg: number;
@@ -94,9 +90,6 @@ export function validateSellerPrices(input: {
   const market = input.marketPricePerKg;
   const start = input.startPricePerKg;
   const floor = input.floorPricePerKg;
-  if (start > market + 1e-9) {
-    return { ok: false, error: 'start_above_market', message: 'ราคาเริ่มต้องไม่เกินราคาตลาดวันนั้น' };
-  }
   const minFloor = minAllowedFloor(market);
   if (floor + 1e-9 < minFloor) {
     return {
@@ -183,6 +176,38 @@ export function availableAs(saleMode: string, donationOpened: boolean | number):
     return ['buy'];
   }
   return ['buy']; // sell default
+}
+
+/** Transparency badge tone for current price vs reference market price (D024). */
+export type PriceComparisonTone = 'cheaper' | 'near' | 'higher';
+
+export interface PriceComparison {
+  tone: PriceComparisonTone;
+  /** (marketPricePerKg - pricePerKg) / marketPricePerKg × 100, rounded. Positive = cheaper. */
+  percentDiff: number;
+}
+
+const PRICE_COMPARISON_THRESHOLD_PERCENT = 5;
+
+/**
+ * Compares current lot price to the reference market price.
+ * Returns null when there is no price to compare (donate-only lots, or no market reference).
+ */
+export function priceComparison(
+  pricePerKg: number | null,
+  marketPricePerKg: number | null,
+): PriceComparison | null {
+  if (pricePerKg === null || marketPricePerKg === null || marketPricePerKg <= 0) {
+    return null;
+  }
+  const percentDiff = Math.round(((marketPricePerKg - pricePerKg) / marketPricePerKg) * 100);
+  if (percentDiff >= PRICE_COMPARISON_THRESHOLD_PERCENT) {
+    return { tone: 'cheaper', percentDiff };
+  }
+  if (percentDiff < -PRICE_COMPARISON_THRESHOLD_PERCENT) {
+    return { tone: 'higher', percentDiff };
+  }
+  return { tone: 'near', percentDiff };
 }
 
 function clamp(value: number, min: number, max: number): number {

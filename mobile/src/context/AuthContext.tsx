@@ -143,6 +143,7 @@ interface Api {
     max_hours?: number;
     q?: string;
     sort?: 'near' | 'urgent' | 'cheap';
+    cheaper_only?: boolean;
   }) => Promise<MarketLot[]>;
   getCropCategories: () => Promise<CropCategory[]>;
   getPublicMarketLot: (id: number, lat?: number, lng?: number) => Promise<MarketLot>;
@@ -456,6 +457,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
         }
         if (query.sort !== undefined) {
           params.set('sort', query.sort);
+        }
+        if (query.cheaper_only === true) {
+          params.set('cheaper_only', '1');
         }
         const qs = params.toString();
         return apiRequest<{ lots: MarketLot[] }>({

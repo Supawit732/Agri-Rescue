@@ -5,7 +5,13 @@ import { pool } from '../db/pool';
 import { haversineKm } from '../domain/geo';
 import { remainingLotKg } from '../domain/lotInventory';
 import type { ProduceGrade } from '../domain/pricing';
-import { availableAs, lotAcceptsDonation, lotPricePerKg } from '../domain/sellerPricing';
+import {
+  availableAs,
+  lotAcceptsDonation,
+  lotPricePerKg,
+  priceComparison,
+  type PriceComparison,
+} from '../domain/sellerPricing';
 import { locationDisplayLabelFor } from '../geo/locationLabel';
 import { asyncHandler } from '../http/asyncHandler';
 import { HttpError } from '../http/errors';
@@ -22,6 +28,7 @@ const querySchema = z.object({
 
 interface MarketRow extends RowDataPacket {
   id: number;
+  farmer_id: number;
   weight_kg: number;
   split_allowed: number;
   min_order_kg: number;
@@ -37,6 +44,7 @@ interface MarketRow extends RowDataPacket {
   floor_price_per_kg: number | null;
   sale_mode: string;
   donation_opened: number;
+  market_price_snapshot: number | null;
   expires_at: Date;
   crop_name_th: string;
   crop_name_en: string | null;
@@ -53,9 +61,10 @@ interface MarketRow extends RowDataPacket {
   district_en: string | null;
 }
 
-const MARKET_LOT_SELECT = `SELECT h.id, h.weight_kg, h.split_allowed, h.min_order_kg, h.order_step_kg,
+const MARKET_LOT_SELECT = `SELECT h.id, p.farmer_id, h.weight_kg, h.split_allowed, h.min_order_kg, h.order_step_kg,
               h.grade, h.ripeness, h.allow_donation, h.donation_audience, h.photo_url, h.description,
-              h.start_price_per_kg, h.floor_price_per_kg, h.sale_mode, h.donation_opened, h.expires_at,
+              h.start_price_per_kg, h.floor_price_per_kg, h.sale_mode, h.donation_opened,
+              h.market_price_snapshot, h.expires_at,
               c.name_th AS crop_name_th, c.name_en AS crop_name_en, c.status AS crop_status, c.base_shelf_days,
               p.lat, p.lng, p.name AS plot_name, p.area_rai, p.subdistrict_th, p.district_th,
               p.subdistrict_en, p.district_en,
@@ -74,8 +83,10 @@ function presentBuyerLot(
   viewer: { lat: number; lng: number } | null,
   now: number,
   locale: 'th' | 'en',
+  viewerUserId: number,
 ): {
   id: number;
+  is_mine: boolean;
   crop_name_th: string;
   crop_name_en: string | null;
   farmer_name: string;
@@ -97,6 +108,8 @@ function presentBuyerLot(
   hours_left: number;
   distance_km: number | null;
   price_per_kg: number | null;
+  market_price_per_kg: number | null;
+  price_comparison: PriceComparison | null;
   lat: number;
   lng: number;
   subdistrict_th: string | null;
@@ -131,8 +144,13 @@ function presentBuyerLot(
     viewer === null
       ? null
       : haversineKm({ lat: viewer.lat, lng: viewer.lng }, { lat: plotLat, lng: plotLng });
+  const marketPrice =
+    row.market_price_snapshot === null || row.market_price_snapshot === undefined
+      ? null
+      : Number(row.market_price_snapshot);
   return {
     id: Number(row.id),
+    is_mine: Number(row.farmer_id) === viewerUserId,
     crop_name_th: row.crop_name_th,
     crop_name_en: row.crop_name_en === null || row.crop_name_en === '' ? null : String(row.crop_name_en),
     farmer_name: row.farmer_name,
@@ -154,6 +172,8 @@ function presentBuyerLot(
     hours_left: hoursLeft,
     distance_km: distanceKm === null ? null : Math.round(distanceKm * 10) / 10,
     price_per_kg: pricePerKg,
+    market_price_per_kg: marketPrice,
+    price_comparison: isDonateOnly ? null : priceComparison(pricePerKg, marketPrice),
     // Plot coords kept for authenticated booking maps (owners/buyers) — public API never returns these.
     lat: plotLat,
     lng: plotLng,
@@ -188,8 +208,9 @@ marketRouter.get(
     const now = Date.now();
     const viewer = { lat: query.lat, lng: query.lng };
     const locale = requestLocale(req.headers['accept-language'], req.query.lang);
+    const viewerUserId = req.auth?.id ?? 0;
     const lots = rows
-      .map((row) => presentBuyerLot(row, viewer, now, locale))
+      .map((row) => presentBuyerLot(row, viewer, now, locale, viewerUserId))
       .filter(
         (lot) =>
           lot.distance_km !== null &&
@@ -228,7 +249,7 @@ marketRouter.get(
         ? { lat: coords.lat, lng: coords.lng }
         : null;
     const locale = requestLocale(req.headers['accept-language'], req.query.lang);
-    const lot = presentBuyerLot(row, viewer, Date.now(), locale);
+    const lot = presentBuyerLot(row, viewer, Date.now(), locale, req.auth?.id ?? 0);
     if (lot.remaining_kg <= 0 || lot.hours_left <= 0) {
       throw new HttpError(404, 'NOT_FOUND', 'ไม่พบล็อต');
     }
