@@ -265,4 +265,38 @@ describe('lots and plots', () => {
     const mineLot = mine.body.lots.find((l: { id: number }) => l.id === lotId);
     expect(mineLot.description).toBe('มีตำหนิเล็กน้อยที่ขั้ว');
   });
+
+  it('clears photo_url when crop changes without a new photo', async () => {
+    installWeatherSuccess(28, 75);
+    const mangoCropId = await insertCrop('มะม่วง', 5, 40);
+    const bananaCropId = await insertCrop('กล้วย', 4, 20);
+    const owner = await registerUser(app, { role: 'farmer', name: 'เจ้าของเปลี่ยนพืช' });
+    const plotId = await insertPlot(owner.user.id, 13.66, 100.61);
+
+    const created = await request(app).post('/api/lots').set(bearer(owner.token)).send({
+      plot_id: plotId,
+      crop_id: mangoCropId,
+      weight_kg: 10,
+      grade: 'normal',
+      ripeness: 2,
+      sale_mode: 'sell',
+      photo_url: 'https://example.com/mango.jpg',
+    });
+    expect(created.status).toBe(201);
+    const lotId = Number(created.body.lot.id);
+    expect(created.body.lot.photo_url).toBe('https://example.com/mango.jpg');
+
+    const patched = await request(app)
+      .patch(`/api/lots/${lotId}`)
+      .set(bearer(owner.token))
+      .send({ crop_id: bananaCropId, photo_url: null });
+    expect(patched.status).toBe(200);
+    expect(patched.body.lot.photo_url).toBeNull();
+
+    const [rows] = await pool.query<RowDataPacket[]>(
+      'SELECT photo_url FROM harvest_lots WHERE id = ?',
+      [lotId],
+    );
+    expect(rows[0]?.photo_url).toBeNull();
+  });
 });

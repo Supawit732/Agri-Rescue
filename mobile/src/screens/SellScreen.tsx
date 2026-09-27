@@ -11,6 +11,7 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -371,6 +372,8 @@ function NewLotForm({
   const { t, locale, formatNumber, formatDate, cropName, translateError, translateFieldError } =
     useI18n();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const isWide = width >= 900;
   const { scrollRef, registerY, scrollToField } = useFieldScroll();
   const isEditing = editingLot !== null;
   const cropLockedByOrders =
@@ -554,15 +557,25 @@ function NewLotForm({
     }
     // editingLot identity is unchanged — a dependency change here means the seller picked
     // a different crop (create flow, or an in-place crop change while editing).
-    // Only clear photo/AI on a real crop change in edit mode, or anytime in create mode.
-    const isRealCropChange = isEditing && cropId !== editingLot?.crop_id;
-    if (isRealCropChange || !isEditing) {
+    if (isEditing && editingLot !== null) {
+      // In edit mode: restore original photo if switching back to original crop, else clear on change.
+      if (cropId === editingLot.crop_id) {
+        setPhotoPreview(mediaUri(editingLot.photo_url));
+        setAiResult(null);
+        setAiEdited(false);
+        setAiMessage(null);
+      } else {
+        setAiResult(null);
+        setAiEdited(false);
+        setAiMessage(null);
+        setPhotoPreview(null);
+      }
+    } else if (!isEditing) {
+      // Create mode: clear photo/AI on any crop change.
       setAiResult(null);
       setAiEdited(false);
       setAiMessage(null);
       setPhotoPreview(null);
-    }
-    if (!isEditing) {
       setPricesEdited(false);
       setFloorEdited(false);
       setStartPrice('');
@@ -658,6 +671,16 @@ function NewLotForm({
   const tone = estimate !== null ? urgency(estimate.shelf_hours) : null;
   const previewUrgency =
     estimate !== null ? urgencyLabel(estimate.shelf_hours, t) : null;
+
+  const handleSubmitPress = useCallback((): void => {
+    if (ripeness === null) {
+      setFieldErrors((prev) => ({ ...prev, ripeness: t.sell.ripenessRequired }));
+      setSubmitError(t.sell.ripenessRequired);
+      scrollToField('ripeness');
+      return;
+    }
+    void onSubmit();
+  }, [ripeness, t, scrollToField]);
 
   const applyRipeness = (value: number, fromAi: boolean): void => {
     setRipeness(value);
@@ -873,8 +896,9 @@ function NewLotForm({
       const descriptionValue = description.trim() === '' ? null : description.trim();
       if (isEditing && editingLot !== null) {
         const loweringRipeness = ripeness !== null && ripeness < editingLot.ripeness;
+        const cropChanged = cropId !== editingLot.crop_id;
         await api.patchLot(editingLot.id, {
-          ...(cropId !== editingLot.crop_id ? { crop_id: cropId } : {}),
+          ...(cropChanged ? { crop_id: cropId } : {}),
           weight_kg: weightNum,
           grade,
           ripeness: ripeness as number,
@@ -885,6 +909,7 @@ function NewLotForm({
           description: descriptionValue,
           ...(aiResult !== null ? { ai_ripeness: aiResult.ripeness } : {}),
           ...(aiResult?.photo_url !== undefined ? { photo_url: aiResult.photo_url } : {}),
+          ...(cropChanged && aiResult === null ? { photo_url: null } : {}),
           ...(loweringRipeness ? { confirm_ripeness_photo: aiResult !== null } : {}),
         });
       } else {
@@ -982,18 +1007,16 @@ function NewLotForm({
         </>
       ) : (
         <>
-          {canChangeCrop ? (
-            <TextInput
-              style={styles.cropSearchInput}
-              value={cropSearch}
-              onChangeText={setCropSearch}
-              placeholder={t.sell.searchCropPlaceholder}
-              placeholderTextColor={C.mute}
-              returnKeyType="search"
-              clearButtonMode="while-editing"
-            />
-          ) : null}
-          {canChangeCrop && frequentCrops.length > 0 && cropSearch.trim() === '' ? (
+          <TextInput
+            style={styles.cropSearchInput}
+            value={cropSearch}
+            onChangeText={setCropSearch}
+            placeholder={t.sell.searchCropPlaceholder}
+            placeholderTextColor={C.mute}
+            returnKeyType="search"
+            clearButtonMode="while-editing"
+          />
+          {frequentCrops.length > 0 && cropSearch.trim() === '' ? (
             <>
               <Text style={styles.cropSubheading}>{t.sell.frequentCropsSection}</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
@@ -1009,27 +1032,25 @@ function NewLotForm({
               <Text style={styles.cropSubheading}>{t.sell.allCropsSection}</Text>
             </>
           ) : null}
-          {canChangeCrop ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
-              {(cropSearch.trim() === ''
-                ? crops
-                : crops.filter((c) => {
-                    const q = cropSearch.trim().toLowerCase();
-                    return c.name_th.toLowerCase().includes(q) ||
-                      (c.name_en ?? '').toLowerCase().includes(q);
-                  })
-              ).map((crop) => (
-                <Chip
-                  key={crop.id}
-                  label={cropName(crop)}
-                  selected={crop.id === cropId}
-                  onPress={() => {
-                    setCropId(crop.id);
-                  }}
-                />
-              ))}
-            </ScrollView>
-          ) : null}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
+            {(cropSearch.trim() === ''
+              ? crops
+              : crops.filter((c) => {
+                  const q = cropSearch.trim().toLowerCase();
+                  return c.name_th.toLowerCase().includes(q) ||
+                    (c.name_en ?? '').toLowerCase().includes(q);
+                })
+            ).map((crop) => (
+              <Chip
+                key={crop.id}
+                label={cropName(crop)}
+                selected={crop.id === cropId}
+                onPress={() => {
+                  setCropId(crop.id);
+                }}
+              />
+            ))}
+          </ScrollView>
           {isEditing && cropId !== editingLot!.crop_id ? (
             <Text style={styles.cropChangeHint}>{t.sell.cropChangeHint}</Text>
           ) : null}
@@ -1622,22 +1643,14 @@ function NewLotForm({
       ) : null}
 
     </Body>
-    <View style={[styles.stickyFooter, { paddingBottom: 12 }]}>
+    <View style={[styles.stickyFooter, { paddingBottom: isWide ? insets.bottom + 12 : 12 }]}>
       {submitError !== null ? <Text style={styles.previewError}>{submitError}</Text> : null}
       {isEditing ? (
         <View style={styles.footerButtonRow}>
           <View style={{ flex: 1 }}>
             <PrimaryButton
               label={t.sell.saveEdit}
-              onPress={() => {
-                if (ripeness === null) {
-                  setFieldErrors((prev) => ({ ...prev, ripeness: t.sell.ripenessRequired }));
-                  setSubmitError(t.sell.ripenessRequired);
-                  scrollToField('ripeness');
-                  return;
-                }
-                void onSubmit();
-              }}
+              onPress={handleSubmitPress}
               loading={submitting}
               disabled={!(weightNum > 0) || ripeness === null || assessing}
             />
@@ -1650,15 +1663,7 @@ function NewLotForm({
         <PrimaryButton
           label={t.sell.publish}
           block
-          onPress={() => {
-            if (ripeness === null) {
-              setFieldErrors((prev) => ({ ...prev, ripeness: t.sell.ripenessRequired }));
-              setSubmitError(t.sell.ripenessRequired);
-              scrollToField('ripeness');
-              return;
-            }
-            void onSubmit();
-          }}
+          onPress={handleSubmitPress}
           loading={submitting}
           disabled={!(weightNum > 0) || ripeness === null || assessing}
         />
