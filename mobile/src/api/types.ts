@@ -193,6 +193,7 @@ export interface MarketQuote {
   is_estimate: boolean;
   as_of: string | null;
   source: string;
+  seasonal_adjusted: boolean;
 }
 
 export interface PriceForecastRow {
@@ -205,6 +206,9 @@ export interface EstimateResponse {
   price_per_kg: number;
   suggested_start_price_per_kg: number;
   suggested_floor_price_per_kg: number;
+  max_start_price_per_kg: number;
+  min_floor_price_per_kg: number;
+  min_floor_pct_of_market: number;
   market_quote: MarketQuote;
   forecast: PriceForecastRow[];
   nearby_median_price_per_kg: number | null;
