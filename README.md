@@ -41,10 +41,11 @@ npm install
 | `AI_VISION_BASE_URL` | ฐาน URL ของ OpenAI-compatible vision API (ว่าง = `https://opencode.ai/zen/go/v1`) |
 | `AI_VISION_API_KEY` | API key ของบริการ vision (ว่าง = ประเมินจากภาพไม่พร้อมใช้) |
 | `AI_VISION_MODEL` | ชื่อโมเดล (ว่าง = `mimo-v2.6-flash`) |
+| `AI_VISION_TIMEOUT_MS` | เวลารอสูงสุดของการเรียก vision API เป็น ms (ว่าง = `30000`) |
 
 ไฟล์ `.env` ไม่ถูก commit
 
-ค่า `AI_VISION_*` ชี้ไปที่ endpoint แบบ OpenAI-compatible (`POST {base}/chat/completions`) ไม่ผูกกับผู้ให้บริการรายใดรายหนึ่ง ทดสอบจริงด้วย:
+ค่า `AI_VISION_*` ชี้ไปที่ endpoint แบบ OpenAI-compatible (`POST {base}/chat/completions`) ไม่ผูกกับผู้ให้บริการรายใดรายหนึ่ง (ทดสอบแล้วกับ OpenCode Go และ OpenRouter `https://openrouter.ai/api/v1`) การปิด reasoning/thinking เลือกอัตโนมัติตาม host: OpenCode ใช้ `thinking: {type:'disabled'}`, OpenRouter ใช้ `reasoning: {enabled:false}` — ถ้าโมเดลไม่รองรับพารามิเตอร์ใดจะลองใหม่อีกครั้งโดยตัดพารามิเตอร์นั้นออกอัตโนมัติ ปรับ `AI_VISION_TIMEOUT_MS` ให้สูงขึ้นถ้าโมเดลที่ใช้ตอบช้า (เช่น `qwen/qwen3.8-flash` บน OpenRouter ใช้เวลาประมาณ 14 วินาที) ทดสอบจริงด้วย:
 
 ```bash
 cd server

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { RIPENESS_LABELS } from '../db/seedData';
 
-export const AI_VISION_TIMEOUT_MS = 20_000;
+export const DEFAULT_AI_VISION_TIMEOUT_MS = 30_000;
 export const AI_VISION_MAX_BYTES = 5 * 1024 * 1024;
 export const DEFAULT_AI_VISION_BASE_URL = 'https://opencode.ai/zen/go/v1';
 export const DEFAULT_AI_VISION_MODEL = 'mimo-v2.6-flash';
@@ -38,19 +38,33 @@ export type AssessPhotoResult =
   | {
       available: false;
       reason: string;
+      httpStatus?: number;
+      bodyPreview?: string;
     };
 
 export interface VisionConfig {
   baseUrl: string;
   apiKey: string;
   model: string;
+  timeoutMs: number;
 }
 
 export function loadVisionConfig(env: NodeJS.ProcessEnv = process.env): VisionConfig {
   const baseUrl = (env.AI_VISION_BASE_URL ?? '').trim() || DEFAULT_AI_VISION_BASE_URL;
   const apiKey = (env.AI_VISION_API_KEY ?? '').trim();
   const model = (env.AI_VISION_MODEL ?? '').trim() || DEFAULT_AI_VISION_MODEL;
-  return { baseUrl: baseUrl.replace(/\/$/, ''), apiKey, model };
+  const timeoutRaw = Number.parseInt((env.AI_VISION_TIMEOUT_MS ?? '').trim(), 10);
+  const timeoutMs = Number.isFinite(timeoutRaw) && timeoutRaw > 0 ? timeoutRaw : DEFAULT_AI_VISION_TIMEOUT_MS;
+  return { baseUrl: baseUrl.replace(/\/$/, ''), apiKey, model, timeoutMs };
+}
+
+/** OpenRouter's reasoning-disable field differs from OpenCode's `thinking` field. */
+export function isOpenRouterBaseUrl(baseUrl: string): boolean {
+  try {
+    return new URL(baseUrl).host === 'openrouter.ai';
+  } catch {
+    return false;
+  }
 }
 
 export function buildRipenessPrompt(
@@ -105,7 +119,7 @@ export function extractJsonObject(text: string): unknown {
 function unsupportedParamFromError(bodyText: string): 'response_format' | 'thinking' | 'both' {
   const lower = bodyText.toLowerCase();
   const hitsResponse = lower.includes('response_format');
-  const hitsThinking = lower.includes('thinking');
+  const hitsThinking = lower.includes('thinking') || lower.includes('reasoning');
   if (hitsResponse && !hitsThinking) {
     return 'response_format';
   }
@@ -150,7 +164,11 @@ function buildChatPayload(
     };
   }
   if (options.includeThinking) {
-    payload.thinking = { type: 'disabled' };
+    if (isOpenRouterBaseUrl(config.baseUrl)) {
+      payload.reasoning = { enabled: false };
+    } else {
+      payload.thinking = { type: 'disabled' };
+    }
   }
   return payload;
 }
@@ -211,7 +229,7 @@ export async function assessRipenessFromPhoto(input: {
 
   const dataUri = `data:${input.mime};base64,${input.imageBase64}`;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), AI_VISION_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), config.timeoutMs);
 
   try {
     let options: ChatPayloadOptions = { includeResponseFormat: true, includeThinking: true };
@@ -238,7 +256,13 @@ export async function assessRipenessFromPhoto(input: {
     }
 
     if (!response.ok) {
-      return { available: false, reason: `บริการประเมินภาพตอบ ${response.status}` };
+      const bodyPreview = await response.text().catch(() => '');
+      return {
+        available: false,
+        reason: `บริการประเมินภาพตอบ ${response.status}`,
+        httpStatus: response.status,
+        bodyPreview: bodyPreview.slice(0, 300),
+      };
     }
 
     const body = (await response.json()) as {

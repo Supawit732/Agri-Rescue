@@ -36,7 +36,7 @@ async function main(): Promise<void> {
   }
 
   const config = loadVisionConfig();
-  console.log(`crop=${crop.name_th} model=${config.model} base=${config.baseUrl}`);
+  console.log(`crop=${crop.name_th} model=${config.model} base=${config.baseUrl} timeout_ms=${config.timeoutMs}`);
   const imageBase64 = fs.readFileSync(absolute).toString('base64');
   const started = Date.now();
   const result = await assessRipenessFromPhoto({
@@ -48,6 +48,14 @@ async function main(): Promise<void> {
   const elapsedMs = Date.now() - started;
   console.log(JSON.stringify(result, null, 2));
   console.log(`elapsed_ms=${elapsedMs}`);
+  if (!result.available) {
+    if (result.httpStatus !== undefined) {
+      console.error(`http_status=${result.httpStatus}`);
+    }
+    if (result.bodyPreview) {
+      console.error(`body_preview=${result.bodyPreview}`);
+    }
+  }
 }
 
 main()
