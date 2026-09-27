@@ -672,16 +672,6 @@ function NewLotForm({
   const previewUrgency =
     estimate !== null ? urgencyLabel(estimate.shelf_hours, t) : null;
 
-  const handleSubmitPress = useCallback((): void => {
-    if (ripeness === null) {
-      setFieldErrors((prev) => ({ ...prev, ripeness: t.sell.ripenessRequired }));
-      setSubmitError(t.sell.ripenessRequired);
-      scrollToField('ripeness');
-      return;
-    }
-    void onSubmit();
-  }, [ripeness, t, scrollToField]);
-
   const applyRipeness = (value: number, fromAi: boolean): void => {
     setRipeness(value);
     if (fromAi) {
@@ -954,6 +944,16 @@ function NewLotForm({
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleSubmitPress = (): void => {
+    if (ripeness === null) {
+      setFieldErrors((prev) => ({ ...prev, ripeness: t.sell.ripenessRequired }));
+      setSubmitError(t.sell.ripenessRequired);
+      scrollToField('ripeness');
+      return;
+    }
+    void onSubmit();
   };
 
   const aiDefects =
