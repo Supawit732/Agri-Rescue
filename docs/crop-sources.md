@@ -171,3 +171,57 @@ Factors are stored in `crop_season_factors` table and seeded by `server/src/db/s
 - Price-drop hint for vendor/shop when hours left &lt; 12h is product policy (PLAN 6.9), not from these sources.
 - User-facing strings live in i18n (`orderDetail.*`), not AI-generated at runtime.
 - Seed values live in `server/src/db/seedData.ts` (`storageTipTh` / `storageTipEn` / `fridgeOk` / `fridgeExtraDays` / `baseShelfDays`); keep this file in sync when a crop is added.
+
+## Default market price (`market_price_per_kg`)
+
+`crops.market_price_per_kg` is the **fallback reference price** used only when no MOC (กรมการค้าภายใน) price ≤ 7 days old exists. The app shows it as "ราคาประมาณ" and multiplies it by the seasonal factor above. It is **not** an official price.
+
+**Basis**
+- Refers to the **most common variety sold in Thai wholesale markets** (column "พันธุ์ที่อิง"), not premium varieties. Premium varieties (e.g. มะเขือเทศช็อกโกแลต, ทุเรียนเกรดส่งออก) should be added by the seller as a new crop with their own price.
+- **Wholesale price per kg, normal (non-peak) month**, rounded to whole baht.
+- Checked on **27 ก.ย. 2569** against public wholesale price aggregators (see Sources). Aggregator values are the *lowest* wholesale price across markets that day, so typical prices are somewhat higher; vegetable prices swing a lot with weather.
+- "ไม่มีข้อมูล" = no public price found on the check date (usually off-season); the current value is kept and marked unverified.
+
+| พืช | พันธุ์ที่อิง | ค่าเดิมใน seed | ราคาส่งที่พบ (27 ก.ย. 69) | ค่าที่เสนอ | หมายเหตุ |
+|---|---|---|---|---|---|
+| มะม่วง | น้ำดอกไม้/คละ | 40 | 55 (ต่ำสุด, ตลาดไท) | 45 | ก.ย.–ต.ค. นอกฤดู ตัวคูณตุลาคม ×1.25 → ~56 |
+| กล้วยน้ำว้า | น้ำว้า | 25 | 17.5–37.5 | 25 | คงเดิม |
+| มะเขือเทศ | ผลใหญ่/สีดา | 30 | 22 | 25 | ไม่ใช่พันธุ์ช็อกโกแลต/เชอร์รี่ |
+| ผักบุ้ง | ผักบุ้งจีน | 20 | 29 | 28 | |
+| มะนาว | มะนาวแป้น | 35 | 2–3.7 บาท/ผล (~25–40/กก.) | 35 | ขายเป็นลูก/กระสอบ แปลงเป็น กก. โดยประมาณ 10–12 ผล/กก. |
+| ทุเรียน | หมอนทอง ขนาดกลาง | 150 | ใหญ่ 110 / กลาง 82.5; เม.ย. ตลาดไท 160–170 | 100 | กสิกรไทยคาดราคาเฉลี่ยปี 69 ~90 บาท/กก. |
+| ส้มโอ | ขาวน้ำผึ้ง/ทองดี | 35 | 25–30 บาท/ผล (~20–25/กก.) | 25 | 1 ผล ~1–1.5 กก. |
+| ลำไย | อีดอ | 50 | ไม่มีข้อมูล | 50 | ยังไม่ยืนยัน |
+| เงาะ | โรงเรียน | 40 | ไม่มีข้อมูล | 40 | ยังไม่ยืนยัน (นอกฤดู) |
+| ฝรั่ง | กิมจู/แป้นสีทอง | 25 | 5–10 (กิมจู), ไร้เมล็ด 12.5–22.5 | 15 | |
+| สับปะรด | ปัตตาเวีย | 20 | 15 | 15 | |
+| น้อยหน่า | ฝ้าย/หนัง | 45 | ไม่มีข้อมูล | 45 | ยังไม่ยืนยัน |
+| คะน้า | คะน้าทั่วไป | 30 | 17 | 20 | |
+| ผักกาดขาว | ผักกาดขาวปลี | 25 | 14 | 15 | |
+| ผักชี | ผักชีไทย | 60 | 80 | 80 | ผันผวนสูงช่วงฝนตก |
+| ต้นหอม | ต้นหอมทั่วไป | 50 | 55 | 55 | |
+| แตงกวา | แตงกวาทั่วไป | 20 | 19 | 20 | คงเดิม |
+| พริก | พริกขี้หนู | 60 | 37.5 | 40 | |
+| มะเขือยาว | มะเขือยาวเขียว | 30 | 17 | 20 | |
+| กะหล่ำปลี | กะหล่ำปลีทั่วไป | 20 | 12 | 12 | |
+| ข้าวโพด | ข้าวโพดหวาน | 15 | 9 | 10 | |
+| ถั่วฝักยาว | ถั่วฝักยาวทั่วไป | 30 | 32.5 | 30 | คงเดิม |
+| ฟักทอง | ฟักทองทั่วไป | 20 | 12.5 | 13 | |
+| ตะไคร้ | ตะไคร้แกง | 40 | 9 | 10 | ค่าเดิมสูงเกินจริงมาก |
+| ใบกะเพรา | กะเพราทั่วไป | 60 | 27.5 | 30 | |
+| ขิง | ขิงแก่ | 50 | 19 | 20 | |
+| มันเทศ | มันเทศเนื้อเหลือง/ส้ม | 25 | ไม่มีข้อมูล | 25 | ยังไม่ยืนยัน |
+| หอมแดง | หอมแดงไทย | 60 | 85 | 80 | |
+| กระเทียม | กระเทียมไทย | 80 | 65 | 65 | |
+| มังคุด | คละ | 80 | 8–15 (ปลายฤดู, ล้นตลาด) | 40 | ค่าเสนอเป็นค่ากลางปี ไม่ใช่ราคาช่วงล้นตลาด |
+| ลิ้นจี่ | ฮงฮวย/จักรพรรดิ | 70 | ไม่มีข้อมูล | 70 | ยังไม่ยืนยัน (นอกฤดู) |
+
+**Caveats**
+- Durian contradicts the simple "peak = cheaper" rule: export demand keeps Monthong prices high in April–May. Its seasonal factors are demo estimates only.
+- Values are for demo/education. The production path is MOC daily prices; this table only matters when MOC is unavailable.
+
+Sources (checked 27 ก.ย. 2569):
+- [CheckRaka — ราคาผักวันนี้ (ราคาส่งต่ำสุดจาก 8 แหล่ง)](https://checkraka.app/price/vegetable-today/)
+- [CheckRaka — ราคามะม่วง](https://checkraka.app/price/mango-today/) · [กล้วย](https://checkraka.app/price/banana-today/) · [มะนาว](https://checkraka.app/price/lime-today/) · [ภาพรวม](https://checkraka.app/price/)
+- [kasetprice.com — ทุเรียน](https://kasetprice.com/ราคา/ทุเรียน/วันนี้) · [มังคุด](https://kasetprice.com/ราคา/มังคุด/วันนี้) · [ส้มโอ](https://kasetprice.com/ราคา/ส้มโอ/วันนี้) · [ฝรั่ง](https://kasetprice.com/ราคา/ฝรั่ง/วันนี้) (ตลาดไท, สี่มุมเมือง, ศรีเมือง)
+- [ฐานเศรษฐกิจ — ราคาทุเรียนตลาดไท 8 เม.ย. 2569](https://www.thansettakij.com/general-news/656075)
