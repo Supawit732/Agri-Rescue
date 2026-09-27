@@ -516,6 +516,9 @@ export type Messages = {
     viewMyLots: string;
     backToMarket: string;
     summaryLine: string;
+    startPriceLine: string;
+    saleModeLine: string;
+    timeLeftLine: string;
   };
   profile: {
     title: string;

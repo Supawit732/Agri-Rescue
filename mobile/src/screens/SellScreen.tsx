@@ -125,7 +125,15 @@ export default function SellScreen(): React.ReactElement {
   }, [tabParam]);
 
   const onCreated = useCallback(
-    (summary?: { crop?: string; weight?: string; price?: string }) => {
+    (summary?: {
+      crop?: string;
+      weight?: string;
+      price?: string;
+      photoUrl?: string;
+      saleMode?: string;
+      startPrice?: string;
+      shelfHours?: string;
+    }) => {
       setEditingLot(null);
       setFormDirty(false);
       setRefreshKey((value) => value + 1);
@@ -136,6 +144,10 @@ export default function SellScreen(): React.ReactElement {
           ...(summary?.crop != null ? { crop: summary.crop } : {}),
           ...(summary?.weight != null ? { weight: summary.weight } : {}),
           ...(summary?.price != null ? { price: summary.price } : {}),
+          ...(summary?.photoUrl != null ? { photoUrl: summary.photoUrl } : {}),
+          ...(summary?.saleMode != null ? { saleMode: summary.saleMode } : {}),
+          ...(summary?.startPrice != null ? { startPrice: summary.startPrice } : {}),
+          ...(summary?.shelfHours != null ? { shelfHours: summary.shelfHours } : {}),
         },
       });
     },
@@ -236,7 +248,15 @@ function NewLot({
   api: ReturnType<typeof useAuth>['api'];
   refreshKey: number;
   editingLot: MyLot | null;
-  onCreated: (summary?: { crop?: string; weight?: string; price?: string }) => void;
+  onCreated: (summary?: {
+    crop?: string;
+    weight?: string;
+    price?: string;
+    photoUrl?: string;
+    saleMode?: string;
+    startPrice?: string;
+    shelfHours?: string;
+  }) => void;
   onPlotCreated: () => void;
   onCancelEdit: () => void;
   onDirtyChange: (dirty: boolean) => void;
@@ -365,7 +385,15 @@ function NewLotForm({
   categories: CropCategory[];
   plots: Plot[];
   editingLot: MyLot | null;
-  onCreated: (summary?: { crop?: string; weight?: string; price?: string }) => void;
+  onCreated: (summary?: {
+    crop?: string;
+    weight?: string;
+    price?: string;
+    photoUrl?: string;
+    saleMode?: string;
+    startPrice?: string;
+    shelfHours?: string;
+  }) => void;
   onCancelEdit: () => void;
   onDirtyChange: (dirty: boolean) => void;
 }): React.ReactElement {
@@ -942,6 +970,10 @@ function NewLotForm({
         crop: selectedCrop !== undefined ? cropName(selectedCrop) : undefined,
         weight: String(weightNum),
         price: displayPrice !== null ? String(displayPrice) : undefined,
+        photoUrl: uploadedPhotoUrl ?? undefined,
+        saleMode,
+        startPrice: modeHasPrice(saleMode) && startNum > 0 ? String(startNum) : undefined,
+        shelfHours: estimate !== null ? String(estimate.shelf_hours) : undefined,
       });
     } catch (err) {
       if (err instanceof ApiError) {

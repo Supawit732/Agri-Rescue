@@ -512,6 +512,9 @@ const en: Messages = {
     viewMyLots: 'View my lots',
     backToMarket: 'Back to market',
     summaryLine: '{crop} · {weight} kg',
+    startPriceLine: 'Start price {price} baht/kg',
+    saleModeLine: 'Sale mode: {mode}',
+    timeLeftLine: 'Sell within {time}',
   },
   profile: {
     title: 'Profile',

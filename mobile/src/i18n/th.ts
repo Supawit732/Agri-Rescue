@@ -512,6 +512,9 @@ const th: Messages = {
     viewMyLots: 'ดูล็อตของฉัน',
     backToMarket: 'กลับไปตลาด',
     summaryLine: '{crop} · {weight} กก.',
+    startPriceLine: 'ราคาเริ่มต้น {price} บาท/กก.',
+    saleModeLine: 'รูปแบบการขาย: {mode}',
+    timeLeftLine: 'ควรขายภายใน {time}',
   },
   profile: {
     title: 'โปรไฟล์',
