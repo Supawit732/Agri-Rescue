@@ -33,6 +33,10 @@ export function setUnauthorizedHandler(handler: (() => void) | null): void {
   unauthorizedHandler = handler;
 }
 
+/** Default request timeout; slower AI/image endpoints pass a longer timeoutMs. */
+export const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
+export const AI_OR_UPLOAD_TIMEOUT_MS = 45_000;
+
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   path: string;
@@ -40,6 +44,8 @@ interface RequestOptions {
   body?: unknown;
   /** App locale for system-data fields (Accept-Language). */
   lang?: 'th' | 'en';
+  /** Overrides DEFAULT_REQUEST_TIMEOUT_MS; use AI_OR_UPLOAD_TIMEOUT_MS for image/AI calls. */
+  timeoutMs?: number;
 }
 
 /** Overridden by AuthContext from I18n locale when available. */
@@ -48,7 +54,14 @@ export function setApiLang(lang: 'th' | 'en'): void {
   currentLang = lang;
 }
 
-export async function apiRequest<T>({ method = 'GET', path, token, body, lang }: RequestOptions): Promise<T> {
+export async function apiRequest<T>({
+  method = 'GET',
+  path,
+  token,
+  body,
+  lang,
+  timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+}: RequestOptions): Promise<T> {
   const headers: Record<string, string> = { Accept: 'application/json' };
   headers['Accept-Language'] = lang ?? currentLang;
   if (body !== undefined) {
@@ -58,16 +71,25 @@ export async function apiRequest<T>({ method = 'GET', path, token, body, lang }:
     headers.Authorization = `Bearer ${token}`;
   }
 
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
   let response: Response;
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
+      signal: controller.signal,
     });
-  } catch {
+  } catch (error) {
     // Message is the code; UI should display via translateError(err.code, err.message).
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new ApiError(0, 'TIMEOUT', 'TIMEOUT');
+    }
     throw new ApiError(0, 'NETWORK', 'NETWORK');
+  } finally {
+    clearTimeout(timer);
   }
 
   if (response.status === 401) {

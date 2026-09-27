@@ -208,4 +208,61 @@ describe('lots and plots', () => {
     expect(mine.body.lots.map((l: { id: number }) => l.id)).not.toContain(emptyLotId);
     expect(mine.body.lots.map((l: { id: number }) => l.id)).toContain(bookedLotId);
   });
+
+  it('creates and patches a lot description, and rejects contact info in it', async () => {
+    installWeatherSuccess(30, 70);
+    const cropId = await insertCrop('ส้ม', 7, 30);
+    const owner = await registerUser(app, { role: 'farmer', name: 'เจ้าของคำอธิบาย' });
+    const plotId = await insertPlot(owner.user.id, 13.66, 100.61);
+
+    const rejected = await request(app).post('/api/lots').set(bearer(owner.token)).send({
+      plot_id: plotId,
+      crop_id: cropId,
+      weight_kg: 5,
+      grade: 'normal',
+      ripeness: 2,
+      sale_mode: 'sell',
+      description: 'โทร 0812345678 นะครับ',
+    });
+    expect(rejected.status).toBe(400);
+    expect(rejected.body.error.fields.description).toBeDefined();
+
+    const created = await request(app).post('/api/lots').set(bearer(owner.token)).send({
+      plot_id: plotId,
+      crop_id: cropId,
+      weight_kg: 5,
+      grade: 'normal',
+      ripeness: 2,
+      sale_mode: 'sell',
+      description: 'ผิวมีรอยเล็กน้อย รสหวาน เหมาะทำน้ำผลไม้',
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.lot.description).toBe('ผิวมีรอยเล็กน้อย รสหวาน เหมาะทำน้ำผลไม้');
+    const lotId = Number(created.body.lot.id);
+
+    const patchRejected = await request(app)
+      .patch(`/api/lots/${lotId}`)
+      .set(bearer(owner.token))
+      .send({ description: 'ทักไลน์มาคุยกันได้' });
+    expect(patchRejected.status).toBe(400);
+    expect(patchRejected.body.error.fields.description).toBeDefined();
+
+    const patched = await request(app)
+      .patch(`/api/lots/${lotId}`)
+      .set(bearer(owner.token))
+      .send({ description: 'มีตำหนิเล็กน้อยที่ขั้ว' });
+    expect(patched.status).toBe(200);
+    expect(patched.body.lot.description).toBe('มีตำหนิเล็กน้อยที่ขั้ว');
+
+    const [logs] = await pool.query<RowDataPacket[]>(
+      `SELECT field_name, old_value, new_value FROM lot_edit_logs WHERE lot_id = ? AND field_name = 'description'`,
+      [lotId],
+    );
+    expect(logs).toHaveLength(1);
+    expect(logs[0]?.new_value).toBe('มีตำหนิเล็กน้อยที่ขั้ว');
+
+    const mine = await request(app).get('/api/lots/mine').set(bearer(owner.token));
+    const mineLot = mine.body.lots.find((l: { id: number }) => l.id === lotId);
+    expect(mineLot.description).toBe('มีตำหนิเล็กน้อยที่ขั้ว');
+  });
 });

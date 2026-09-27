@@ -484,3 +484,28 @@ Migration 030 ใส่ data ด้วย `INSERT...SELECT FROM crops WHERE name
 - ช่องราคาจางและแก้ไม่ได้จนกว่าจะมีผลประเมิน (ยกเว้นประเมินล้มเหลว หรือแก้ล็อตที่มีราคาอยู่แล้ว) พร้อมข้อความชวนเลือกความสุก; ไม่ขึ้น error "ต้องกรอก" ตอน blur ก่อนมีผลประเมิน แต่ยังตรวจตอนกดลงขาย
 - ใต้ช่องราคาแสดงราคาตลาดอ้างอิง (กรมการค้าภายใน หรือราคาประมาณ + ปรับตามฤดูกาล), เพดานราคาเริ่ม และขั้นต่ำราคาต่ำสุด — ค่าทั้งหมดมาจาก `/lots/estimate` (`max_start_price_per_kg`, `min_floor_price_per_kg`, `min_floor_pct_of_market`, `market_quote.seasonal_adjusted`) แอปไม่คำนวณราคาเอง
 - ถ้าผู้ขายยังไม่แก้ราคาเอง การเปลี่ยนเกรดจะเติมราคาแนะนำใหม่; พิมพ์เองเมื่อไหร่ก็หยุดเติมอัตโนมัติ
+
+## D044 — AI vision timeout ปรับได้ + OpenRouter reasoning field
+
+ปัญหา: timeout ประเมินภาพ hard-code ไว้ 20 วิ ตึงเกินไปสำหรับโมเดลบางตัวผ่าน OpenRouter (เช่น `qwen/qwen3.8-flash` ใช้เวลา ~14 วิ ปกติแต่บางครั้งช้ากว่านั้น)
+- `AI_VISION_TIMEOUT_MS` (ค่าเริ่มต้น 30000) อ่านจาก env ผ่าน `loadVisionConfig()`
+- การปิด reasoning เป็นแบบเฉพาะผู้ให้บริการ: OpenCode Go ใช้ `thinking:{type:'disabled'}` เดิม; host `openrouter.ai` ใช้ `reasoning:{enabled:false}` ตามเอกสาร OpenRouter (https://openrouter.ai/docs/use-cases/reasoning-tokens) — ตรวจจาก host ของ `AI_VISION_BASE_URL` ไม่ใช่ hard-code ผู้ให้บริการ
+- retry-without-unsupported-param เดิมขยายให้จับคำว่า "reasoning" ในข้อความ error 400 ด้วย ไม่ใช่แค่ "thinking"
+- `aiSmoke.ts` พิมพ์ HTTP status + 300 ตัวอักษรแรกของ error body เมื่อเรียกไม่สำเร็จ เพื่อ debug ง่ายขึ้น
+
+## D045 — Mobile request timeout + AI photo loading state
+
+ปัญหา: `apiRequest` ไม่มี timeout — ถ้า `EXPO_PUBLIC_API_URL` ผิด (เช่น IP เปลี่ยนหลังต่อ Wi-Fi ใหม่) ปุ่ม login/ฟอร์มจะหมุนค้างตลอดไปโดยไม่มีข้อความ
+- `apiRequest` ใช้ `AbortController` timeout ค่าเริ่มต้น 15 วิ; endpoint ที่ส่งรูปหรือรอ AI (assess-photo, สร้าง/แก้ล็อต, avatar, support/donor attachments) ใช้ 45 วิ
+- แยก error code `TIMEOUT` (ยกเลิกเพราะหมดเวลา) ออกจาก `NETWORK` (fetch ล้มเหลวด้วยเหตุอื่น เช่น DNS/connection refused) ข้อความทั้งสองชวนตรวจเครือข่ายหรือที่อยู่ API
+- หน้า login reset สถานะ loading และแสดงข้อความแปลแล้วทุกกรณี error (เดิมใช้ `err.message` ดิบ)
+- `AiPhotoInput` ระหว่างประเมิน: ทับรูปด้วย overlay มืดจาง + ตัวหมุน + นับวินาที; หลัง 20 วิ เปลี่ยนข้อความชวนเลือกความสุกเอง และแตะชิปความสุกระหว่างรอได้เพื่อยกเลิกการรอ (ผลที่มาช้าจะถูกละทิ้ง) ปุ่ม "ลงประกาศ" และชิปความสุก (ก่อน 20 วิ) disable ระหว่างประเมิน
+- `__DEV__` เท่านั้น: `console.warn` ค่า `API_BASE_URL` ตอนแอปเริ่ม เพื่อ debug IP ผิด
+
+## D046 — คำอธิบายล็อตแบบข้อความอิสระ (ป้องกันข้อมูลติดต่อ)
+
+เพิ่ม `harvest_lots.description` (VARCHAR(500) NULL, migration 033) ให้ผู้ขายอธิบายสภาพผลผลิตเพิ่มเติมนอกเหนือจากตำหนิที่ AI ตรวจ (เช่น "ผิวมีรอยเล็กน้อย รสหวาน เหมาะทำน้ำผลไม้")
+- ตรวจด้วย pure function `findContactInfoInDescription` (`server/src/domain/lotDescriptionGuard.ts`) ปฏิเสธเบอร์โทรไทย (มี/ไม่มีขีดหรือเว้นวรรค), URL, อีเมล, LINE ID ("line", "ไลน์", "@id") — ป้องกันไม่ให้หลบกฎ 6.7 (แลกเบอร์/LINE ได้หลังจองเท่านั้น) ผ่านช่องคำอธิบาย
+- field error สองภาษา (th/en) ตาม `Accept-Language`/`lang` เหมือน endpoint อื่น
+- เป็นข้อความที่ผู้ใช้พิมพ์เอง **ไม่แปล** — ส่งผ่านตรงในทุก API (ล็อตของฉัน, ตลาดที่ login, ตลาดสาธารณะ/รายละเอียดล็อตสาธารณะ)
+- มือถือ: ช่องหลายบรรทัด + ตัวนับ x/500 ในฟอร์มลงขาย/แก้ล็อต, แสดงใต้ราคาที่หน้า `/lots/:id`, ตัดสองบรรทัดในการ์ดตลาด

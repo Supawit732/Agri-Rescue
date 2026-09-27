@@ -75,6 +75,7 @@ export async function seed(): Promise<void> {
         ripeness: farmer.lot.ripeness,
         allowDonation: farmer.lot.allowDonation,
         shelfHours: farmer.lot.hoursLeft,
+        description: 'description' in farmer.lot ? farmer.lot.description : null,
         createdAt,
         expiresAt,
       });
@@ -276,6 +277,7 @@ async function upsertLot(
     ripeness: number;
     allowDonation: boolean;
     shelfHours: number;
+    description: string | null;
     createdAt: Date;
     expiresAt: Date;
   },
@@ -309,8 +311,8 @@ async function upsertLot(
        plot_id, crop_id, weight_kg, grade, ripeness, photo_url, allow_donation, donation_audience,
        start_price_per_kg, floor_price_per_kg, sale_mode, donation_opened,
        market_price_snapshot, market_price_is_estimate,
-       predicted_shelf_hours, expires_at, status, created_at
-     ) VALUES (?, ?, ?, ?, ?, NULL, ?, 'verified_org_only', ?, ?, ?, 0, ?, 1, ?, ?, 'open', ?)`,
+       predicted_shelf_hours, expires_at, status, description, created_at
+     ) VALUES (?, ?, ?, ?, ?, NULL, ?, 'verified_org_only', ?, ?, ?, 0, ?, 1, ?, ?, 'open', ?, ?)`,
     [
       lot.plotId,
       lot.cropId,
@@ -324,6 +326,7 @@ async function upsertLot(
       market,
       lot.shelfHours,
       lot.expiresAt,
+      lot.description,
       lot.createdAt,
     ],
   );

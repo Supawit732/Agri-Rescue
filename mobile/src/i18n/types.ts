@@ -281,6 +281,9 @@ export type Messages = {
     minOrder: string;
     minOrderPlaceholder: string;
     gradeSection: string;
+    descriptionLabel: string;
+    descriptionPlaceholder: string;
+    descriptionCounter: string;
     saleMode: string;
     donationAudience: string;
     audienceVerifiedOnly: string;
@@ -1029,6 +1032,10 @@ export type Messages = {
     dropOrClick: string;
     dropHint: string;
     takeForAi: string;
+    assessingOverlayTitle: string;
+    assessingOverlayHint: string;
+    assessingOverlayHintLong: string;
+    assessingOverlaySeconds: string;
   };
   form: {
     attachFile: string;

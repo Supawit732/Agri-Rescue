@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { apiRequest, setUnauthorizedHandler } from '../api/client';
+import { AI_OR_UPLOAD_TIMEOUT_MS, apiRequest, setUnauthorizedHandler } from '../api/client';
 import { clearAppMode, clearToken, loadAppMode, loadToken, saveAppMode, saveToken } from '../api/storage';
 import type {
   AppMode,
@@ -108,6 +108,7 @@ interface Api {
     ai_ripeness?: number | null;
     ai_confidence?: number | null;
     ai_model?: string | null;
+    description?: string | null;
   }) => Promise<unknown>;
   patchLot: (
     id: number,
@@ -125,6 +126,7 @@ interface Api {
       ripeness?: number;
       ai_ripeness?: number | null;
       confirm_ripeness_photo?: boolean;
+      description?: string | null;
     },
   ) => Promise<unknown>;
   getMyLots: () => Promise<MyLot[]>;
@@ -383,12 +385,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
   );
 
   const api = useMemo<Api>(() => {
-    const authed = <T,>(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: string, body?: unknown): Promise<T> =>
-      apiRequest<T>({ method, path, token, body });
+    const authed = <T,>(
+      method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+      path: string,
+      body?: unknown,
+      timeoutMs?: number,
+    ): Promise<T> => apiRequest<T>({ method, path, token, body, timeoutMs });
     return {
       getMe: () => authed<{ user: User }>('GET', '/api/auth/me').then((r) => r.user),
       uploadAvatar: async (input) => {
-        const res = await authed<{ user: User; avatar: string }>('POST', '/api/auth/avatar', input);
+        const res = await authed<{ user: User; avatar: string }>(
+          'POST',
+          '/api/auth/avatar',
+          input,
+          AI_OR_UPLOAD_TIMEOUT_MS,
+        );
         setUser(res.user);
         return res;
       },
@@ -402,9 +413,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
       getPlots: () => authed<{ plots: Plot[] }>('GET', '/api/plots/mine').then((r) => r.plots),
       createPlot: (input) => authed<{ plot: Plot }>('POST', '/api/plots', input).then((r) => r.plot),
       estimate: (input) => authed<EstimateResponse>('POST', '/api/lots/estimate', input),
-      assessPhoto: (input) => authed<AssessPhotoResponse>('POST', '/api/lots/assess-photo', input),
-      createLot: (input) => authed('POST', '/api/lots', input),
-      patchLot: (id, body) => authed('PATCH', `/api/lots/${id}`, body),
+      assessPhoto: (input) =>
+        authed<AssessPhotoResponse>('POST', '/api/lots/assess-photo', input, AI_OR_UPLOAD_TIMEOUT_MS),
+      createLot: (input) => authed('POST', '/api/lots', input, AI_OR_UPLOAD_TIMEOUT_MS),
+      patchLot: (id, body) => authed('PATCH', `/api/lots/${id}`, body, AI_OR_UPLOAD_TIMEOUT_MS),
       getMyLots: () => authed<{ lots: MyLot[] }>('GET', '/api/lots/mine').then((r) => r.lots),
       getMarket: (lat, lng, radiusKm) =>
         authed<{ lots: MarketLot[] }>('GET', `/api/market?lat=${lat}&lng=${lng}&radius_km=${radiusKm}`).then((r) => r.lots),
@@ -505,14 +517,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
         );
       },
       createSupportTicket: (input) =>
-        authed<{ ticket: SupportTicket }>('POST', '/api/support/tickets', input),
+        authed<{ ticket: SupportTicket }>('POST', '/api/support/tickets', input, AI_OR_UPLOAD_TIMEOUT_MS),
       getSupportTicket: (id) =>
         authed<SupportTicketDetail>('GET', `/api/support/tickets/${id}`),
       replySupportTicket: (id, body, attachments) =>
-        authed<{ message: SupportMessage }>('POST', `/api/support/tickets/${id}/messages`, {
-          body,
-          ...(attachments !== undefined ? { attachments } : {}),
-        }),
+        authed<{ message: SupportMessage }>(
+          'POST',
+          `/api/support/tickets/${id}/messages`,
+          {
+            body,
+            ...(attachments !== undefined ? { attachments } : {}),
+          },
+          AI_OR_UPLOAD_TIMEOUT_MS,
+        ),
       updateSupportTicketStatus: (id, status) =>
         authed<{ ticket: SupportTicket }>('PATCH', `/api/support/tickets/${id}`, { status }),
       getOrdersMine: () => authed<{ orders: Order[] }>('GET', '/api/orders/mine').then((r) => r.orders),
@@ -596,7 +613,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
           checklist,
         }),
       addOrgDocuments: async (documents) => {
-        const res = await authed<{ user: User }>('POST', '/api/donors/org-applications/documents', { documents });
+        const res = await authed<{ user: User }>(
+          'POST',
+          '/api/donors/org-applications/documents',
+          { documents },
+          AI_OR_UPLOAD_TIMEOUT_MS,
+        );
         setUser(res.user);
         return { token: token ?? '', user: res.user };
       },

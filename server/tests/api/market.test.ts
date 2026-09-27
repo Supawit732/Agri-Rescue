@@ -129,4 +129,35 @@ describe('market', () => {
     const missing = await request(app).get('/api/market/lots/999999').set(bearer(buyer.token));
     expect(missing.status).toBe(404);
   });
+
+  it('passes the seller-written description through to buyer market views', async () => {
+    const farmer = await registerUser(app, { role: 'farmer' });
+    const buyer = await registerUser(app, {
+      role: 'buyer',
+      buyer_type: 'vendor',
+      lat: 13.662,
+      lng: 100.611,
+    });
+    const cropId = await insertCrop('มะม่วง', 5, 40);
+    const plotId = await insertPlot(farmer.user.id, 13.662, 100.611, 'แปลงคำอธิบาย');
+    const lotId = await insertLot({
+      plotId,
+      cropId,
+      expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+      description: 'ผิวมีรอยเล็กน้อย รสหวาน เหมาะทำน้ำผลไม้',
+    });
+
+    const list = await request(app)
+      .get('/api/market')
+      .query({ lat: 13.662, lng: 100.611, radius_km: 15 })
+      .set(bearer(buyer.token));
+    const lot = list.body.lots.find((entry: { id: number }) => entry.id === lotId);
+    expect(lot.description).toBe('ผิวมีรอยเล็กน้อย รสหวาน เหมาะทำน้ำผลไม้');
+
+    const detail = await request(app)
+      .get(`/api/market/lots/${lotId}`)
+      .query({ lat: 13.662, lng: 100.611 })
+      .set(bearer(buyer.token));
+    expect(detail.body.lot.description).toBe('ผิวมีรอยเล็กน้อย รสหวาน เหมาะทำน้ำผลไม้');
+  });
 });

@@ -116,6 +116,7 @@ export function ChipGroup({
   error,
   multi = false,
   fieldRef,
+  disabled = false,
 }: {
   label: string;
   name: string;
@@ -125,6 +126,7 @@ export function ChipGroup({
   error?: string | null;
   multi?: boolean;
   fieldRef?: (name: string, y: number) => void;
+  disabled?: boolean;
 }): React.ReactElement {
   const hasError = error !== null && error !== undefined && error !== '';
   const selected = new Set(Array.isArray(value) ? value : value !== null ? [value] : []);
@@ -142,6 +144,7 @@ export function ChipGroup({
               key={opt.key}
               label={opt.label}
               selected={isOn}
+              disabled={disabled}
               onPress={() => {
                 if (multi) {
                   const next = new Set(selected);

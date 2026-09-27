@@ -32,6 +32,7 @@ interface MarketRow extends RowDataPacket {
   allow_donation: number;
   donation_audience: 'verified_org_only' | 'all_donors';
   photo_url: string | null;
+  description: string | null;
   start_price_per_kg: number | null;
   floor_price_per_kg: number | null;
   sale_mode: string;
@@ -53,7 +54,7 @@ interface MarketRow extends RowDataPacket {
 }
 
 const MARKET_LOT_SELECT = `SELECT h.id, h.weight_kg, h.split_allowed, h.min_order_kg, h.order_step_kg,
-              h.grade, h.ripeness, h.allow_donation, h.donation_audience, h.photo_url,
+              h.grade, h.ripeness, h.allow_donation, h.donation_audience, h.photo_url, h.description,
               h.start_price_per_kg, h.floor_price_per_kg, h.sale_mode, h.donation_opened, h.expires_at,
               c.name_th AS crop_name_th, c.name_en AS crop_name_en, c.status AS crop_status, c.base_shelf_days,
               p.lat, p.lng, p.name AS plot_name, p.area_rai, p.subdistrict_th, p.district_th,
@@ -81,6 +82,7 @@ function presentBuyerLot(
   plot_name: string;
   area_rai: number;
   photo_url: string | null;
+  description: string | null;
   weight_kg: number;
   remaining_kg: number;
   split_allowed: boolean;
@@ -137,6 +139,7 @@ function presentBuyerLot(
     plot_name: row.plot_name,
     area_rai: Number(row.area_rai),
     photo_url: row.photo_url,
+    description: row.description,
     weight_kg: weightKg,
     remaining_kg: remaining,
     split_allowed: Number(row.split_allowed) === 1,

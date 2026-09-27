@@ -6,7 +6,7 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { ApiError } from '../api/client';
 import { AiPhotoInput } from '../components/AiPhotoInput';
-import { ChipGroup, useFieldScroll } from '../components/form';
+import { ChipGroup, FormField, useFieldScroll } from '../components/form';
 import {
   Badge,
   Body,
@@ -366,6 +366,7 @@ function NewLotForm({
     editingLot !== null ? 'user' : null,
   );
   const [grade, setGrade] = useState<Grade>(editingLot?.grade ?? 'substandard');
+  const [description, setDescription] = useState(editingLot?.description ?? '');
   const [saleMode, setSaleMode] = useState<SaleMode>(editingLot?.sale_mode ?? 'sell');
   const [donationAudience, setDonationAudience] = useState<DonationAudience>(
     editingLot?.donation_audience ?? 'verified_org_only',
@@ -395,6 +396,8 @@ function NewLotForm({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [assessing, setAssessing] = useState(false);
+  const [assessElapsedSec, setAssessElapsedSec] = useState(0);
+  const assessRequestIdRef = useRef(0);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [aiResult, setAiResult] = useState<
     Extract<AssessPhotoResponse, { available: true; subject_match: true }> | null
@@ -433,6 +436,16 @@ function NewLotForm({
   );
 
   const plot = useMemo(() => plots.find((entry) => entry.id === plotId), [plots, plotId]);
+
+  useEffect(() => {
+    if (!assessing) {
+      return;
+    }
+    const timer = setInterval(() => {
+      setAssessElapsedSec((prev) => prev + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [assessing]);
 
   useEffect(() => {
     primedDirty.current = false;
@@ -636,8 +649,17 @@ function NewLotForm({
     return { base64: result.base64, mime: 'image/jpeg' };
   };
 
+  /** A ripeness tap after a long wait cancels the pending assessment; its result is then ignored. */
+  const cancelAssessment = (): void => {
+    assessRequestIdRef.current += 1;
+    setAssessing(false);
+    setAssessElapsedSec(0);
+  };
+
   const runAssessment = async (uri: string, width: number, height: number): Promise<void> => {
+    const requestId = (assessRequestIdRef.current += 1);
     setAssessing(true);
+    setAssessElapsedSec(0);
     setAiMessage(null);
     setPhotoPreview(uri);
     const selected = crops.find((entry) => entry.id === cropId);
@@ -649,6 +671,9 @@ function NewLotForm({
         image_base64: prepared.base64,
         mime: prepared.mime,
       });
+      if (assessRequestIdRef.current !== requestId) {
+        return;
+      }
       if (!result.available) {
         setAiResult(null);
         setAiEdited(false);
@@ -669,6 +694,9 @@ function NewLotForm({
         setAiMessage(null);
       }
     } catch (err) {
+      if (assessRequestIdRef.current !== requestId) {
+        return;
+      }
       setAiResult(null);
       setAiEdited(false);
       setAiMessage(
@@ -677,7 +705,9 @@ function NewLotForm({
           : t.sell.aiFailedPickManual,
       );
     } finally {
-      setAssessing(false);
+      if (assessRequestIdRef.current === requestId) {
+        setAssessing(false);
+      }
     }
   };
 
@@ -789,6 +819,7 @@ function NewLotForm({
         split_allowed: splitAllowed,
         min_order_kg: minOrderNum,
       };
+      const descriptionValue = description.trim() === '' ? null : description.trim();
       if (isEditing && editingLot !== null) {
         const loweringRipeness = ripeness !== null && ripeness < editingLot.ripeness;
         await api.patchLot(editingLot.id, {
@@ -799,6 +830,7 @@ function NewLotForm({
           donation_audience: audience,
           ...priceFields,
           ...splitFields,
+          description: descriptionValue,
           ...(aiResult !== null ? { ai_ripeness: aiResult.ripeness } : {}),
           ...(aiResult?.photo_url !== undefined ? { photo_url: aiResult.photo_url } : {}),
           ...(loweringRipeness ? { confirm_ripeness_photo: aiResult !== null } : {}),
@@ -814,6 +846,7 @@ function NewLotForm({
           donation_audience: audience,
           ...priceFields,
           ...splitFields,
+          description: descriptionValue,
           photo_url: aiResult?.photo_url ?? null,
           ai_ripeness: aiResult?.ripeness ?? null,
           ai_confidence: aiResult?.confidence ?? null,
@@ -1179,8 +1212,12 @@ function NewLotForm({
         name="ripeness"
         options={t.ripenessLabels.map((label, index) => ({ key: String(index), label }))}
         value={ripeness === null ? null : String(ripeness)}
+        disabled={assessing && assessElapsedSec < 20}
         onChange={(next) => {
           const value = Number(Array.isArray(next) ? next[0] : next);
+          if (assessing) {
+            cancelAssessment();
+          }
           applyRipeness(value, false);
           setFieldErrors((prev) => {
             const cleared = { ...prev };
@@ -1193,6 +1230,7 @@ function NewLotForm({
       <AiPhotoInput
         previewUri={photoPreview}
         assessing={assessing}
+        assessElapsedSec={assessElapsedSec}
         disabled={cropId === 0}
         onPickNative={pickPhoto}
         onChangePress={pickPhoto}
@@ -1286,6 +1324,21 @@ function NewLotForm({
           />
         ))}
       </View>
+
+      <FormField
+        label={t.sell.descriptionLabel}
+        name="description"
+        value={description}
+        onChangeText={(text) => setDescription(text.slice(0, 500))}
+        placeholder={t.sell.descriptionPlaceholder}
+        multiline
+        numberOfLines={3}
+        maxLength={500}
+        style={styles.descriptionInput}
+      />
+      <Text style={styles.descriptionCounter}>
+        {formatTemplate(t.sell.descriptionCounter, { n: description.length, max: 500 })}
+      </Text>
 
       <ChipGroup
         label={t.sell.saleMode}
@@ -1461,7 +1514,7 @@ function NewLotForm({
           void onSubmit();
         }}
         loading={submitting}
-        disabled={!(weightNum > 0) || ripeness === null}
+        disabled={!(weightNum > 0) || ripeness === null || assessing}
       />
       {isEditing ? (
         <SecondaryButton label={t.sell.cancelEdit} block onPress={onCancelEdit} />
@@ -1649,6 +1702,8 @@ const styles = StyleSheet.create({
   editHint: { color: C.turmeric, fontWeight: '700', marginBottom: 8 },
   aiWarn: { color: C.turmeric, marginBottom: 8, marginTop: 4 },
   aiLine: { color: C.ink, marginTop: 6 },
+  descriptionInput: { height: 84, alignItems: 'flex-start', paddingTop: 12 },
+  descriptionCounter: { color: C.mute, fontSize: 12, textAlign: 'right', marginTop: -4, marginBottom: 8 },
   priceLockedHint: {
     color: C.ink,
     backgroundColor: C.leafSoft,

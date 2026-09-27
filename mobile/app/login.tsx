@@ -14,7 +14,7 @@ import { C, fonts, radius } from '../src/theme';
 
 export default function LoginScreen(): React.ReactElement {
   const { login } = useAuth();
-  const { t, locale, setLocale } = useI18n();
+  const { t, locale, setLocale, translateError } = useI18n();
   const router = useRouter();
   const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
   const [identity, setIdentity] = useState('');
@@ -77,7 +77,7 @@ export default function LoginScreen(): React.ReactElement {
         if (err.fields !== undefined && Object.keys(err.fields).length > 0) {
           scrollToField(Object.keys(err.fields)[0] ?? null);
         } else {
-          setFormError(err.message);
+          setFormError(translateError(err.code, err.message));
         }
       } else {
         setFormError(t.login.failed);

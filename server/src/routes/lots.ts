@@ -3,6 +3,7 @@ import type { PoolConnection, ResultSetHeader, RowDataPacket } from 'mysql2/prom
 import { z } from 'zod';
 import { assessRipenessFromPhoto, loadVisionConfig } from '../ai/vision';
 import { pool } from '../db/pool';
+import { findContactInfoInDescription } from '../domain/lotDescriptionGuard';
 import { haversineKm } from '../domain/geo';
 import { remainingLotKg, validateLotWeightPatch } from '../domain/lotInventory';
 import { assertLotTransition, type LotStatus } from '../domain/lotStateMachine';
@@ -20,6 +21,7 @@ import {
 import { predictShelfHours } from '../domain/shelfLife';
 import { asyncHandler } from '../http/asyncHandler';
 import { HttpError } from '../http/errors';
+import { requestLocale } from '../http/locale';
 import { requireAuth, requireCapability } from '../middleware/auth';
 import { sumReservedQuantityKg } from '../orders/lotInventoryService';
 import { defaultLotPrices, resolveMarketPrice } from '../pricing/referencePrices';
@@ -36,6 +38,12 @@ async function insertLotPhoto(connection: PoolConnection, lotId: number, photoUr
 export const lotsRouter = Router();
 
 const gradeSchema = z.enum(['normal', 'substandard']);
+const descriptionSchema = z
+  .string()
+  .max(500)
+  .nullable()
+  .optional()
+  .transform((value) => (value === undefined ? undefined : value === null ? null : value.trim() === '' ? null : value.trim()));
 const saleModeSchema = z.enum(['sell', 'donate', 'sell_then_donate']);
 const donationAudienceSchema = z.enum(['verified_org_only', 'all_donors']);
 
@@ -72,6 +80,7 @@ const createSchema = z.object({
   ai_ripeness: z.number().int().min(0).max(4).nullable().optional(),
   ai_confidence: z.number().min(0).max(1).nullable().optional(),
   ai_model: z.string().max(128).nullable().optional(),
+  description: descriptionSchema,
 });
 
 const patchSchema = z.object({
@@ -88,7 +97,23 @@ const patchSchema = z.object({
   ripeness: z.number().int().min(0).max(4).optional(),
   ai_ripeness: z.number().int().min(0).max(4).optional(),
   confirm_ripeness_photo: z.boolean().optional(),
+  description: descriptionSchema,
 });
+
+const DESCRIPTION_CONTACT_INFO_MESSAGE = {
+  th: 'ห้ามใส่เบอร์โทร ลิงก์ หรือ LINE ในคำอธิบาย ติดต่อกันได้หลังจอง',
+  en: 'Do not include phone numbers, links, or LINE in the description — contact info can be shared after booking.',
+} as const;
+
+function assertNoContactInfo(description: string | null | undefined, locale: 'th' | 'en'): void {
+  if (description === null || description === undefined) {
+    return;
+  }
+  if (findContactInfoInDescription(description) !== null) {
+    const message = DESCRIPTION_CONTACT_INFO_MESSAGE[locale];
+    throw new HttpError(400, 'VALIDATION', message, { description: message });
+  }
+}
 
 interface CropRow extends RowDataPacket {
   id: number;
@@ -110,6 +135,7 @@ interface OwnedLotRow extends RowDataPacket {
   grade: ProduceGrade;
   ripeness: number;
   photo_url: string | null;
+  description: string | null;
   allow_donation: number;
   donation_audience: 'verified_org_only' | 'all_donors';
   start_price_per_kg: number | null;
@@ -231,6 +257,8 @@ lotsRouter.post(
   '/',
   asyncHandler(async (req, res) => {
     const body = createSchema.parse(req.body);
+    const locale = requestLocale(req.headers['accept-language'], req.query.lang);
+    assertNoContactInfo(body.description, locale);
     const farmerId = req.auth?.id ?? 0;
     const plot = await findOwnedPlot(body.plot_id, farmerId);
     const crop = await findCrop(body.crop_id);
@@ -272,8 +300,8 @@ lotsRouter.post(
            grade, ripeness, photo_url, allow_donation, donation_audience,
            start_price_per_kg, floor_price_per_kg, sale_mode, donation_opened,
            market_price_snapshot, market_price_is_estimate, market_price_as_of,
-           predicted_shelf_hours, expires_at, status, created_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 'open', ?)`,
+           predicted_shelf_hours, expires_at, status, description, created_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 'open', ?, ?)`,
         [
           body.plot_id,
           body.crop_id,
@@ -294,6 +322,7 @@ lotsRouter.post(
           market.as_of,
           shelfHours,
           expiresAt,
+          body.description ?? null,
           createdAt,
         ],
       );
@@ -369,6 +398,7 @@ lotsRouter.post(
           grade: body.grade,
           ripeness: body.ripeness,
           photo_url: photoUrl,
+          description: body.description ?? null,
           sale_mode: body.sale_mode,
           allow_donation: allowDonation === 1,
           donation_audience: donationAudience,
@@ -410,6 +440,8 @@ lotsRouter.patch(
   asyncHandler(async (req, res) => {
     const lotId = z.coerce.number().int().positive().parse(req.params.id);
     const body = patchSchema.parse(req.body);
+    const locale = requestLocale(req.headers['accept-language'], req.query.lang);
+    assertNoContactInfo(body.description, locale);
     const farmerId = req.auth?.id ?? 0;
     const connection = await pool.getConnection();
     try {
@@ -473,6 +505,11 @@ lotsRouter.patch(
       if (body.photo_url !== undefined) {
         noteChange('photo_url', lot.photo_url, body.photo_url);
         updates.photo_url = body.photo_url;
+      }
+
+      if (body.description !== undefined) {
+        noteChange('description', lot.description, body.description);
+        updates.description = body.description;
       }
 
       if (body.donation_audience !== undefined) {
@@ -823,7 +860,7 @@ async function findOwnedLotForUpdate(
 ): Promise<OwnedLotRow> {
   const [rows] = await connection.query<OwnedLotRow[]>(
     `SELECT h.id, h.plot_id, h.crop_id, h.weight_kg, h.split_allowed, h.min_order_kg, h.order_step_kg,
-            h.grade, h.ripeness, h.photo_url,
+            h.grade, h.ripeness, h.photo_url, h.description,
             h.allow_donation, h.donation_audience, h.start_price_per_kg, h.floor_price_per_kg,
             h.sale_mode, h.donation_opened, h.market_price_snapshot, h.market_price_is_estimate,
             h.market_price_as_of, h.predicted_shelf_hours, h.expires_at, h.status, h.deleted_at,
@@ -853,6 +890,7 @@ interface MineLotRow extends RowDataPacket {
   grade: ProduceGrade;
   ripeness: number;
   photo_url: string | null;
+  description: string | null;
   allow_donation: number;
   donation_audience: string;
   start_price_per_kg: number | null;
@@ -872,7 +910,7 @@ interface MineLotRow extends RowDataPacket {
 async function listMine(farmerId: number): Promise<object[]> {
   const [rows] = await pool.query<MineLotRow[]>(
     `SELECT h.id, h.plot_id, h.crop_id, h.weight_kg, h.split_allowed, h.min_order_kg, h.order_step_kg,
-            h.grade, h.ripeness, h.photo_url,
+            h.grade, h.ripeness, h.photo_url, h.description,
             h.allow_donation, h.donation_audience, h.start_price_per_kg, h.floor_price_per_kg,
             h.sale_mode, h.donation_opened, h.predicted_shelf_hours, h.expires_at, h.status, h.created_at,
             c.name_th AS crop_name_th, c.name_en AS crop_name_en, c.base_shelf_days, p.name AS plot_name
@@ -889,7 +927,7 @@ async function listMine(farmerId: number): Promise<object[]> {
 async function presentLot(lotId: number): Promise<object> {
   const [rows] = await pool.query<MineLotRow[]>(
     `SELECT h.id, h.plot_id, h.crop_id, h.weight_kg, h.split_allowed, h.min_order_kg, h.order_step_kg,
-            h.grade, h.ripeness, h.photo_url,
+            h.grade, h.ripeness, h.photo_url, h.description,
             h.allow_donation, h.donation_audience, h.start_price_per_kg, h.floor_price_per_kg,
             h.sale_mode, h.donation_opened, h.predicted_shelf_hours, h.expires_at, h.status, h.created_at,
             c.name_th AS crop_name_th, c.name_en AS crop_name_en, c.base_shelf_days, p.name AS plot_name
@@ -948,6 +986,7 @@ async function mapMineLots(rows: MineLotRow[]): Promise<object[]> {
       grade: row.grade,
       ripeness: Number(row.ripeness),
       photo_url: row.photo_url,
+      description: row.description,
       sale_mode: saleMode,
       allow_donation: lotAcceptsDonation(saleMode, row.donation_opened),
       donation_audience: row.donation_audience,

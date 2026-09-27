@@ -263,6 +263,7 @@ export interface MyLot {
   grade: Grade;
   ripeness: number;
   photo_url: string | null;
+  description: string | null;
   sale_mode: SaleMode;
   allow_donation: number | boolean;
   donation_audience?: DonationAudience;
@@ -326,6 +327,7 @@ export interface MarketLot {
   can_request_donation?: boolean;
   reason?: string | null;
   crop_pending?: boolean;
+  description?: string | null;
 }
 
 export interface DitCropRefPrice {

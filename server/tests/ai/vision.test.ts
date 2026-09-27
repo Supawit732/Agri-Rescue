@@ -1,5 +1,5 @@
 import {
-  AI_VISION_TIMEOUT_MS,
+  DEFAULT_AI_VISION_TIMEOUT_MS,
   assessRipenessFromPhoto,
   extractJsonObject,
   loadVisionConfig,
@@ -20,6 +20,14 @@ const testConfig: VisionConfig = {
   baseUrl: 'https://vision.test/v1',
   apiKey: 'test-key',
   model: 'test-model',
+  timeoutMs: DEFAULT_AI_VISION_TIMEOUT_MS,
+};
+
+const openRouterConfig: VisionConfig = {
+  baseUrl: 'https://openrouter.ai/api/v1',
+  apiKey: 'test-key',
+  model: 'qwen/qwen3.8-flash',
+  timeoutMs: DEFAULT_AI_VISION_TIMEOUT_MS,
 };
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -47,7 +55,30 @@ describe('AI vision client', () => {
       baseUrl: 'https://opencode.ai/zen/go/v1',
       apiKey: '',
       model: 'mimo-v2.6-flash',
+      timeoutMs: DEFAULT_AI_VISION_TIMEOUT_MS,
     });
+  });
+
+  it('loads AI_VISION_TIMEOUT_MS from env when set to a valid positive integer', () => {
+    expect(
+      loadVisionConfig({
+        AI_VISION_BASE_URL: '',
+        AI_VISION_API_KEY: '',
+        AI_VISION_MODEL: '',
+        AI_VISION_TIMEOUT_MS: '45000',
+      }),
+    ).toMatchObject({ timeoutMs: 45000 });
+  });
+
+  it('falls back to the default timeout when AI_VISION_TIMEOUT_MS is invalid', () => {
+    expect(
+      loadVisionConfig({
+        AI_VISION_BASE_URL: '',
+        AI_VISION_API_KEY: '',
+        AI_VISION_MODEL: '',
+        AI_VISION_TIMEOUT_MS: 'not-a-number',
+      }),
+    ).toMatchObject({ timeoutMs: DEFAULT_AI_VISION_TIMEOUT_MS });
   });
 
   it('extracts JSON from a fenced code block', () => {
@@ -176,7 +207,7 @@ describe('AI vision client', () => {
         config: testConfig,
         fetchImpl: fetchImpl as unknown as typeof fetch,
       });
-      await jest.advanceTimersByTimeAsync(AI_VISION_TIMEOUT_MS);
+      await jest.advanceTimersByTimeAsync(testConfig.timeoutMs);
       await expect(pending).resolves.toEqual({ available: false, reason: 'หมดเวลารอประเมินภาพ' });
     } finally {
       jest.useRealTimers();
@@ -217,6 +248,83 @@ describe('AI vision client', () => {
       note_en: low.note_en,
       low_confidence: true,
       model: 'test-model',
+    });
+  });
+
+  it('sends OpenCode-style `thinking` disable field for non-OpenRouter hosts', async () => {
+    const fetchImpl = jest.fn(async () => jsonResponse(completionWithContent(JSON.stringify(sampleAssessment))));
+    await assessRipenessFromPhoto({
+      cropNameTh: 'มะม่วง',
+      imageBase64: Buffer.from('img').toString('base64'),
+      mime: 'image/jpeg',
+      config: testConfig,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    const call = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    const payload = JSON.parse(String(call[1].body)) as { thinking?: unknown; reasoning?: unknown };
+    expect(payload.thinking).toEqual({ type: 'disabled' });
+    expect(payload.reasoning).toBeUndefined();
+  });
+
+  it('sends OpenRouter-style `reasoning` disable field for an openrouter.ai base URL', async () => {
+    const fetchImpl = jest.fn(async () => jsonResponse(completionWithContent(JSON.stringify(sampleAssessment))));
+    await assessRipenessFromPhoto({
+      cropNameTh: 'มะม่วง',
+      imageBase64: Buffer.from('img').toString('base64'),
+      mime: 'image/jpeg',
+      config: openRouterConfig,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    const call = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    const payload = JSON.parse(String(call[1].body)) as { thinking?: unknown; reasoning?: unknown };
+    expect(payload.reasoning).toEqual({ enabled: false });
+    expect(payload.thinking).toBeUndefined();
+  });
+
+  it('retries dropping `reasoning` after a 400 that mentions it on an OpenRouter host', async () => {
+    const fetchImpl = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        text: async () => 'invalid parameter: reasoning',
+        json: async () => ({}),
+      } as Response)
+      .mockResolvedValueOnce(jsonResponse(completionWithContent(JSON.stringify(sampleAssessment))));
+
+    const result = await assessRipenessFromPhoto({
+      cropNameTh: 'มะม่วง',
+      imageBase64: Buffer.from('img').toString('base64'),
+      mime: 'image/jpeg',
+      config: openRouterConfig,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    expect(result.available).toBe(true);
+    const secondCall = fetchImpl.mock.calls[1] as unknown as [string, RequestInit];
+    const secondPayload = JSON.parse(String(secondCall[1].body)) as { reasoning?: unknown };
+    expect(secondPayload.reasoning).toBeUndefined();
+  });
+
+  it('returns HTTP status and a body preview on a non-OK response', async () => {
+    const longBody = 'x'.repeat(400);
+    const fetchImpl = jest.fn(async () => ({
+      ok: false,
+      status: 502,
+      text: async () => longBody,
+      json: async () => ({}),
+    } as Response));
+    const result = await assessRipenessFromPhoto({
+      cropNameTh: 'มะม่วง',
+      imageBase64: Buffer.from('img').toString('base64'),
+      mime: 'image/jpeg',
+      config: testConfig,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    expect(result).toEqual({
+      available: false,
+      reason: 'บริการประเมินภาพตอบ 502',
+      httpStatus: 502,
+      bodyPreview: longBody.slice(0, 300),
     });
   });
 

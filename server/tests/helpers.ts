@@ -141,6 +141,7 @@ export async function insertLot(input: {
   saleMode?: 'sell' | 'donate' | 'sell_then_donate';
   startPricePerKg?: number | null;
   floorPricePerKg?: number | null;
+  description?: string | null;
 }): Promise<number> {
   const [cropRows] = await pool.query<RowDataPacket[]>(
     'SELECT market_price_per_kg FROM crops WHERE id = ?',
@@ -173,8 +174,8 @@ export async function insertLot(input: {
        grade, ripeness, allow_donation, donation_audience,
        start_price_per_kg, floor_price_per_kg, sale_mode, donation_opened,
        market_price_snapshot, market_price_is_estimate,
-       predicted_shelf_hours, expires_at, status
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, 'open')`,
+       predicted_shelf_hours, expires_at, status, description
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, 'open', ?)`,
     [
       input.plotId,
       input.cropId,
@@ -193,6 +194,7 @@ export async function insertLot(input: {
       market,
       61,
       input.expiresAt,
+      input.description ?? null,
     ],
   );
   return result.insertId;
