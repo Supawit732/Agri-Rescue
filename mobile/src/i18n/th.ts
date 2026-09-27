@@ -1026,6 +1026,10 @@ const th: Messages = {
     dropOrClick: 'ลากรูปมาวาง หรือคลิกเพื่อเลือกรูป',
     dropHint: 'JPEG / PNG / WebP ไม่เกิน 10MB · วางด้วย Cmd/Ctrl+V ได้',
     takeForAi: 'ถ่ายรูปให้ AI ประเมิน',
+    assessingOverlayTitle: 'AI กำลังประเมินรูป…',
+    assessingOverlayHint: 'อาจใช้เวลา 10–20 วินาที',
+    assessingOverlayHintLong: 'ใช้เวลานานกว่าปกติ… หรือเลือกความสุกเองได้เลย',
+    assessingOverlaySeconds: '{n} วินาที',
   },
   form: {
     attachFile: '+ แนบไฟล์',
@@ -1118,7 +1122,7 @@ const th: Messages = {
     fragmentMinutes: '{minutes} นาที',
   },
   errors: {
-    NETWORK: 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาลองใหม่',
+    NETWORK: 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาตรวจสอบเครือข่ายหรือที่อยู่ API แล้วลองใหม่',
     UNAUTHORIZED: 'กรุณาเข้าสู่ระบบ',
     VALIDATION: 'ข้อมูลไม่ถูกต้อง',
     NOT_FOUND: 'ไม่พบข้อมูล',
@@ -1139,7 +1143,7 @@ const th: Messages = {
     ERROR: 'เกิดข้อผิดพลาด',
     HAS_ORDERS: 'ลบไม่ได้เพราะมีคำสั่งซื้อแล้ว',
     RATE_LIMIT: 'คำขอมากเกินไป กรุณาลองใหม่ภายหลัง',
-    TIMEOUT: 'หมดเวลา กรุณาลองใหม่',
+    TIMEOUT: 'รอนานเกินไป เซิร์ฟเวอร์ไม่ตอบสนอง กรุณาตรวจสอบเครือข่ายหรือที่อยู่ API แล้วลองใหม่',
     BAD_REQUEST: 'คำขอไม่ถูกต้อง',
     UNPROCESSABLE: 'ไม่สามารถดำเนินการได้',
     AI_UNAVAILABLE: 'ประเมินรูปไม่สำเร็จ กรุณาลองใหม่',

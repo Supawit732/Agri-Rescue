@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Image, Platform, StyleSheet, Text, View } from 'react-native';
-import { useI18n } from '../i18n';
+import { ActivityIndicator, Image, Platform, StyleSheet, Text, View } from 'react-native';
+import { formatTemplate, useI18n } from '../i18n';
 import { C } from '../theme';
 import { SecondaryButton } from './ui';
+
+const LONG_WAIT_SECONDS = 20;
 
 const MAX_BYTES_BEFORE_RESIZE = 10 * 1024 * 1024;
 const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp']);
@@ -43,6 +45,7 @@ async function fileToPickedImage(file: File): Promise<PickedImage> {
 export function AiPhotoInput({
   previewUri,
   assessing,
+  assessElapsedSec = 0,
   disabled,
   onPickNative,
   onImageReady,
@@ -52,6 +55,8 @@ export function AiPhotoInput({
 }: {
   previewUri: string | null;
   assessing: boolean;
+  /** Seconds elapsed since the current assessment started; drives the overlay's long-wait hint. */
+  assessElapsedSec?: number;
   disabled: boolean;
   onPickNative: () => void;
   onImageReady: (image: PickedImage) => void;
@@ -126,11 +131,27 @@ export function AiPhotoInput({
   if (previewUri !== null) {
     return (
       <View style={styles.previewBlock}>
-        <Image
-          source={{ uri: previewUri }}
-          style={styles.photoPreview}
-          accessibilityLabel={t.aiPhoto.photoA11y}
-        />
+        <View>
+          <Image
+            source={{ uri: previewUri }}
+            style={[styles.photoPreview, assessing ? styles.photoPreviewDimmed : null]}
+            accessibilityLabel={t.aiPhoto.photoA11y}
+          />
+          {assessing ? (
+            <View style={styles.assessOverlay} accessibilityRole="progressbar">
+              <ActivityIndicator size="large" color={C.white} />
+              <Text style={styles.assessOverlayTitle}>{t.aiPhoto.assessingOverlayTitle}</Text>
+              <Text style={styles.assessOverlayHint}>
+                {assessElapsedSec >= LONG_WAIT_SECONDS
+                  ? t.aiPhoto.assessingOverlayHintLong
+                  : t.aiPhoto.assessingOverlayHint}
+              </Text>
+              <Text style={styles.assessOverlaySeconds}>
+                {formatTemplate(t.aiPhoto.assessingOverlaySeconds, { n: assessElapsedSec })}
+              </Text>
+            </View>
+          ) : null}
+        </View>
         <View style={styles.previewActions}>
           <View style={styles.actionSlot}>
             <SecondaryButton
@@ -256,6 +277,23 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     backgroundColor: C.line,
   },
+  photoPreviewDimmed: { opacity: 0.35 },
+  assessOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 8,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingHorizontal: 16,
+  },
+  assessOverlayTitle: { color: C.white, fontWeight: '700', fontSize: 14, textAlign: 'center', marginTop: 8 },
+  assessOverlayHint: { color: C.white, fontSize: 12, textAlign: 'center' },
+  assessOverlaySeconds: { color: C.white, fontSize: 12, fontWeight: '600', textAlign: 'center' },
   previewActions: { flexDirection: 'row', gap: 8 },
   actionSlot: { flex: 1 },
 });

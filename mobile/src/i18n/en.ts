@@ -1026,6 +1026,10 @@ const en: Messages = {
     dropOrClick: 'Drop an image here, or click to choose',
     dropHint: 'JPEG / PNG / WebP up to 10MB · paste with Cmd/Ctrl+V',
     takeForAi: 'Take a photo for AI assessment',
+    assessingOverlayTitle: 'AI is assessing the photo…',
+    assessingOverlayHint: 'This can take 10–20 seconds',
+    assessingOverlayHintLong: 'Taking longer than usual… or pick the ripeness yourself',
+    assessingOverlaySeconds: '{n}s',
   },
   form: {
     attachFile: '+ Attach file',
@@ -1118,7 +1122,7 @@ const en: Messages = {
     fragmentMinutes: '{minutes}m',
   },
   errors: {
-    NETWORK: 'Could not reach the server. Please try again.',
+    NETWORK: 'Could not reach the server. Please check your network or API address and try again.',
     UNAUTHORIZED: 'Please log in',
     VALIDATION: 'Invalid data',
     NOT_FOUND: 'Not found',
@@ -1139,7 +1143,7 @@ const en: Messages = {
     ERROR: 'An error occurred',
     HAS_ORDERS: 'Cannot delete — this lot already has orders',
     RATE_LIMIT: 'Too many requests. Please try again later.',
-    TIMEOUT: 'Timed out. Please try again.',
+    TIMEOUT: 'The request took too long and the server did not respond. Please check your network or API address and try again.',
     BAD_REQUEST: 'Bad request',
     UNPROCESSABLE: 'Could not process the request',
     AI_UNAVAILABLE: 'Photo assessment failed. Please try again.',

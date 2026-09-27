@@ -395,6 +395,8 @@ function NewLotForm({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [assessing, setAssessing] = useState(false);
+  const [assessElapsedSec, setAssessElapsedSec] = useState(0);
+  const assessRequestIdRef = useRef(0);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [aiResult, setAiResult] = useState<
     Extract<AssessPhotoResponse, { available: true; subject_match: true }> | null
@@ -433,6 +435,16 @@ function NewLotForm({
   );
 
   const plot = useMemo(() => plots.find((entry) => entry.id === plotId), [plots, plotId]);
+
+  useEffect(() => {
+    if (!assessing) {
+      return;
+    }
+    const timer = setInterval(() => {
+      setAssessElapsedSec((prev) => prev + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [assessing]);
 
   useEffect(() => {
     primedDirty.current = false;
@@ -636,8 +648,17 @@ function NewLotForm({
     return { base64: result.base64, mime: 'image/jpeg' };
   };
 
+  /** A ripeness tap after a long wait cancels the pending assessment; its result is then ignored. */
+  const cancelAssessment = (): void => {
+    assessRequestIdRef.current += 1;
+    setAssessing(false);
+    setAssessElapsedSec(0);
+  };
+
   const runAssessment = async (uri: string, width: number, height: number): Promise<void> => {
+    const requestId = (assessRequestIdRef.current += 1);
     setAssessing(true);
+    setAssessElapsedSec(0);
     setAiMessage(null);
     setPhotoPreview(uri);
     const selected = crops.find((entry) => entry.id === cropId);
@@ -649,6 +670,9 @@ function NewLotForm({
         image_base64: prepared.base64,
         mime: prepared.mime,
       });
+      if (assessRequestIdRef.current !== requestId) {
+        return;
+      }
       if (!result.available) {
         setAiResult(null);
         setAiEdited(false);
@@ -669,6 +693,9 @@ function NewLotForm({
         setAiMessage(null);
       }
     } catch (err) {
+      if (assessRequestIdRef.current !== requestId) {
+        return;
+      }
       setAiResult(null);
       setAiEdited(false);
       setAiMessage(
@@ -677,7 +704,9 @@ function NewLotForm({
           : t.sell.aiFailedPickManual,
       );
     } finally {
-      setAssessing(false);
+      if (assessRequestIdRef.current === requestId) {
+        setAssessing(false);
+      }
     }
   };
 
@@ -1179,8 +1208,12 @@ function NewLotForm({
         name="ripeness"
         options={t.ripenessLabels.map((label, index) => ({ key: String(index), label }))}
         value={ripeness === null ? null : String(ripeness)}
+        disabled={assessing && assessElapsedSec < 20}
         onChange={(next) => {
           const value = Number(Array.isArray(next) ? next[0] : next);
+          if (assessing) {
+            cancelAssessment();
+          }
           applyRipeness(value, false);
           setFieldErrors((prev) => {
             const cleared = { ...prev };
@@ -1193,6 +1226,7 @@ function NewLotForm({
       <AiPhotoInput
         previewUri={photoPreview}
         assessing={assessing}
+        assessElapsedSec={assessElapsedSec}
         disabled={cropId === 0}
         onPickNative={pickPhoto}
         onChangePress={pickPhoto}
@@ -1461,7 +1495,7 @@ function NewLotForm({
           void onSubmit();
         }}
         loading={submitting}
-        disabled={!(weightNum > 0) || ripeness === null}
+        disabled={!(weightNum > 0) || ripeness === null || assessing}
       />
       {isEditing ? (
         <SecondaryButton label={t.sell.cancelEdit} block onPress={onCancelEdit} />

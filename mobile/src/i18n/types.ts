@@ -1029,6 +1029,10 @@ export type Messages = {
     dropOrClick: string;
     dropHint: string;
     takeForAi: string;
+    assessingOverlayTitle: string;
+    assessingOverlayHint: string;
+    assessingOverlayHintLong: string;
+    assessingOverlaySeconds: string;
   };
   form: {
     attachFile: string;

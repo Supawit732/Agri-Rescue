@@ -227,19 +227,25 @@ export function Chip({
   selected,
   onPress,
   color,
+  disabled,
 }: {
   label: string;
   selected: boolean;
   onPress: () => void;
   color?: string;
+  disabled?: boolean;
 }): React.ReactElement {
   const active = color ?? C.leaf;
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      style={[styles.chip, selected ? { backgroundColor: active, borderColor: active } : null]}
+      accessibilityState={{ selected, disabled: disabled === true }}
+      onPress={disabled === true ? undefined : onPress}
+      style={[
+        styles.chip,
+        selected ? { backgroundColor: active, borderColor: active } : null,
+        disabled === true ? { opacity: 0.5 } : null,
+      ]}
     >
       <Text style={[styles.chipText, selected ? { color: C.white } : null]} numberOfLines={2}>
         {label}
