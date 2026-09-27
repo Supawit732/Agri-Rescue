@@ -24,7 +24,7 @@ export const crops = [
     nameTh: 'มะม่วง',
     nameEn: 'Mango',
     categoryId: 1,
-    baseShelfDays: 5,
+    baseShelfDays: 5, // needs verification — UC Davis/FAO fact sheets describe ripening behavior but no Thai-ambient day count confirmed here
     marketPricePerKg: 45,
     parcelAllowed: true,
     storageTipTh: 'สุกบนชั้นวางจนหอมแล้วค่อยแช่เย็น ถ้าหั่นแล้วเก็บตู้เย็นไม่เกิน 2–3 วัน ให้ผึ่งให้แห้ง',
@@ -40,7 +40,7 @@ export const crops = [
     nameTh: 'กล้วยน้ำว้า',
     nameEn: 'Namwa banana',
     categoryId: 1,
-    baseShelfDays: 4,
+    baseShelfDays: 4, // needs verification
     marketPricePerKg: 25,
     parcelAllowed: false,
     storageTipTh: 'สุกที่อุณหภูมิห้อง แล้วแช่เย็นเพื่อยืดอายุเปลือกได้อีกหลายวัน แยกจากผักที่ไวต่อเอทิลีน',
@@ -56,7 +56,7 @@ export const crops = [
     nameTh: 'มะเขือเทศ',
     nameEn: 'Tomato',
     categoryId: 3,
-    baseShelfDays: 6,
+    baseShelfDays: 6, // needs verification
     marketPricePerKg: 25,
     parcelAllowed: false,
     storageTipTh: 'วางขั้วขึ้นที่อุณหภูมิห้องจนสุก แช่เย็นเฉพาะเมื่อสุกเต็มที่หรือหั่นแล้ว ใช้ภายในไม่กี่วัน',
@@ -71,7 +71,7 @@ export const crops = [
     nameTh: 'ผักบุ้ง',
     nameEn: 'Morning glory',
     categoryId: 2,
-    baseShelfDays: 2,
+    baseShelfDays: 2, // needs verification
     marketPricePerKg: 28,
     parcelAllowed: false,
     storageTipTh: 'ความชื้นสูง ใช้ภายใน 1–2 วัน ล้างก่อนใช้ ทิ้งใบที่เหลืองหรือเละ',
@@ -86,7 +86,7 @@ export const crops = [
     nameTh: 'มะนาว',
     nameEn: 'Lime',
     categoryId: 1,
-    baseShelfDays: 14,
+    baseShelfDays: 14, // needs verification
     marketPricePerKg: 35,
     parcelAllowed: true,
     storageTipTh: 'ที่แห้งเย็น หรือตู้เย็นช่องผักเพื่อยืดอายุ หลีกเลี่ยงความชื้นส่วนเกิน',
@@ -102,7 +102,7 @@ export const crops = [
     nameTh: 'ทุเรียน',
     nameEn: 'Durian',
     categoryId: 1,
-    baseShelfDays: 3,
+    baseShelfDays: 7, // UC Davis Postharvest Research & Extension Center produce fact sheet: mature unripe durian ripens in ~4-6 days at ambient temperature, plus a short ripe window before spoiling — https://postharvest.ucdavis.edu/produce-facts-sheets/durian
     marketPricePerKg: 100,
     parcelAllowed: false,
     storageTipTh: 'เก็บในที่เย็นและอากาศถ่ายเทดี ห่อด้วยพลาสติกให้แน่นก่อนแช่เย็น ใช้ภายใน 1–2 วันหลังเปิด',
@@ -117,7 +117,7 @@ export const crops = [
     nameTh: 'ส้มโอ',
     nameEn: 'Pomelo',
     categoryId: 1,
-    baseShelfDays: 14,
+    baseShelfDays: 14, // needs verification
     marketPricePerKg: 25,
     parcelAllowed: true,
     storageTipTh: 'เก็บที่อุณหภูมิห้องที่เย็นและแห้ง หรือแช่เย็นเพื่อยืดอายุ ไม่ต้องใส่ถุง',
@@ -132,7 +132,7 @@ export const crops = [
     nameTh: 'ลำไย',
     nameEn: 'Longan',
     categoryId: 1,
-    baseShelfDays: 5,
+    baseShelfDays: 5, // needs verification
     marketPricePerKg: 50,
     parcelAllowed: true,
     storageTipTh: 'แช่เย็นในถุงระบายอากาศ ใช้ภายใน 5–7 วัน ล้างก่อนรับประทาน',
@@ -147,7 +147,7 @@ export const crops = [
     nameTh: 'เงาะ',
     nameEn: 'Rambutan',
     categoryId: 1,
-    baseShelfDays: 4,
+    baseShelfDays: 4, // needs verification
     marketPricePerKg: 40,
     parcelAllowed: false,
     storageTipTh: 'แช่เย็นในถุงพลาสติกหลวม ๆ ใช้ภายใน 3–5 วัน ไม่ควรวางกองซ้อนหนัก',
@@ -162,7 +162,7 @@ export const crops = [
     nameTh: 'ฝรั่ง',
     nameEn: 'Guava',
     categoryId: 1,
-    baseShelfDays: 5,
+    baseShelfDays: 5, // needs verification
     marketPricePerKg: 15,
     parcelAllowed: true,
     storageTipTh: 'วางที่อุณหภูมิห้องจนสุก แล้วแช่เย็น ใช้ภายใน 3–5 วัน',
@@ -177,7 +177,7 @@ export const crops = [
     nameTh: 'สับปะรด',
     nameEn: 'Pineapple',
     categoryId: 1,
-    baseShelfDays: 5,
+    baseShelfDays: 5, // needs verification
     marketPricePerKg: 15,
     parcelAllowed: true,
     storageTipTh: 'เก็บที่อุณหภูมิห้อง 2–3 วัน หลังตัดแช่เย็นในภาชนะปิด ใช้ภายใน 3–5 วัน',
@@ -192,7 +192,7 @@ export const crops = [
     nameTh: 'น้อยหน่า',
     nameEn: 'Custard apple',
     categoryId: 1,
-    baseShelfDays: 3,
+    baseShelfDays: 3, // needs verification
     marketPricePerKg: 45,
     parcelAllowed: false,
     storageTipTh: 'สุกที่อุณหภูมิห้อง แล้วแช่เย็นทันทีและใช้ภายใน 1–2 วัน ไม่ควรกดหรือกองซ้อน',
@@ -207,7 +207,7 @@ export const crops = [
     nameTh: 'คะน้า',
     nameEn: 'Chinese kale',
     categoryId: 2,
-    baseShelfDays: 3,
+    baseShelfDays: 3, // needs verification
     marketPricePerKg: 20,
     parcelAllowed: false,
     storageTipTh: 'ห่อด้วยผ้าชื้นหรือกระดาษชำระ แช่เย็น ใช้ภายใน 3–4 วัน ล้างก่อนใช้',
@@ -222,7 +222,7 @@ export const crops = [
     nameTh: 'ผักกาดขาว',
     nameEn: 'Napa cabbage',
     categoryId: 2,
-    baseShelfDays: 7,
+    baseShelfDays: 7, // needs verification
     marketPricePerKg: 15,
     parcelAllowed: false,
     storageTipTh: 'แช่เย็นห่อพลาสติกหลวม ๆ ใช้ภายใน 7–10 วัน ตัดรอยช้ำออกก่อนใช้',
@@ -237,7 +237,7 @@ export const crops = [
     nameTh: 'ผักชี',
     nameEn: 'Coriander (cilantro)',
     categoryId: 2,
-    baseShelfDays: 3,
+    baseShelfDays: 3, // needs verification
     marketPricePerKg: 80,
     parcelAllowed: false,
     storageTipTh: 'ใส่ขวดน้ำเล็กน้อยแล้วแช่เย็น หรือห่อด้วยกระดาษชื้น ใช้ภายใน 3–5 วัน',
@@ -252,7 +252,7 @@ export const crops = [
     nameTh: 'ต้นหอม',
     nameEn: 'Green onion',
     categoryId: 2,
-    baseShelfDays: 4,
+    baseShelfDays: 4, // needs verification
     marketPricePerKg: 55,
     parcelAllowed: false,
     storageTipTh: 'ห่อด้วยกระดาษชำระชื้นแล้วใส่ถุงแช่เย็น ใช้ภายใน 4–5 วัน',
@@ -267,7 +267,7 @@ export const crops = [
     nameTh: 'แตงกวา',
     nameEn: 'Cucumber',
     categoryId: 3,
-    baseShelfDays: 5,
+    baseShelfDays: 5, // needs verification
     marketPricePerKg: 20,
     parcelAllowed: false,
     storageTipTh: 'แช่เย็น ไม่ตัดก่อนเก็บ ใช้ภายใน 5–7 วัน',
@@ -282,7 +282,7 @@ export const crops = [
     nameTh: 'พริก',
     nameEn: 'Chili',
     categoryId: 3,
-    baseShelfDays: 7,
+    baseShelfDays: 7, // needs verification
     marketPricePerKg: 40,
     parcelAllowed: false,
     storageTipTh: 'แช่เย็นในถุงกระดาษหรือภาชนะที่ระบายอากาศได้ ใช้ภายใน 1–2 สัปดาห์',
@@ -297,7 +297,7 @@ export const crops = [
     nameTh: 'มะเขือยาว',
     nameEn: 'Thai eggplant',
     categoryId: 3,
-    baseShelfDays: 5,
+    baseShelfDays: 5, // needs verification
     marketPricePerKg: 20,
     parcelAllowed: false,
     storageTipTh: 'แช่เย็นในถุงพลาสติก ใช้ภายใน 5–7 วัน ตัดส่วนที่ช้ำออกก่อนใช้',
@@ -312,7 +312,7 @@ export const crops = [
     nameTh: 'กะหล่ำปลี',
     nameEn: 'Cabbage',
     categoryId: 2,
-    baseShelfDays: 10,
+    baseShelfDays: 10, // needs verification
     marketPricePerKg: 12,
     parcelAllowed: false,
     storageTipTh: 'แช่เย็น ไม่ตัดก่อนเก็บ ใช้ภายใน 2 สัปดาห์',
@@ -327,7 +327,7 @@ export const crops = [
     nameTh: 'ข้าวโพด',
     nameEn: 'Corn',
     categoryId: 3,
-    baseShelfDays: 2,
+    baseShelfDays: 2, // needs verification
     marketPricePerKg: 10,
     parcelAllowed: false,
     storageTipTh: 'แช่เย็นทันที ไม่ปอกเปลือก ใช้ภายใน 1–2 วันเพื่อรสชาติที่ดีที่สุด',
@@ -342,7 +342,7 @@ export const crops = [
     nameTh: 'ถั่วฝักยาว',
     nameEn: 'Long bean',
     categoryId: 3,
-    baseShelfDays: 3,
+    baseShelfDays: 3, // needs verification
     marketPricePerKg: 30,
     parcelAllowed: false,
     storageTipTh: 'ห่อด้วยผ้าชื้นแช่เย็น ใช้ภายใน 3–4 วัน อย่าล้างก่อนเก็บ',
@@ -357,7 +357,7 @@ export const crops = [
     nameTh: 'ฟักทอง',
     nameEn: 'Pumpkin',
     categoryId: 3,
-    baseShelfDays: 14,
+    baseShelfDays: 14, // needs verification
     marketPricePerKg: 13,
     parcelAllowed: true,
     storageTipTh: 'เก็บที่เย็นแห้งและอากาศถ่ายเทดี หลังตัดแช่เย็นในภาชนะปิด ใช้ภายใน 5 วัน',
@@ -372,7 +372,7 @@ export const crops = [
     nameTh: 'ตะไคร้',
     nameEn: 'Lemongrass',
     categoryId: 4,
-    baseShelfDays: 7,
+    baseShelfDays: 7, // needs verification
     marketPricePerKg: 10,
     parcelAllowed: false,
     storageTipTh: 'แช่เย็นในถุงพลาสติก ใช้ภายใน 1–2 สัปดาห์ หรือแช่แข็งได้นาน 3 เดือน',
@@ -387,7 +387,7 @@ export const crops = [
     nameTh: 'ใบกะเพรา',
     nameEn: 'Holy basil',
     categoryId: 4,
-    baseShelfDays: 3,
+    baseShelfDays: 3, // needs verification
     marketPricePerKg: 30,
     parcelAllowed: false,
     storageTipTh: 'ห่อด้วยกระดาษชำระชื้นแช่เย็น ใช้ภายใน 2–3 วัน',
@@ -402,7 +402,7 @@ export const crops = [
     nameTh: 'ขิง',
     nameEn: 'Ginger',
     categoryId: 4,
-    baseShelfDays: 14,
+    baseShelfDays: 14, // needs verification
     marketPricePerKg: 20,
     parcelAllowed: true,
     storageTipTh: 'เก็บที่แห้งอุณหภูมิห้อง หรือแช่เย็น ใช้ภายใน 2–3 สัปดาห์',
@@ -417,7 +417,7 @@ export const crops = [
     nameTh: 'มันเทศ',
     nameEn: 'Sweet potato',
     categoryId: 5,
-    baseShelfDays: 14,
+    baseShelfDays: 14, // needs verification
     marketPricePerKg: 25,
     parcelAllowed: true,
     storageTipTh: 'เก็บที่เย็นแห้งอากาศถ่ายเท ไม่แช่เย็น ใช้ภายใน 2–4 สัปดาห์',
@@ -432,7 +432,7 @@ export const crops = [
     nameTh: 'หอมแดง',
     nameEn: 'Shallot',
     categoryId: 5,
-    baseShelfDays: 21,
+    baseShelfDays: 21, // needs verification
     marketPricePerKg: 80,
     parcelAllowed: true,
     storageTipTh: 'เก็บที่เย็นแห้งอากาศถ่ายเท ไม่แช่เย็น ใช้ภายใน 3–4 สัปดาห์',
@@ -447,7 +447,7 @@ export const crops = [
     nameTh: 'กระเทียม',
     nameEn: 'Garlic',
     categoryId: 5,
-    baseShelfDays: 21,
+    baseShelfDays: 21, // needs verification
     marketPricePerKg: 65,
     parcelAllowed: true,
     storageTipTh: 'เก็บที่เย็นแห้งอากาศถ่ายเท ไม่แช่เย็น ใช้ภายใน 3–4 สัปดาห์',
@@ -462,7 +462,7 @@ export const crops = [
     nameTh: 'มังคุด',
     nameEn: 'Mangosteen',
     categoryId: 1,
-    baseShelfDays: 7,
+    baseShelfDays: 7, // needs verification
     marketPricePerKg: 40,
     parcelAllowed: true,
     storageTipTh: 'เก็บที่เย็น 10–13°C ห่อด้วยกระดาษ ใช้ภายใน 1 สัปดาห์',
@@ -477,7 +477,7 @@ export const crops = [
     nameTh: 'ลิ้นจี่',
     nameEn: 'Lychee',
     categoryId: 1,
-    baseShelfDays: 5,
+    baseShelfDays: 5, // needs verification
     marketPricePerKg: 70,
     parcelAllowed: true,
     storageTipTh: 'แช่เย็น 2–5°C ใส่ถุงผักสด ใช้ภายใน 3–5 วัน',
