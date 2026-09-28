@@ -125,7 +125,15 @@ export default function SellScreen(): React.ReactElement {
   }, [tabParam]);
 
   const onCreated = useCallback(
-    (summary?: { crop?: string; weight?: string; price?: string }) => {
+    (summary?: {
+      crop?: string;
+      weight?: string;
+      price?: string;
+      photoUrl?: string;
+      saleMode?: string;
+      startPrice?: string;
+      shelfHours?: string;
+    }) => {
       setEditingLot(null);
       setFormDirty(false);
       setRefreshKey((value) => value + 1);
@@ -136,6 +144,10 @@ export default function SellScreen(): React.ReactElement {
           ...(summary?.crop != null ? { crop: summary.crop } : {}),
           ...(summary?.weight != null ? { weight: summary.weight } : {}),
           ...(summary?.price != null ? { price: summary.price } : {}),
+          ...(summary?.photoUrl != null ? { photoUrl: summary.photoUrl } : {}),
+          ...(summary?.saleMode != null ? { saleMode: summary.saleMode } : {}),
+          ...(summary?.startPrice != null ? { startPrice: summary.startPrice } : {}),
+          ...(summary?.shelfHours != null ? { shelfHours: summary.shelfHours } : {}),
         },
       });
     },
@@ -236,7 +248,15 @@ function NewLot({
   api: ReturnType<typeof useAuth>['api'];
   refreshKey: number;
   editingLot: MyLot | null;
-  onCreated: (summary?: { crop?: string; weight?: string; price?: string }) => void;
+  onCreated: (summary?: {
+    crop?: string;
+    weight?: string;
+    price?: string;
+    photoUrl?: string;
+    saleMode?: string;
+    startPrice?: string;
+    shelfHours?: string;
+  }) => void;
   onPlotCreated: () => void;
   onCancelEdit: () => void;
   onDirtyChange: (dirty: boolean) => void;
@@ -365,7 +385,15 @@ function NewLotForm({
   categories: CropCategory[];
   plots: Plot[];
   editingLot: MyLot | null;
-  onCreated: (summary?: { crop?: string; weight?: string; price?: string }) => void;
+  onCreated: (summary?: {
+    crop?: string;
+    weight?: string;
+    price?: string;
+    photoUrl?: string;
+    saleMode?: string;
+    startPrice?: string;
+    shelfHours?: string;
+  }) => void;
   onCancelEdit: () => void;
   onDirtyChange: (dirty: boolean) => void;
 }): React.ReactElement {
@@ -424,6 +452,11 @@ function NewLotForm({
   const [assessElapsedSec, setAssessElapsedSec] = useState(0);
   const assessRequestIdRef = useRef(0);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  // Kept separate from aiResult: the photo is always saved server-side (even when the AI
+  // check is unavailable or reports a subject mismatch), so it must survive a null aiResult.
+  const [uploadedPhotoUrl, setUploadedPhotoUrl] = useState<string | null>(
+    editingLot?.photo_url ?? null,
+  );
   const [aiResult, setAiResult] = useState<
     Extract<AssessPhotoResponse, { available: true; subject_match: true }> | null
   >(null);
@@ -537,12 +570,14 @@ function NewLotForm({
         setAiEdited(false);
         setAiMessage(null);
         setPhotoPreview(mediaUri(editingLot.photo_url));
+        setUploadedPhotoUrl(editingLot.photo_url ?? null);
         setSubmitError(null);
       } else {
         setAiResult(null);
         setAiEdited(false);
         setAiMessage(null);
         setPhotoPreview(null);
+        setUploadedPhotoUrl(null);
         setPricesEdited(false);
         setFloorEdited(false);
         setStartPrice('');
@@ -561,6 +596,7 @@ function NewLotForm({
       // In edit mode: restore original photo if switching back to original crop, else clear on change.
       if (cropId === editingLot.crop_id) {
         setPhotoPreview(mediaUri(editingLot.photo_url));
+        setUploadedPhotoUrl(editingLot.photo_url ?? null);
         setAiResult(null);
         setAiEdited(false);
         setAiMessage(null);
@@ -569,6 +605,7 @@ function NewLotForm({
         setAiEdited(false);
         setAiMessage(null);
         setPhotoPreview(null);
+        setUploadedPhotoUrl(null);
       }
     } else if (!isEditing) {
       // Create mode: clear photo/AI on any crop change.
@@ -576,6 +613,7 @@ function NewLotForm({
       setAiEdited(false);
       setAiMessage(null);
       setPhotoPreview(null);
+      setUploadedPhotoUrl(null);
       setPricesEdited(false);
       setFloorEdited(false);
       setStartPrice('');
@@ -588,7 +626,10 @@ function NewLotForm({
 
   const startNum = Number(startPrice);
   const floorNum = Number(floorPrice);
-  const hasCustomPrices = modeHasPrice(saleMode) && startNum > 0 && floorNum > 0;
+  // Only treat the price fields as a seller override once pricesEdited is true — otherwise a
+  // grade change would re-send the previous grade's auto-seeded price as an "override" for one
+  // debounce cycle, computing price_per_kg from the stale value before it self-corrects.
+  const hasCustomPrices = modeHasPrice(saleMode) && pricesEdited && startNum > 0 && floorNum > 0;
 
   const seedPrices = useCallback((result: EstimateResponse) => {
     setStartPrice(String(result.suggested_start_price_per_kg));
@@ -738,6 +779,8 @@ function NewLotForm({
       if (assessRequestIdRef.current !== requestId) {
         return;
       }
+      // Photo is always saved server-side even when the AI check fails or is unavailable.
+      setUploadedPhotoUrl(result.photo_url);
       if (!result.available) {
         setAiResult(null);
         setAiEdited(false);
@@ -777,6 +820,7 @@ function NewLotForm({
 
   const clearPhoto = (): void => {
     setPhotoPreview(null);
+    setUploadedPhotoUrl(null);
     setAiResult(null);
     setAiEdited(false);
     setAiMessage(null);
@@ -898,8 +942,9 @@ function NewLotForm({
           ...splitFields,
           description: descriptionValue,
           ...(aiResult !== null ? { ai_ripeness: aiResult.ripeness } : {}),
-          ...(aiResult?.photo_url !== undefined ? { photo_url: aiResult.photo_url } : {}),
-          ...(cropChanged && aiResult === null ? { photo_url: null } : {}),
+          ...(uploadedPhotoUrl !== (editingLot.photo_url ?? null)
+            ? { photo_url: uploadedPhotoUrl }
+            : {}),
           ...(loweringRipeness ? { confirm_ripeness_photo: aiResult !== null } : {}),
         });
       } else {
@@ -914,7 +959,7 @@ function NewLotForm({
           ...priceFields,
           ...splitFields,
           description: descriptionValue,
-          photo_url: aiResult?.photo_url ?? null,
+          photo_url: uploadedPhotoUrl,
           ai_ripeness: aiResult?.ripeness ?? null,
           ai_confidence: aiResult?.confidence ?? null,
           ai_model: aiResult?.model ?? null,
@@ -925,6 +970,10 @@ function NewLotForm({
         crop: selectedCrop !== undefined ? cropName(selectedCrop) : undefined,
         weight: String(weightNum),
         price: displayPrice !== null ? String(displayPrice) : undefined,
+        photoUrl: uploadedPhotoUrl ?? undefined,
+        saleMode,
+        startPrice: modeHasPrice(saleMode) && startNum > 0 ? String(startNum) : undefined,
+        shelfHours: estimate !== null ? String(estimate.shelf_hours) : undefined,
       });
     } catch (err) {
       if (err instanceof ApiError) {
@@ -1430,6 +1479,9 @@ function NewLotForm({
           />
         ))}
       </View>
+      {grade === 'substandard' && pricesEdited ? (
+        <Text style={styles.cropChangeHint}>{t.sell.substandardPriceHint}</Text>
+      ) : null}
 
       <FormField
         label={t.sell.descriptionLabel}
@@ -1955,7 +2007,7 @@ const styles = StyleSheet.create({
   previewTotal: { fontSize: 15, color: C.ink, marginTop: 2 },
   previewMuted: { color: C.mute, marginTop: 4 },
   previewError: { color: C.chili, marginBottom: 8 },
-  myLotTopRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  myLotTopRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
   myLotThumb: { width: 56, height: 56, borderRadius: 10, backgroundColor: C.leafSoft },
   myLotThumbPlaceholder: { backgroundColor: C.line },
   myLotDescription: { color: C.mute, fontSize: 13, marginTop: 4, marginBottom: 4 },

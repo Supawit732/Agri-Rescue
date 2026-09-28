@@ -353,6 +353,7 @@ const th: Messages = {
     editSummary: 'แก้ไข: {crop} · {weight} กก. · ลงขายเมื่อ {date}',
     cropLockedHasOrders: 'เปลี่ยนพืชไม่ได้เพราะมีผู้จองแล้ว',
     cropChangeHint: 'เปลี่ยนพืชแล้ว ระบบจะคำนวณอายุการขายและราคาแนะนำใหม่เมื่อบันทึก',
+    substandardPriceHint: 'ของตกเกรดมักตั้งราคาถูกกว่าปกติประมาณ 30% — ระบบไม่ได้ปรับราคาที่คุณแก้ไขไว้ให้อัตโนมัติ',
     deleteLot: 'ลบ/ปิดล็อต',
     confirmDeleteTitle: 'ลบหรือปิดล็อตนี้?',
     confirmDeleteBody: 'ล็อตจะถูกซ่อนจากตลาด (เก็บประวัติไว้) — ยืนยันหรือไม่?',
@@ -511,6 +512,9 @@ const th: Messages = {
     viewMyLots: 'ดูล็อตของฉัน',
     backToMarket: 'กลับไปตลาด',
     summaryLine: '{crop} · {weight} กก.',
+    startPriceLine: 'ราคาเริ่มต้น {price} บาท/กก.',
+    saleModeLine: 'รูปแบบการขาย: {mode}',
+    timeLeftLine: 'ควรขายภายใน {time}',
   },
   profile: {
     title: 'โปรไฟล์',

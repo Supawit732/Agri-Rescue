@@ -61,15 +61,22 @@ describe('sellerPricing', () => {
     expect(priceComparison(45, 40)).toEqual({ tone: 'higher', percentDiff: -12 });
   });
 
-  it('computes lot price and forecast from start/floor + freshness', () => {
-    expect(
+  it('holds full price above freshness 0.5, then linear down to floor', () => {
+    // baseShelfHours 100 so hoursLeft == freshness × 100, for round fractions.
+    const priceAt = (freshness: number): number =>
       lotPricePerKg({
         startPricePerKg: 40,
         floorPricePerKg: 12,
-        baseShelfHours: 120,
-        hoursLeft: 61,
-      }),
-    ).toBe(26);
+        baseShelfHours: 100,
+        hoursLeft: freshness * 100,
+      });
+    expect(priceAt(1)).toBe(40);
+    expect(priceAt(0.75)).toBe(40);
+    expect(priceAt(0.5)).toBe(40);
+    expect(priceAt(0.25)).toBe(26);
+    expect(priceAt(0.1)).toBe(18);
+    expect(priceAt(0)).toBe(12);
+
     expect(
       lotPricePerKg({
         startPricePerKg: 28,
@@ -77,7 +84,8 @@ describe('sellerPricing', () => {
         baseShelfHours: 120,
         hoursLeft: 61,
       }),
-    ).toBe(18);
+    ).toBe(28);
+
     const rows = priceForecastRows({
       startPricePerKg: 40,
       floorPricePerKg: 12,

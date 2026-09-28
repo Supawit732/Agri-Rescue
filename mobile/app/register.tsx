@@ -278,7 +278,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodySemi,
   },
   missingItem: { color: C.soonFg, fontFamily: fonts.body, fontSize: 13 },
-  footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 20 },
+  footer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 20 },
   footerText: { color: C.mute, fontFamily: fonts.body },
   linkBtn: { minHeight: 44, justifyContent: 'center' },
   link: { color: C.leaf, fontWeight: '700', fontFamily: fonts.bodySemi },

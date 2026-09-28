@@ -5,8 +5,8 @@ export const PRICING_CONFIG = {
   substandardStartFactor: 0.7,
   suggestedFloorOfStart: 0.3,
   minFloorOfMarket: 0.2,
-  freshnessBase: 0.3,
-  freshnessSpan: 0.7,
+  /** Above this freshness, price stays at `start`; below it, linear down to `floor`. See D048. */
+  holdFullPriceUntilFreshness: 0.5,
   referenceMaxAgeDays: 30,
   sellThenDonateHours: 12,
   medianRadiusKm: 15,
@@ -106,7 +106,16 @@ export function validateSellerPrices(input: {
 
 /**
  * Lot price from seller start/floor and remaining freshness.
- * price = max(floor, round(start × (0.3 + 0.7 × freshness)))
+ *
+ * freshness >= holdFullPriceUntilFreshness (0.5) → price = start
+ * freshness <  holdFullPriceUntilFreshness       → price = floor + (start - floor) × (freshness / 0.5)
+ *
+ * A straight line from start to floor, and a √freshness curve, both start dropping the price
+ * immediately, well before the produce is actually near expiry. Holding the full `start` price
+ * for the first half of the shelf life protects the seller during that window, then a steady
+ * linear drop over the second half gives buyers a clear, predictable incentive to act before
+ * expiry (see D048 — an f^0.3 curve was considered but rejected for dropping too late to give
+ * buyers enough of a nudge). `floor` remains a hard minimum regardless of the curve shape.
  */
 export function lotPricePerKg(input: {
   startPricePerKg: number;
@@ -116,10 +125,13 @@ export function lotPricePerKg(input: {
 }): number {
   const freshness =
     input.baseShelfHours <= 0 ? 0 : clamp(input.hoursLeft / input.baseShelfHours, 0, 1);
-  const raw = Math.round(
-    input.startPricePerKg * (PRICING_CONFIG.freshnessBase + PRICING_CONFIG.freshnessSpan * freshness),
-  );
-  return Math.max(Math.round(input.floorPricePerKg), raw);
+  const threshold = PRICING_CONFIG.holdFullPriceUntilFreshness;
+  const raw =
+    freshness >= threshold
+      ? input.startPricePerKg
+      : input.floorPricePerKg +
+        (input.startPricePerKg - input.floorPricePerKg) * (freshness / threshold);
+  return Math.max(Math.round(input.floorPricePerKg), Math.round(raw));
 }
 
 /** Forecast table for 6 / 12 / 24 hours from now. */

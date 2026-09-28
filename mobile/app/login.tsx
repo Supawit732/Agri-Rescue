@@ -209,7 +209,7 @@ const styles = StyleSheet.create({
   muted: { fontSize: 14, color: C.mute, fontFamily: fonts.body },
   link: { color: C.leaf, fontWeight: '600', fontFamily: fonts.bodySemi, fontSize: 14 },
   error: { color: C.danger, marginBottom: 8, fontFamily: fonts.body },
-  footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 22 },
+  footer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 22 },
   footerText: { color: C.mute, fontFamily: fonts.body },
   guest: {
     marginTop: 18,

@@ -64,7 +64,7 @@ describe('lots and plots', () => {
     expect(estimate.body.weather_source).toBe('live');
     expect(estimate.body.weather_basis).toBe('forecast_72h_daytime_avg');
     expect(estimate.body.shelf_hours).toBe(61);
-    expect(estimate.body.price_per_kg).toBe(26);
+    expect(estimate.body.price_per_kg).toBe(40);
 
     const [before] = await pool.query<RowDataPacket[]>('SELECT COUNT(*) AS total FROM harvest_lots');
     expect(Number(before[0]?.total)).toBe(0);
@@ -298,5 +298,38 @@ describe('lots and plots', () => {
       [lotId],
     );
     expect(rows[0]?.photo_url).toBeNull();
+  });
+
+  it('saves the photo from assess-photo even when the AI check is unavailable', async () => {
+    const cropId = await insertCrop('มะม่วง', 5, 40);
+    const owner = await registerUser(app, { role: 'farmer', name: 'เกษตรกรถ่ายรูป' });
+    // 1x1 px PNG, tiny fixture image.
+    const image_base64 =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+
+    const assessed = await request(app).post('/api/lots/assess-photo').set(bearer(owner.token)).send({
+      crop_id: cropId,
+      image_base64,
+      mime: 'image/png',
+    });
+
+    expect(assessed.status).toBe(200);
+    expect(assessed.body.available).toBe(false);
+    expect(typeof assessed.body.photo_url).toBe('string');
+    expect(assessed.body.photo_url).toMatch(/^\/uploads\/lots\//);
+
+    const plotId = await insertPlot(owner.user.id, 13.65, 100.6);
+    const created = await request(app).post('/api/lots').set(bearer(owner.token)).send({
+      plot_id: plotId,
+      crop_id: cropId,
+      weight_kg: 8,
+      grade: 'normal',
+      ripeness: 2,
+      sale_mode: 'sell',
+      photo_url: assessed.body.photo_url,
+    });
+
+    expect(created.status).toBe(201);
+    expect(created.body.lot.photo_url).toBe(assessed.body.photo_url);
   });
 });

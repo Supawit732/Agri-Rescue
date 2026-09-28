@@ -454,8 +454,11 @@ function MarketCatalog(): React.ReactElement {
                         {lot.description}
                       </Text>
                     ) : null}
-                    {saleBadge !== null || isMine ? (
+                    {saleBadge !== null || isMine || lot.grade === 'substandard' ? (
                       <View style={styles.badgeRow}>
+                        {lot.grade === 'substandard' ? (
+                          <Badge text={t.market.gradeSub} fg={C.turmeric} bg={C.turmericSoft} />
+                        ) : null}
                         {saleBadge !== null ? (
                           <Badge
                             text={saleBadge.text}
