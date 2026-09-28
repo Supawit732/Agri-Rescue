@@ -44,6 +44,7 @@ erDiagram
     batches ||--o{ route_stops : "ประกอบด้วยจุดแวะ"
     batches ||--o{ orders : "ขนส่งคำสั่งซื้อ (batch_id)"
 
+    orders ||--o| payments : "มีรายการชำระเงินจำลอง 1 ชุด (ไม่ใช่ออเดอร์บริจาค)"
     orders ||--o| donation_proofs : "มีหลักฐานการบริจาค 1 ชุด"
     orders ||--o{ donation_infractions : "มีประวัติการทำผิดเงื่อนไข"
     orders ||--o| impact_logs : "มีบันทึกผลกระทบ 1 ชุด"
@@ -195,6 +196,16 @@ erDiagram
         int buyer_id FK
         enum stop_type
         enum status
+    }
+
+    payments {
+        int id PK
+        int order_id FK,UK
+        decimal amount
+        enum status
+        varchar provider
+        datetime deadline_at
+        datetime paid_at
     }
 
     donation_proofs {

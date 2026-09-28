@@ -26,6 +26,7 @@ import type {
   NotificationFilter,
   Order,
   OrgApplication,
+  Payment,
   OrgChecklist,
   Plot,
   SaleMode,
@@ -193,6 +194,8 @@ interface Api {
   getPickupSlots: (lotId: number) => Promise<{ slots: PickupSlotOption[] }>;
   getBuyerRoute: (date: string) => Promise<BuyerRoute>;
   getOrder: (id: number) => Promise<Order>;
+  getOrderPayment: (id: number) => Promise<Payment | null>;
+  simulateOrderPayment: (id: number) => Promise<Payment>;
   becomeVolunteer: () => Promise<AuthResponse>;
   getDonorTerms: () => Promise<DonorTermsMeta>;
   getMyDonorApplication: () => Promise<MyDonorApplication>;
@@ -571,6 +574,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
       getBuyerRoute: (date) =>
         authed<BuyerRoute>('GET', `/api/orders/route?date=${encodeURIComponent(date)}`),
       getOrder: (id) => authed<{ order: Order }>('GET', `/api/orders/${id}`).then((r) => r.order),
+      getOrderPayment: (id) =>
+        authed<{ payment: Payment | null }>('GET', `/api/orders/${id}/payment`).then((r) => r.payment),
+      simulateOrderPayment: (id) =>
+        authed<{ payment: Payment }>('POST', `/api/orders/${id}/payment/simulate`).then(
+          (r) => r.payment,
+        ),
       becomeVolunteer: async () => {
         const res = await authed<{ user: User }>('POST', '/api/donors/volunteer', {});
         setUser(res.user);

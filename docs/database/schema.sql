@@ -2,7 +2,7 @@
 -- Agri-Rescue — Final Database Schema (MySQL / InnoDB / utf8mb4)
 -- =============================================================================
 -- ไฟล์นี้รวมผลลัพธ์ของ migration ทุกไฟล์ใน server/src/db/migrations/
--- (001_init.sql ... 034_durian_shelf_days.sql) เป็นโครงสร้างฐานข้อมูลสุดท้าย
+-- (001_init.sql ... 035_payments.sql) เป็นโครงสร้างฐานข้อมูลสุดท้าย
 -- ไฟล์เดียว สำหรับใช้ประกอบรายงานวิชา — ไม่มีการใช้ ALTER TABLE ในไฟล์นี้
 --
 -- ตารางทั้งหมดในระบบ (เรียงตามลำดับที่สร้างในไฟล์นี้):
@@ -24,6 +24,7 @@
 --   batches                 รอบการขนส่งของคนขับ 1 รอบ
 --   route_stops             จุดแวะรับ/ส่งในแต่ละรอบขนส่ง
 --   orders                  คำสั่งซื้อ/รับบริจาคของผู้ซื้อต่อหนึ่งล็อต
+--   payments                รายการชำระเงินจำลอง (mock) ต่อคำสั่งซื้อที่ไม่ใช่บริจาค
 --   donation_proofs         หลักฐานการนำผลผลิตที่รับบริจาคไปแจกจ่ายจริง
 --   donation_infractions    ประวัติการทำผิดเงื่อนไขการรับบริจาค (พลาดกำหนด/หลักฐานไม่ตรง)
 --   impact_logs             บันทึกผลกระทบเชิงบวก (กก. ที่ช่วยได้ / CO2e ที่ลดได้) ต่อคำสั่งซื้อ
@@ -397,6 +398,24 @@ CREATE TABLE IF NOT EXISTS orders (
   KEY idx_orders_buyer_id (buyer_id),
   KEY idx_orders_batch_id (batch_id),
   KEY idx_orders_pickup_slot_start (pickup_slot_start)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -----------------------------------------------------------------------------
+-- ตารางรายการชำระเงินจำลอง (mock) ต่อคำสั่งซื้อที่ไม่ใช่บริจาค (D049) — ไม่ใช่ payment gateway จริง
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS payments (
+  id INT NOT NULL AUTO_INCREMENT,
+  order_id INT NOT NULL,
+  amount DECIMAL(10, 2) NOT NULL,
+  status ENUM('pending', 'paid', 'expired', 'refunded') NOT NULL DEFAULT 'pending',
+  provider VARCHAR(32) NOT NULL DEFAULT 'mock',
+  provider_ref VARCHAR(255) NULL,
+  deadline_at DATETIME NOT NULL, -- clamp(5% ของชั่วโมงที่เหลือก่อนล็อตหมดอายุ, 15 นาที, 2 ชม.)
+  paid_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_payments_order_id (order_id),
+  KEY idx_payments_status_deadline (status, deadline_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- -----------------------------------------------------------------------------

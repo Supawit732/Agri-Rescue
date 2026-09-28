@@ -26,6 +26,7 @@
 --   quality_assessments     ผลประเมินคุณภาพ/ความสุกของล็อต (แบบกฎเกณฑ์หรือ AI)
 --   batches                 รอบการขนส่งของคนขับ 1 รอบ
 --   orders                  คำสั่งซื้อ/รับบริจาคของผู้ซื้อต่อหนึ่งล็อต
+--   payments                รายการชำระเงินจำลอง (mock) ต่อคำสั่งซื้อที่ไม่ใช่บริจาค
 --   route_stops             จุดแวะรับ/ส่งในแต่ละรอบขนส่ง
 --   donation_proofs         หลักฐานการนำผลผลิตที่รับบริจาคไปแจกจ่ายจริง
 --   donation_infractions    ประวัติการทำผิดเงื่อนไขการรับบริจาค (พลาดกำหนด/หลักฐานไม่ตรง)
@@ -451,6 +452,26 @@ CREATE TABLE IF NOT EXISTS orders (
     ON DELETE RESTRICT ON UPDATE RESTRICT, -- ห้ามลบบัญชีผู้ซื้อถ้ายังมีคำสั่งซื้ออ้างอิงอยู่
   CONSTRAINT fk_orders_batch FOREIGN KEY (batch_id) REFERENCES batches (id)
     ON DELETE RESTRICT ON UPDATE RESTRICT -- ห้ามลบรอบขนส่งถ้ายังมีคำสั่งซื้อผูกอยู่กับรอบนั้น
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -----------------------------------------------------------------------------
+-- ตารางรายการชำระเงินจำลอง (mock) ต่อคำสั่งซื้อที่ไม่ใช่บริจาค (D049) — ไม่ใช่ payment gateway จริง
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS payments (
+  id INT NOT NULL AUTO_INCREMENT,
+  order_id INT NOT NULL,
+  amount DECIMAL(10, 2) NOT NULL,
+  status ENUM('pending', 'paid', 'expired', 'refunded') NOT NULL DEFAULT 'pending',
+  provider VARCHAR(32) NOT NULL DEFAULT 'mock',
+  provider_ref VARCHAR(255) NULL,
+  deadline_at DATETIME NOT NULL, -- clamp(5% ของชั่วโมงที่เหลือก่อนล็อตหมดอายุ, 15 นาที, 2 ชม.)
+  paid_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_payments_order_id (order_id),
+  KEY idx_payments_status_deadline (status, deadline_at),
+  CONSTRAINT fk_payments_order FOREIGN KEY (order_id) REFERENCES orders (id)
+    ON DELETE RESTRICT ON UPDATE RESTRICT -- ห้ามลบคำสั่งซื้อถ้ายังมีรายการชำระเงินอ้างอิงอยู่
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- -----------------------------------------------------------------------------

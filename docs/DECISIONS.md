@@ -530,3 +530,25 @@ Migration 030 ใส่ data ด้วย `INSERT...SELECT FROM crops WHERE name
 - **ปฏิเสธ f^0.3**: เส้นโค้ง f^0.3 ลดราคาช้าเกินไปในช่วงท้าย (ที่ freshness 0.1 ยังเหลือ ~50% ของช่วง start→floor) ทำให้แรงจูงใจให้ผู้ซื้อรีบตัดสินใจอ่อนเกินไปเมื่อใกล้หมดอายุจริง
 
 สูตร: `price = max(floor, round(freshness >= 0.5 ? start : floor + (start - floor) × (freshness / 0.5)))` (`server/src/domain/sellerPricing.ts` — `lotPricePerKg`, `priceForecastRows`). ค่าเกณฑ์ 0.5 อยู่ใน `PRICING_CONFIG.holdFullPriceUntilFreshness` ปรับได้ง่าย `floor` ยังเป็นค่าต่ำสุดเหมือนเดิม ไม่กระทบ `suggestedStartPrice`/`suggestedFloorPrice`/`validateSellerPrices`. ลบ `freshnessBase`/`freshnessSpan` ออกจาก `PRICING_CONFIG` เพราะไม่ใช้แล้ว (สูตรใหม่ไม่มีค่าคงที่สองตัวนี้).
+
+## D049 — 6.5 ชำระเงินจำลอง (mock payment) แบบย่อกว่า HANDOFF เดิม
+
+D042 ย้าย escrow เต็มรูปแบบไป Future Work เนื่องจากเวลาไม่พอ คำสั่งงานที่ได้รับภายหลังจึงตัดขอบเขตให้เล็กลงกว่าที่ `docs/HANDOFF.md` ข้อ 8 (6.5 แบบย่อ) และ `docs/PLAN_V2.md` ข้อ 6.5 ระบุไว้เดิมอีกชั้นหนึ่ง เพื่อให้ทำเสร็จได้เร็วสำหรับเดโม — บันทึกความต่างไว้ที่นี่กันสับสนกับสองเอกสารนั้น
+
+### ตัดออกจากสเปกเดิม (ไม่ทำ)
+- ไม่มี `PaymentProvider` interface / `MockPaymentProvider` — เขียน mock ตรงใน `server/src/payments/paymentService.ts` เท่านั้น เผื่ออนาคตค่อย refactor เป็น interface ตอนต่อ gateway จริง
+- ไม่มี `ledger_entries` และไม่ตรวจสอบยอด debit/credit สมดุล — เดโมไม่ต้องมีบัญชีคู่
+- ไม่มีสถานะ `paid_held` / `released` และไม่มีการ "ปล่อยเงิน" ตอนผู้ขายยืนยัน OTP — `payments.status` ไปจาก `paid` ตรง ๆ (ไม่ผ่าน held) เพราะไม่มีบัญชีให้ปล่อยเงินเข้า
+- ไม่มีหน้า "กระเป๋าเงิน" ผู้ขาย และไม่เพิ่มยอดพักเงินในหน้าภาพรวมแอดมิน
+- ไม่เปลี่ยนเงื่อนไขปุ่มโทร/LINE จาก "จองแล้ว" (D034) เป็น "ชำระแล้ว" — คงพฤติกรรมเดิมไว้เพื่อลดความเสี่ยงต่อ regression ใกล้วันเดโม
+- ค่าปรับ "ไม่เกินเวลาเริ่มช่วงนัดรับ" ในสูตร deadline ของ PLAN_V2 ไม่ได้ใส่ — ใช้แค่ `clamp(5% ของชั่วโมงที่เหลือก่อนล็อตหมดอายุ, 15 นาที, 2 ชม.)` ตรง ๆ
+
+### ที่ทำจริง
+- ตาราง `payments(id, order_id UNIQUE, amount, status ENUM('pending','paid','expired','refunded'), provider DEFAULT 'mock', provider_ref, deadline_at, paid_at, created_at)` — migration `035_payments.sql`; ไม่มี FOREIGN KEY (คง convention เดิม) แต่มี index `(status, deadline_at)` ให้ expire job querry เร็ว
+- สร้าง payment แบบ `pending` ในทรานแซกชันเดียวกับสร้างออเดอร์ (`server/src/routes/orders.ts`) เฉพาะออเดอร์ที่ `donation = false`; `amount = agreed_price_per_kg × quantity_kg`; deadline คำนวณจาก `server/src/domain/paymentDeadline.ts` (pure function, unit test ครบ)
+- state machine เดี่ยว `server/src/domain/paymentStateMachine.ts`: อนุญาตเฉพาะ `pending → paid` และ `pending → expired`
+- `GET /api/orders/:id/payment` (buyer/seller ของออเดอร์เท่านั้น คืน `payment: null` สำหรับออเดอร์บริจาค) และ `POST /api/orders/:id/payment/simulate` (buyer เจ้าของเท่านั้น, ปฏิเสธเมื่อ `NODE_ENV=production` เป็น sandbox guard, ปฏิเสธเมื่อออเดอร์ไม่ใช่ `reserved` หรือ payment ไม่ใช่ `pending`)
+- ขยาย `runExpireJobs` (`server/src/jobs/expireLots.ts`) ให้เรียก `expireDuePayments` ทุก 10 นาทีเหมือนงานอื่น: payment ที่ `pending` และเลย `deadline_at` → `expired`, ถ้าออเดอร์ยังเป็น `reserved` ให้ยกเลิกออเดอร์และคืนน้ำหนักเข้าล็อตผ่าน `syncLotBookableStatus` เดิม
+- `server/src/delivery/createBatch.ts` (ปัจจุบันยังไม่มี route เรียกใช้ — เตรียมไว้สำหรับโมเดลรอบวิ่งเก่า) กรองเฉพาะออเดอร์ที่ `is_donation = 1` หรือมี payment `status = 'paid'`
+- แอป: `mobile/app/orders/[id].tsx` แสดง QR PromptPay จำลอง (สร้างด้วย `MockQrCode`, ลาย pixel กำหนดจาก seed ไม่ใช่ QR จริงที่สแกนได้ — ไม่เพิ่ม dependency ไลบรารี QR), ยอดชำระ, นับถอยหลังถึง `deadline_at`, ปุ่ม "จำลองการชำระ" (เฉพาะผู้ซื้อ) พร้อมป้าย "โหมดจำลอง ไม่มีการตัดเงินจริง"; ซ่อนทั้งหมดสำหรับออเดอร์บริจาค
+- i18n ครบ th/en ภายใต้ `orderDetail.*` (`sectionPayment`, `payment*`)

@@ -453,6 +453,14 @@ export interface Order {
   } | null;
 }
 
+export interface Payment {
+  status: 'pending' | 'paid' | 'expired' | 'refunded';
+  amount: number;
+  deadline_at: string;
+  paid_at: string | null;
+  provider: string;
+}
+
 export interface PickupSlotOption {
   key: string;
   day: 'today' | 'tomorrow';

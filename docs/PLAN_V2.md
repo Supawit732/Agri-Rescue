@@ -31,7 +31,8 @@
 | 6.3 พืช ~31 ชนิด + เกษตรกรเพิ่มพืชเอง (+ fix ฤดูกาล) | เสร็จ | [#37](https://github.com/Supawit732/Agri-Rescue/pull/37) + [#38](https://github.com/Supawit732/Agri-Rescue/pull/38) |
 | Pre-demo cleanup | เสร็จ | [#39](https://github.com/Supawit732/Agri-Rescue/pull/39) |
 | UX ราคาในหน้าลงล็อต (ราคารอความสุก + ช่วงราคา) | เสร็จ | [#41](https://github.com/Supawit732/Agri-Rescue/pull/41) |
-| 6.5 Escrow | ย้ายไป Future Work | — ดู DECISIONS D042 |
+| 6.5 Escrow เต็มรูปแบบ | ย้ายไป Future Work | — ดู DECISIONS D042 |
+| 6.5 ชำระเงินจำลองแบบย่อ (mock payment, ไม่มี ledger/wallet) | เสร็จ | — ดู DECISIONS D049 |
 | AI vision timeout + mobile request timeout/loading + คำอธิบายล็อต | กำลังทำ | [#42](https://github.com/Supawit732/Agri-Rescue/pull/42) |
 | 6.6, 6.8, 6.10–6.12 / UI PR D | ยังไม่ทำ | — |
 
