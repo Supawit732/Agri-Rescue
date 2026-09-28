@@ -1032,6 +1032,7 @@ export type Messages = {
     needMapsLink: string;
     coordsNotInLink: string;
     resolveFailed: string;
+    resolveFailedHint: string;
     invalidCoords: string;
     useGps: string;
     locating: string;

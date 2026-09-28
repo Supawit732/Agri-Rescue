@@ -19,7 +19,7 @@ describe('resolveGoogleMapsLink', () => {
   });
 
   it(`times out after ${RESOLVE_LINK_TIMEOUT_MS}ms`, async () => {
-    expect(RESOLVE_LINK_TIMEOUT_MS).toBe(5000);
+    expect(RESOLVE_LINK_TIMEOUT_MS).toBe(10000);
     jest.useFakeTimers();
     global.fetch = jest.fn((_input: unknown, init?: { signal?: AbortSignal }) => {
       return new Promise((_resolve, reject) => {
@@ -33,8 +33,8 @@ describe('resolveGoogleMapsLink', () => {
 
     const pending = resolveGoogleMapsLink('https://maps.app.goo.gl/slow');
     const expectation = expect(pending).rejects.toMatchObject({
-      status: 504,
-      code: 'TIMEOUT',
+      status: 422,
+      code: 'LINK_UNRESOLVED',
     } satisfies Partial<HttpError>);
     await jest.advanceTimersByTimeAsync(RESOLVE_LINK_TIMEOUT_MS);
     await expectation;
@@ -61,5 +61,28 @@ describe('resolveGoogleMapsLink', () => {
       code: 'TOO_MANY_REDIRECTS',
     });
     expect(calls).toBe(MAX_REDIRECT_HOPS);
+  });
+
+  it('follows a consent.google.com redirect via its continue param', async () => {
+    const target = 'https://www.google.com/maps/@13.75,100.5,15z';
+    global.fetch = jest.fn(async () => {
+      return {
+        ok: false,
+        status: 302,
+        headers: {
+          get: (name: string) =>
+            name.toLowerCase() === 'location'
+              ? `https://consent.google.com/m?continue=${encodeURIComponent(target)}&gl=TH`
+              : null,
+        },
+        url: '',
+        text: async () => '',
+      } as unknown as Response;
+    }) as unknown as typeof fetch;
+
+    await expect(resolveGoogleMapsLink('https://maps.app.goo.gl/consent')).resolves.toMatchObject({
+      lat: 13.75,
+      lng: 100.5,
+    });
   });
 });

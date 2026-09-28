@@ -119,11 +119,10 @@ export function LocationPicker({
       const resolved = await resolveMapsLink(trimmed);
       applyCoords(resolved);
     } catch (err) {
-      setError(
-        err instanceof ApiError
-          ? translateError(err.code, err.message)
-          : t.locationPicker.resolveFailed,
-      );
+      const reason =
+        err instanceof ApiError ? translateError(err.code, err.message) : t.locationPicker.resolveFailed;
+      setError(`${reason} ${t.locationPicker.resolveFailedHint}`);
+      setManualOpen(true);
     } finally {
       setBusy(null);
     }

@@ -1029,6 +1029,7 @@ const en: Messages = {
     needMapsLink: 'Please paste a Google Maps link',
     coordsNotInLink: 'No coordinates found in this link. Use a Google Maps share link with a location.',
     resolveFailed: 'Could not resolve the link. Please try again.',
+    resolveFailedHint: 'Open the link in your browser and paste the full URL here, or tap "Enter coordinates manually" below.',
     invalidCoords: 'Invalid coordinates',
     useGps: 'Use current location',
     locating: 'Locating…',
@@ -1181,6 +1182,7 @@ const en: Messages = {
     RESOLVE_FAILED: 'Could not resolve the Google Maps link',
     TOO_MANY_REDIRECTS: 'Too many redirects while resolving the link',
     COORDS_NOT_FOUND: 'No coordinates found in this link',
+    LINK_UNRESOLVED: 'Could not resolve the link. Please open it and paste the full URL, or enter coordinates manually.',
   },
   fieldErrors: {
     REQUIRED: 'This field is required',

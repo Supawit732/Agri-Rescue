@@ -1029,6 +1029,7 @@ const th: Messages = {
     needMapsLink: 'กรุณาวางลิงก์ Google Maps',
     coordsNotInLink: 'ไม่พบพิกัดในลิงก์นี้ กรุณาใช้ลิงก์ Google Maps ที่แชร์ตำแหน่ง',
     resolveFailed: 'ตามลิงก์ไม่สำเร็จ กรุณาลองใหม่',
+    resolveFailedHint: 'เปิดลิงก์ในเบราว์เซอร์แล้ววางลิงก์แบบเต็มที่นี่ หรือกด "แก้พิกัดเอง" ด้านล่างเพื่อกรอกพิกัดเอง',
     invalidCoords: 'พิกัดไม่ถูกต้อง',
     useGps: 'ใช้ตำแหน่งปัจจุบัน',
     locating: 'กำลังหาตำแหน่ง…',
@@ -1181,6 +1182,7 @@ const th: Messages = {
     RESOLVE_FAILED: 'ตามลิงก์ Google Maps ไม่สำเร็จ',
     TOO_MANY_REDIRECTS: 'ตามลิงก์เกินจำนวนที่อนุญาต',
     COORDS_NOT_FOUND: 'ไม่พบพิกัดในลิงก์นี้',
+    LINK_UNRESOLVED: 'ตามลิงก์ไม่สำเร็จ กรุณาเปิดลิงก์แล้ววางลิงก์แบบเต็ม หรือกรอกพิกัดเอง',
   },
   fieldErrors: {
     REQUIRED: 'กรุณากรอกข้อมูลนี้',
