@@ -30,7 +30,7 @@ export function Screen({
       style={styles.screen}
       edges={skipTopSafeArea === true ? ['left', 'right'] : ['top', 'left', 'right']}
     >
-      <View style={[styles.screenInner, fullWidth === true ? styles.screenInnerWide : null]}>{children}</View>
+      <View style={[styles.screenInner, fullWidth !== true ? styles.screenInnerNarrow : null]}>{children}</View>
     </SafeAreaView>
   );
 }
@@ -486,6 +486,7 @@ export function Body({
   return (
     <ScrollView
       ref={scrollRef}
+      style={styles.bodyScroll}
       contentContainerStyle={styles.body}
       keyboardShouldPersistTaps="handled"
     >
@@ -503,10 +504,12 @@ const styles = StyleSheet.create({
   screenInner: {
     flex: 1,
     width: '100%',
-    ...(Platform.OS === 'web' ? { maxWidth: 480 } : {}),
   },
-  screenInnerWide: {
-    maxWidth: undefined,
+  // Applied only when the screen is NOT fullWidth. A style array merge can't clear a
+  // property by setting it to `undefined` (RN keeps the earlier value), so the cap has to
+  // live in an opt-in style instead of an opt-out one.
+  screenInnerNarrow: {
+    ...(Platform.OS === 'web' ? { maxWidth: 480 } : {}),
   },
   stackHeader: {
     flexDirection: 'row',
@@ -709,5 +712,6 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     paddingHorizontal: 8,
   },
+  bodyScroll: { flex: 1, width: '100%' },
   body: { padding: 16, paddingBottom: 40 },
 });

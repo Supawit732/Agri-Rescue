@@ -1,9 +1,10 @@
 import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
 import { Feather } from '@expo/vector-icons';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Image,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -97,16 +98,42 @@ function MarketCatalog(): React.ReactElement {
   const router = useRouter();
   const now = useNow();
   const { width } = useWindowDimensions();
-  const columns = width >= 720 ? 3 : width < 340 ? 1 : 2;
+  const columns = width >= 960 ? 3 : width >= 600 ? 2 : 1;
+  const singleColumn = columns === 1;
   const gridGap = 12;
   const [gridWidth, setGridWidth] = useState(0);
+  const gridResizeObserver = useRef<ResizeObserver | null>(null);
   // Body applies paddingHorizontal via `padding: 16` on both sides (see ui.tsx `body` style).
   const bodyHorizontalPadding = 16 * 2;
-  // Fallback for web, where a wrap-row View can report onLayout width 0 until it has
-  // non-empty content, which would otherwise permanently block cards from rendering.
+  // Fallback until the grid's real width is known (e.g. before the first measurement
+  // lands). This assumes the grid spans the full window, which is wrong on wide layouts
+  // that add a side rail (see the ref callback below, which corrects it on web).
   const fallbackGridWidth = Math.max(0, width - bodyHorizontalPadding);
   const effectiveGridWidth = gridWidth > 0 ? gridWidth : fallbackGridWidth;
   const cardWidth = Math.floor((effectiveGridWidth - gridGap * (columns - 1)) / columns);
+
+  // react-native-web's onLayout for a flex-wrap row is unreliable: it never fires once the
+  // row's own width is driven by its parent (width: 100%) rather than its children, which
+  // is exactly the fix needed to make cards render at all (see the `grid` style below). A
+  // ResizeObserver on the underlying DOM node gives the real, sidebar-aware width instead
+  // of the window-width fallback above. Runs as a ref callback (not useEffect) because the
+  // grid only mounts once data has loaded, well after this component's initial mount.
+  const gridRefCallback = useCallback((node: View | null) => {
+    gridResizeObserver.current?.disconnect();
+    gridResizeObserver.current = null;
+    if (Platform.OS !== 'web' || typeof ResizeObserver === 'undefined' || node === null) {
+      return;
+    }
+    const domNode = node as unknown as HTMLElement;
+    const observer = new ResizeObserver((entries) => {
+      const measured = entries[0]?.contentRect.width;
+      if (measured !== undefined && measured > 0) {
+        setGridWidth(measured);
+      }
+    });
+    observer.observe(domNode);
+    gridResizeObserver.current = observer;
+  }, []);
 
   const [coords, setCoords] = useState<LatLng | null>(
     user?.lat != null && user?.lng != null ? { lat: user.lat, lng: user.lng } : null,
@@ -376,7 +403,11 @@ function MarketCatalog(): React.ReactElement {
         emptyText={t.market.empty}
       >
         {(lots) => (
-          <View style={styles.grid} onLayout={(e) => setGridWidth(e.nativeEvent.layout.width)}>
+          <View
+            ref={gridRefCallback}
+            style={styles.grid}
+            onLayout={(e) => setGridWidth(e.nativeEvent.layout.width)}
+          >
             {lots.map((lot) => {
               const hours = hoursLeftFrom(lot.expires_at, now);
               const tone = urgency(hours);
@@ -417,14 +448,28 @@ function MarketCatalog(): React.ReactElement {
               return (
                 <Pressable
                   key={lot.id}
-                  style={[styles.card, { width: cardWidth }, isMine ? styles.cardMine : null]}
+                  style={[
+                    styles.card,
+                    { width: cardWidth },
+                    isMine ? styles.cardMine : null,
+                  ]}
                   onPress={() => router.push({ pathname: '/lots/[id]', params: { id: String(lot.id) } })}
                 >
-                  <View style={styles.photoWrap}>
+                  <View style={[styles.photoWrap, singleColumn ? styles.photoWrapWide : null]}>
                     {uri !== null ? (
-                      <Image source={{ uri }} style={styles.photo} resizeMode="cover" />
+                      <Image
+                        source={{ uri }}
+                        style={[styles.photo, singleColumn ? styles.photoWide : null]}
+                        resizeMode="cover"
+                      />
                     ) : (
-                      <View style={[styles.photo, { backgroundColor: cropTint(lot.crop_id ?? lot.id) }]}>
+                      <View
+                        style={[
+                          styles.photo,
+                          singleColumn ? styles.photoWide : null,
+                          { backgroundColor: cropTint(lot.crop_id ?? lot.id) },
+                        ]}
+                      >
                         <Feather name="image" size={28} color={C.mute} />
                         <Text style={styles.photoPlaceholderText}>{title}</Text>
                       </View>
@@ -443,12 +488,12 @@ function MarketCatalog(): React.ReactElement {
                     <Text style={styles.cardMeta} numberOfLines={1}>
                       {meta}
                     </Text>
-                    <Text style={styles.cardMeta} numberOfLines={1}>
+                    <Text style={styles.cardMeta} numberOfLines={singleColumn ? 2 : 1}>
                       {lotLocationLabel(lot, t.market.plotFallback)}
                       {dist !== null ? ` · ${dist}` : ''}
                     </Text>
                     {lot.shop_name != null && lot.shop_name !== '' ? (
-                      <Text style={styles.cardShop} numberOfLines={1}>
+                      <Text style={styles.cardShop} numberOfLines={singleColumn ? 2 : 1}>
                         {lot.shop_name}
                       </Text>
                     ) : null}
@@ -554,7 +599,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     marginHorizontal: 16,
-    marginBottom: 8,
+    marginBottom: 12,
     paddingVertical: 8,
     paddingHorizontal: 12,
     backgroundColor: C.leafSoft,
@@ -563,7 +608,7 @@ const styles = StyleSheet.create({
   guestText: { flex: 1, color: C.leafDeep, fontSize: 13, fontFamily: fonts.body },
   enableBuyBanner: {
     marginHorizontal: 16,
-    marginBottom: 8,
+    marginBottom: 12,
     paddingVertical: 10,
     paddingHorizontal: 12,
     backgroundColor: C.soonBg,
@@ -616,10 +661,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 3,
   },
   filterCountText: { color: C.white, fontSize: 11, fontWeight: '700' },
-  cropScroll: { marginBottom: 8, flexGrow: 0 },
+  cropScroll: { marginTop: 4, marginBottom: 8, flexGrow: 0 },
   chip: {
     minHeight: 44,
     paddingHorizontal: 16,
+    paddingVertical: 8,
     borderRadius: radius.chip,
     borderWidth: 1,
     borderColor: C.line,
@@ -633,11 +679,14 @@ const styles = StyleSheet.create({
   chipTextActive: { color: C.white, fontWeight: '600', fontFamily: fonts.bodySemi },
   listHeader: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
+    rowGap: 4,
     marginBottom: 10,
   },
   listTitle: {
+    flexShrink: 0,
     fontFamily: fonts.title,
     fontSize: 17,
     fontWeight: '600',
@@ -651,7 +700,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: 10,
   },
-  listHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  listHeaderActions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 4 },
   sortBtnText: { color: C.leaf, fontWeight: '600', fontSize: 14, fontFamily: fonts.bodySemi },
   grid: {
     flexDirection: 'row',
@@ -669,12 +718,14 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   photoWrap: { height: 104, position: 'relative' },
+  photoWrapWide: { height: 200 },
   photo: {
     height: 104,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
   },
+  photoWide: { height: 200 },
   photoPlaceholderText: {
     fontSize: 11,
     color: C.mute,
