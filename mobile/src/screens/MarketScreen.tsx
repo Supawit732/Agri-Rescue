@@ -100,8 +100,13 @@ function MarketCatalog(): React.ReactElement {
   const columns = width >= 720 ? 3 : width < 340 ? 1 : 2;
   const gridGap = 12;
   const [gridWidth, setGridWidth] = useState(0);
-  const cardWidth =
-    gridWidth > 0 ? Math.floor((gridWidth - gridGap * (columns - 1)) / columns) : undefined;
+  // Body applies paddingHorizontal via `padding: 16` on both sides (see ui.tsx `body` style).
+  const bodyHorizontalPadding = 16 * 2;
+  // Fallback for web, where a wrap-row View can report onLayout width 0 until it has
+  // non-empty content, which would otherwise permanently block cards from rendering.
+  const fallbackGridWidth = Math.max(0, width - bodyHorizontalPadding);
+  const effectiveGridWidth = gridWidth > 0 ? gridWidth : fallbackGridWidth;
+  const cardWidth = Math.floor((effectiveGridWidth - gridGap * (columns - 1)) / columns);
 
   const [coords, setCoords] = useState<LatLng | null>(
     user?.lat != null && user?.lng != null ? { lat: user.lat, lng: user.lng } : null,
@@ -372,9 +377,7 @@ function MarketCatalog(): React.ReactElement {
       >
         {(lots) => (
           <View style={styles.grid} onLayout={(e) => setGridWidth(e.nativeEvent.layout.width)}>
-            {cardWidth === undefined
-              ? null
-              : lots.map((lot) => {
+            {lots.map((lot) => {
               const hours = hoursLeftFrom(lot.expires_at, now);
               const tone = urgency(hours);
               const remaining = remainingOf(lot);
@@ -655,6 +658,8 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 12,
     paddingBottom: 24,
+    width: '100%',
+    alignSelf: 'stretch',
   },
   card: {
     backgroundColor: C.surface,
