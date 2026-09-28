@@ -1,6 +1,7 @@
 import type { RowDataPacket } from 'mysql2';
 import { pool } from './pool';
-import { crops, farmers } from './seedData';
+import { crops, farmers, SEED_CROP_PHOTOS } from './seedData';
+import { upsertLot } from './seed';
 
 export async function resetDemoLots(now: Date = new Date()): Promise<number> {
   const connection = await pool.getConnection();
@@ -44,23 +45,25 @@ export async function resetDemoLots(now: Date = new Date()): Promise<number> {
         throw new Error(`Run npm run seed before seed:reset. Missing crop ${crop.nameTh}`);
       }
       const expiresAt = new Date(now.getTime() + farmer.lot.hoursLeft * 60 * 60 * 1000);
-      await connection.query(
-        `INSERT INTO harvest_lots (
-           plot_id, crop_id, weight_kg, grade, ripeness, photo_url, allow_donation,
-           predicted_shelf_hours, expires_at, status, created_at
-         ) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, 'open', ?)`,
-        [
-          plot.id,
-          cropRow.id,
-          farmer.lot.weightKg,
-          farmer.lot.grade,
-          farmer.lot.ripeness,
-          farmer.lot.allowDonation ? 1 : 0,
-          farmer.lot.hoursLeft,
-          expiresAt,
-          now,
-        ],
-      );
+      // Delegates to seed.ts's upsertLot so pricing (start/floor/market-snapshot), sale
+      // mode, and photo_url are computed the same way here as in `npm run seed` — this
+      // used to be a separate hand-rolled INSERT that omitted those columns entirely,
+      // leaving price_per_kg at 0 for anything reset this way. The table was already
+      // wiped above, so upsertLot's "does a matching lot exist?" check always misses and
+      // it always inserts.
+      await upsertLot(connection, {
+        plotId: Number(plot.id),
+        cropId: Number(cropRow.id),
+        weightKg: farmer.lot.weightKg,
+        grade: farmer.lot.grade,
+        ripeness: farmer.lot.ripeness,
+        allowDonation: farmer.lot.allowDonation,
+        shelfHours: farmer.lot.hoursLeft,
+        description: 'description' in farmer.lot ? farmer.lot.description : null,
+        photoUrl: SEED_CROP_PHOTOS[farmer.lot.cropKey] ?? null,
+        createdAt: now,
+        expiresAt,
+      });
       inserted += 1;
     }
 

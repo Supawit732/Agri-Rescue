@@ -491,6 +491,20 @@ export const crops = [
 
 export type CropKey = (typeof crops)[number]['key'];
 
+/**
+ * Sample thumbnails for the crops seeded lots use, so a fresh demo shows real photos
+ * instead of the crop-tinted placeholder. Source files are committed at
+ * server/assets/seed-photos/ (unlike server/uploads/, which holds real user uploads and
+ * is gitignored) and served at this same /uploads/seed/... path by a dedicated static
+ * mount in app.ts. Add an entry here + the matching file to give another crop a seed photo.
+ */
+export const SEED_CROP_PHOTOS: Partial<Record<CropKey, string>> = {
+  mango: '/uploads/seed/mango.jpg',
+  banana: '/uploads/seed/banana.jpg',
+  tomato: '/uploads/seed/tomato.jpg',
+  'morning-glory': '/uploads/seed/morning-glory.jpg',
+};
+
 export interface CropSeasonFactor {
   cropKey: CropKey;
   month: number; // 1-12

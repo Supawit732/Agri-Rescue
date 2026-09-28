@@ -8,6 +8,7 @@ import {
   crops,
   DEMO_PASSWORD,
   farmers,
+  SEED_CROP_PHOTOS,
   staff,
   type CropKey,
 } from './seedData';
@@ -76,6 +77,7 @@ export async function seed(): Promise<void> {
         allowDonation: farmer.lot.allowDonation,
         shelfHours: farmer.lot.hoursLeft,
         description: 'description' in farmer.lot ? farmer.lot.description : null,
+        photoUrl: SEED_CROP_PHOTOS[farmer.lot.cropKey] ?? null,
         createdAt,
         expiresAt,
       });
@@ -267,7 +269,7 @@ async function upsertPlot(
   return result.insertId;
 }
 
-async function upsertLot(
+export async function upsertLot(
   connection: PoolConnection,
   lot: {
     plotId: number;
@@ -278,6 +280,7 @@ async function upsertLot(
     allowDonation: boolean;
     shelfHours: number;
     description: string | null;
+    photoUrl: string | null;
     createdAt: Date;
     expiresAt: Date;
   },
@@ -296,6 +299,13 @@ async function upsertLot(
         [lot.expiresAt, Number(row.id)],
       );
     }
+    // Backfill a thumbnail on a lot seeded before sample crop photos existed.
+    if (lot.photoUrl !== null) {
+      await connection.query(
+        `UPDATE harvest_lots SET photo_url = ? WHERE id = ? AND photo_url IS NULL`,
+        [lot.photoUrl, Number(row.id)],
+      );
+    }
     return;
   }
   const [cropRows] = await connection.query<RowDataPacket[]>(
@@ -312,13 +322,14 @@ async function upsertLot(
        start_price_per_kg, floor_price_per_kg, sale_mode, donation_opened,
        market_price_snapshot, market_price_is_estimate,
        predicted_shelf_hours, expires_at, status, description, created_at
-     ) VALUES (?, ?, ?, ?, ?, NULL, ?, 'verified_org_only', ?, ?, ?, 0, ?, 1, ?, ?, 'open', ?, ?)`,
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, 'verified_org_only', ?, ?, ?, 0, ?, 1, ?, ?, 'open', ?, ?)`,
     [
       lot.plotId,
       lot.cropId,
       lot.weightKg,
       lot.grade,
       lot.ripeness,
+      lot.photoUrl,
       lot.allowDonation ? 1 : 0,
       start,
       floor,

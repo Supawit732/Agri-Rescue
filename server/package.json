@@ -12,6 +12,7 @@
     "seed:demo": "tsx src/db/seedDemo.ts",
     "seed:reset": "tsx src/db/resetLots.ts",
     "backfill:location-labels": "tsx scripts/backfillLocationLabels.ts",
+    "backfill:seed-photos": "tsx scripts/backfillSeedPhotos.ts",
     "check:en-api": "tsx scripts/checkEnSystemApi.ts",
     "ai:smoke": "tsx scripts/aiSmoke.ts",
     "cleanup:demo": "tsx scripts/cleanupDemo.ts",

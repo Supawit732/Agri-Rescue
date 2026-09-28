@@ -445,6 +445,62 @@ function MarketCatalog(): React.ReactElement {
                 lot.weight_kg > 0
                   ? Math.max(0, Math.min(100, Math.round((remaining / lot.weight_kg) * 100)))
                   : 0;
+
+              if (singleColumn) {
+                return (
+                  <Pressable
+                    key={lot.id}
+                    style={[styles.rowCard, { width: cardWidth }, isMine ? styles.cardMine : null]}
+                    onPress={() => router.push({ pathname: '/lots/[id]', params: { id: String(lot.id) } })}
+                  >
+                    {uri !== null ? (
+                      <Image source={{ uri }} style={styles.rowThumb} resizeMode="cover" />
+                    ) : (
+                      <View style={[styles.rowThumb, styles.rowThumbPlaceholder, { backgroundColor: cropTint(lot.crop_id ?? lot.id) }]}>
+                        <Feather name="image" size={22} color={C.mute} />
+                      </View>
+                    )}
+                    <View style={styles.rowBody}>
+                      <View style={styles.rowTitleRow}>
+                        <Text style={styles.rowTitle} numberOfLines={1}>
+                          {title}
+                        </Text>
+                        <Badge text={formatCountdown(hours, t.countdown)} fg={tone.fg} bg={tone.bg} />
+                      </View>
+                      {lot.shop_name != null && lot.shop_name !== '' ? (
+                        <Text style={styles.rowShop} numberOfLines={1}>
+                          {lot.shop_name}
+                        </Text>
+                      ) : null}
+                      {lot.price_per_kg !== null ? (
+                        <View style={styles.rowPriceRow}>
+                          <Text style={styles.rowPrice}>{formatNumber(lot.price_per_kg)}</Text>
+                          <Text style={styles.rowPriceUnit}>
+                            {t.dashboard.unitBaht}/{t.dashboard.unitKg}
+                          </Text>
+                          {priceCompare !== null ? (
+                            <Text
+                              style={[
+                                styles.rowPriceCompare,
+                                priceCompare.tone === 'cheaper' ? styles.priceCompareCheaper : null,
+                              ]}
+                            >
+                              {priceCompare.text}
+                            </Text>
+                          ) : null}
+                        </View>
+                      ) : (
+                        <Text style={styles.rowPriceDonate}>{t.market.badgeDonate}</Text>
+                      )}
+                      <Text style={styles.rowRemaining} numberOfLines={1}>
+                        {t.market.remaining} {formatNumber(remaining)}/{formatNumber(lot.weight_kg)}{' '}
+                        {t.dashboard.unitKg}
+                      </Text>
+                    </View>
+                  </Pressable>
+                );
+              }
+
               return (
                 <Pressable
                   key={lot.id}
@@ -455,21 +511,11 @@ function MarketCatalog(): React.ReactElement {
                   ]}
                   onPress={() => router.push({ pathname: '/lots/[id]', params: { id: String(lot.id) } })}
                 >
-                  <View style={[styles.photoWrap, singleColumn ? styles.photoWrapWide : null]}>
+                  <View style={styles.photoWrap}>
                     {uri !== null ? (
-                      <Image
-                        source={{ uri }}
-                        style={[styles.photo, singleColumn ? styles.photoWide : null]}
-                        resizeMode="cover"
-                      />
+                      <Image source={{ uri }} style={styles.photo} resizeMode="cover" />
                     ) : (
-                      <View
-                        style={[
-                          styles.photo,
-                          singleColumn ? styles.photoWide : null,
-                          { backgroundColor: cropTint(lot.crop_id ?? lot.id) },
-                        ]}
-                      >
+                      <View style={[styles.photo, { backgroundColor: cropTint(lot.crop_id ?? lot.id) }]}>
                         <Feather name="image" size={28} color={C.mute} />
                         <Text style={styles.photoPlaceholderText}>{title}</Text>
                       </View>
@@ -488,12 +534,12 @@ function MarketCatalog(): React.ReactElement {
                     <Text style={styles.cardMeta} numberOfLines={1}>
                       {meta}
                     </Text>
-                    <Text style={styles.cardMeta} numberOfLines={singleColumn ? 2 : 1}>
+                    <Text style={styles.cardMeta} numberOfLines={1}>
                       {lotLocationLabel(lot, t.market.plotFallback)}
                       {dist !== null ? ` · ${dist}` : ''}
                     </Text>
                     {lot.shop_name != null && lot.shop_name !== '' ? (
-                      <Text style={styles.cardShop} numberOfLines={singleColumn ? 2 : 1}>
+                      <Text style={styles.cardShop} numberOfLines={1}>
                         {lot.shop_name}
                       </Text>
                     ) : null}
@@ -718,14 +764,12 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   photoWrap: { height: 104, position: 'relative' },
-  photoWrapWide: { height: 200 },
   photo: {
     height: 104,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
   },
-  photoWide: { height: 200 },
   photoPlaceholderText: {
     fontSize: 11,
     color: C.mute,
@@ -757,6 +801,27 @@ const styles = StyleSheet.create({
   cardDescription: { fontSize: 12, color: C.mute, fontFamily: fonts.body, marginTop: 2 },
   badgeRow: { flexDirection: 'row', marginTop: 2, gap: 4 },
   cardMine: { borderColor: C.leaf, borderWidth: 1.5 },
+  rowCard: {
+    flexDirection: 'row',
+    gap: 10,
+    padding: 8,
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.line,
+    borderRadius: radius.cardLg,
+  },
+  rowThumb: { width: 96, height: 96, borderRadius: 12 },
+  rowThumbPlaceholder: { alignItems: 'center', justifyContent: 'center' },
+  rowBody: { flex: 1, minWidth: 0, justifyContent: 'center', gap: 3 },
+  rowTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  rowTitle: { flex: 1, fontFamily: fonts.title, fontSize: 15, fontWeight: '600', color: C.ink },
+  rowShop: { fontSize: 12, color: C.mute, fontFamily: fonts.body },
+  rowPriceRow: { flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', gap: 4, marginTop: 2 },
+  rowPrice: { fontSize: 17, fontWeight: '700', color: C.ink, fontFamily: fonts.titleBold },
+  rowPriceUnit: { fontSize: 12, color: C.mute, fontFamily: fonts.body },
+  rowPriceCompare: { fontSize: 11, color: C.mute, fontFamily: fonts.body },
+  rowPriceDonate: { marginTop: 2, fontSize: 15, fontWeight: '700', color: C.soonFg, fontFamily: fonts.titleBold },
+  rowRemaining: { fontSize: 11, color: C.mute, fontFamily: fonts.body },
   priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 2, marginTop: 6 },
   price: { fontSize: 20, fontWeight: '700', color: C.ink, fontFamily: fonts.titleBold },
   priceUnit: { fontSize: 12, color: C.mute, fontFamily: fonts.body },
