@@ -334,12 +334,14 @@ export type Messages = {
     nearbyMedian: string;
     forecastRow: string;
     startPrice: string;
+    startPriceHint: string;
     startPricePlaceholder: string;
     floorPrice: string;
     floorPricePlaceholder: string;
     pricesLockedHint: string;
     priceRefMoc: string;
     priceRefEstimate: string;
+    priceRefBackup: string;
     priceRefSeasonal: string;
     priceAboveMarketWarning: string;
     floorPriceMin: string;

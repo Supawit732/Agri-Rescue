@@ -1590,20 +1590,27 @@ function NewLotForm({
               placeholder={t.sell.startPricePlaceholder}
             />
           </View>
+          {!pricesLocked ? (
+            <Text style={styles.fieldHint}>{t.sell.startPriceHint}</Text>
+          ) : null}
           {estimate !== null ? (
             <View style={styles.priceHelp}>
               <Text style={styles.priceHelpText}>
-                {estimate.market_quote.is_estimate
-                  ? formatTemplate(t.sell.priceRefEstimate, {
+                {estimate.market_quote.source === 'crop_fallback'
+                  ? formatTemplate(t.sell.priceRefBackup, {
                       price: formatNumber(estimate.market_quote.price_per_kg),
                     }) + (estimate.market_quote.seasonal_adjusted ? t.sell.priceRefSeasonal : '')
-                  : formatTemplate(t.sell.priceRefMoc, {
-                      price: formatNumber(estimate.market_quote.price_per_kg),
-                      date:
-                        estimate.market_quote.as_of !== null
-                          ? formatDate(estimate.market_quote.as_of)
-                          : '',
-                    })}
+                  : estimate.market_quote.is_estimate
+                    ? formatTemplate(t.sell.priceRefEstimate, {
+                        price: formatNumber(estimate.market_quote.price_per_kg),
+                      }) + (estimate.market_quote.seasonal_adjusted ? t.sell.priceRefSeasonal : '')
+                    : formatTemplate(t.sell.priceRefMoc, {
+                        price: formatNumber(estimate.market_quote.price_per_kg),
+                        date:
+                          estimate.market_quote.as_of !== null
+                            ? formatDate(estimate.market_quote.as_of)
+                            : '',
+                      })}
               </Text>
               {startNum > 0 && estimate.max_start_price_per_kg > 0 && startNum > estimate.max_start_price_per_kg ? (
                 <Text style={styles.priceWarning}>
@@ -2000,6 +2007,7 @@ const styles = StyleSheet.create({
   priceHelpText: { color: C.mute, fontSize: 13, marginTop: 2 },
   priceHelpStrong: { color: C.ink, fontSize: 13, fontWeight: '600', marginTop: 2 },
   priceWarning: { color: C.turmeric, fontSize: 13, fontWeight: '600', marginTop: 2 },
+  fieldHint: { fontSize: 12, color: C.mute, marginTop: -2, marginBottom: 12 },
   forecastTitle: { fontSize: 15, fontWeight: '700', color: C.ink, marginBottom: 4 },
   forecastLine: { color: C.ink, marginTop: 2 },
   previewUrgency: { fontSize: 18, fontWeight: '800', marginBottom: 4 },
