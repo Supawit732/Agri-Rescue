@@ -12,6 +12,7 @@ const SIDEBAR_BREAKPOINT = 900;
 export default function TabsLayout(): React.ReactElement {
   const { width } = useWindowDimensions();
   const isWide = width >= SIDEBAR_BREAKPOINT;
+  const insets = useSafeAreaInsets();
   const { t } = useI18n();
   const { user, api } = useAuth();
   const isAdmin = user?.is_admin === true;
@@ -68,7 +69,13 @@ export default function TabsLayout(): React.ReactElement {
             tabBarInactiveTintColor: C.mute,
             tabBarStyle: isWide
               ? { display: 'none' }
-              : { backgroundColor: C.surface, borderTopColor: C.line },
+              : {
+                  backgroundColor: C.surface,
+                  borderTopColor: C.line,
+                  paddingBottom: insets.bottom + 4,
+                  height: 64 + (insets.bottom ?? 0),
+                },
+            tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
             sceneStyle: { backgroundColor: C.bg },
           }}
         >
