@@ -783,7 +783,7 @@ ordersRouter.post(
   '/:id/payment/simulate',
   requireCapability('buy'),
   asyncHandler(async (req, res) => {
-    if (process.env.NODE_ENV === 'production') {
+    if (process.env.ALLOW_MOCK_PAYMENT !== 'true') {
       throw new HttpError(403, 'FORBIDDEN', 'จำลองการชำระใช้ได้เฉพาะโหมดทดสอบ');
     }
     const orderId = z.coerce.number().int().positive().parse(req.params.id);

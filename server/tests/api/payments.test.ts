@@ -136,6 +136,43 @@ describe('mock payment (6.5, simplified)', () => {
     expect(again.status).toBe(409);
   });
 
+  describe('ALLOW_MOCK_PAYMENT gate', () => {
+    const original = process.env.ALLOW_MOCK_PAYMENT;
+
+    afterEach(() => {
+      if (original === undefined) {
+        delete process.env.ALLOW_MOCK_PAYMENT;
+      } else {
+        process.env.ALLOW_MOCK_PAYMENT = original;
+      }
+    });
+
+    it('blocks simulate when unset or not the literal string "true"', async () => {
+      delete process.env.ALLOW_MOCK_PAYMENT;
+      const { orderId, buyerToken } = await bookNonDonationOrder();
+      const blocked = await request(app)
+        .post(`/api/orders/${orderId}/payment/simulate`)
+        .set(bearer(buyerToken));
+      expect(blocked.status).toBe(403);
+
+      process.env.ALLOW_MOCK_PAYMENT = 'false';
+      const stillBlocked = await request(app)
+        .post(`/api/orders/${orderId}/payment/simulate`)
+        .set(bearer(buyerToken));
+      expect(stillBlocked.status).toBe(403);
+    });
+
+    it('allows simulate when set to "true"', async () => {
+      process.env.ALLOW_MOCK_PAYMENT = 'true';
+      const { orderId, buyerToken } = await bookNonDonationOrder();
+      const ok = await request(app)
+        .post(`/api/orders/${orderId}/payment/simulate`)
+        .set(bearer(buyerToken));
+      expect(ok.status).toBe(200);
+      expect(ok.body.payment.status).toBe('paid');
+    });
+  });
+
   it('expires unpaid payments past the deadline, cancels the order, and restores lot stock', async () => {
     const farmer = await registerUser(app, { role: 'farmer' });
     const buyer = await registerUser(app, { role: 'buyer', buyer_type: 'shop' });

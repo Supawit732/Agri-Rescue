@@ -72,6 +72,12 @@ degrades gracefully. See the comments in `.env.production.example` for why
 there's no `PUBLIC_URL`/`CORS_ORIGIN`/`UPLOAD_DIR` var: uploads are served as
 relative paths and CORS already allows any origin, so nothing to configure.
 
+Set `ALLOW_MOCK_PAYMENT=true` if reviewers/graders need to click the
+"จำลองการชำระ" (simulate payment) button on this deployment — it's off by
+default so a plain production deploy never exposes it by accident. It only
+gates that one mock endpoint; no real payment gateway is involved either way
+(see `docs/DECISIONS.md` D049).
+
 ## 4. Build
 
 ```bash
