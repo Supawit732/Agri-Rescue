@@ -44,6 +44,35 @@ describe('mapsLink parser', () => {
     });
   });
 
+  it('parses JSON-LD geo data from HTML', () => {
+    const htmlWithJsonLd = `
+      <script type="application/ld+json">
+        {
+          "@context": "https://schema.org",
+          "geo": {
+            "latitude": 13.736717,
+            "longitude": 100.523186
+          }
+        }
+      </script>
+    `;
+    expect(parseCoordsFromMapsUrl(htmlWithJsonLd)).toEqual({
+      lat: 13.736717,
+      lng: 100.523186,
+    });
+  });
+
+  it('parses center parameter from query string', () => {
+    expect(parseCoordsFromMapsUrl('https://www.google.com/maps?center=14.5,101.0')).toEqual({
+      lat: 14.5,
+      lng: 101.0,
+    });
+    expect(parseCoordsFromMapsUrl('https://www.google.com/maps?center=14.5+101.0&z=12')).toEqual({
+      lat: 14.5,
+      lng: 101.0,
+    });
+  });
+
   it('returns null for empty or non-coordinate links', () => {
     expect(parseCoordsFromMapsUrl('')).toBeNull();
     expect(parseCoordsFromMapsUrl('https://www.google.com/maps/place/Bangkok')).toBeNull();

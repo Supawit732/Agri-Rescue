@@ -94,6 +94,8 @@ export async function resolveGoogleMapsLink(rawUrl: string): Promise<LatLng & { 
           headers: {
             'User-Agent': BROWSER_USER_AGENT,
             'Accept-Language': 'th,en;q=0.8',
+            'Referer': 'https://www.google.com/',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
           },
         });
       } catch (error) {

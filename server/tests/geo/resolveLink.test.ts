@@ -85,4 +85,106 @@ describe('resolveGoogleMapsLink', () => {
       lng: 100.5,
     });
   });
+
+  it('parses coordinates from JSON-LD in HTML body', async () => {
+    const htmlWithJsonLd = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <script type="application/ld+json">
+            {
+              "@context": "https://schema.org",
+              "@type": "Place",
+              "geo": {
+                "latitude": 13.736717,
+                "longitude": 100.523186
+              }
+            }
+          </script>
+        </head>
+        <body>Map Content</body>
+      </html>
+    `;
+    global.fetch = jest.fn(async () => {
+      return {
+        ok: true,
+        status: 200,
+        headers: {
+          get: () => null,
+        },
+        url: 'https://www.google.com/maps/place/some-place',
+        text: async () => htmlWithJsonLd,
+      } as unknown as Response;
+    }) as unknown as typeof fetch;
+
+    await expect(resolveGoogleMapsLink('https://maps.app.goo.gl/jsonld')).resolves.toMatchObject({
+      lat: 13.736717,
+      lng: 100.523186,
+    });
+  });
+
+  it('parses coordinates from center parameter in query string', async () => {
+    const urlWithCenter = 'https://www.google.com/maps/place/Test?center=14.5,101.0';
+    global.fetch = jest.fn(async () => {
+      return {
+        ok: true,
+        status: 200,
+        headers: {
+          get: () => null,
+        },
+        url: urlWithCenter,
+        text: async () => '',
+      } as unknown as Response;
+    }) as unknown as typeof fetch;
+
+    await expect(resolveGoogleMapsLink('https://maps.app.goo.gl/center')).resolves.toMatchObject({
+      lat: 14.5,
+      lng: 101.0,
+    });
+  });
+
+  it('handles a real short-link redirect chain with geolocation redirect', async () => {
+    let callCount = 0;
+    global.fetch = jest.fn(async (url: string | Request) => {
+      const urlStr = typeof url === 'string' ? url : url.url;
+      callCount++;
+
+      // First hop: maps.app.goo.gl redirects to consent
+      if (urlStr.includes('maps.app.goo.gl')) {
+        return {
+          ok: false,
+          status: 307,
+          headers: {
+            get: (name: string) =>
+              name.toLowerCase() === 'location'
+                ? 'https://consent.google.com/m?continue=' +
+                  encodeURIComponent('https://www.google.com/maps/@13.7563,100.5018,15z')
+                : null,
+          },
+          url: '',
+          text: async () => '',
+        } as unknown as Response;
+      }
+
+      // Final page with JSON-LD coordinates (consent.google.com continue URL points here)
+      return {
+        ok: true,
+        status: 200,
+        headers: {
+          get: () => null,
+        },
+        url: 'https://www.google.com/maps/@13.7563,100.5018,15z',
+        text: async () =>
+          '{"geo":{"latitude":13.7563,"longitude":100.5018}}',
+      } as unknown as Response;
+    }) as unknown as typeof fetch;
+
+    const result = await resolveGoogleMapsLink('https://maps.app.goo.gl/R9hbhk6B7eDxvtX18');
+    expect(result).toMatchObject({
+      lat: 13.7563,
+      lng: 100.5018,
+    });
+    // Should make at least 1 fetch call (some hops are handled by URL parsing without fetch)
+    expect(callCount).toBeGreaterThanOrEqual(1);
+  });
 });

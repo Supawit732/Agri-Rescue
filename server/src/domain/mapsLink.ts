@@ -65,7 +65,7 @@ function validPair(lat: number, lng: number): LatLng | null {
 
 /**
  * Extract lat/lng from a full Google Maps URL or pasted fragment.
- * Supports @lat,lng, ?q=lat,lng, !3d..!4d.., ll=, and /search/lat,lng.
+ * Supports @lat,lng, ?q=lat,lng, !3d..!4d.., ll=, /search/lat,lng, and JSON-LD embedded in HTML.
  */
 export function parseCoordsFromMapsUrl(raw: string): LatLng | null {
   const text = raw.trim();
@@ -108,6 +108,24 @@ export function parseCoordsFromMapsUrl(raw: string): LatLng | null {
   const searchMatch = text.match(/\/maps\/search\/(-?\d+(?:\.\d+)?)[,+\s]+(-?\d+(?:\.\d+)?)/i);
   if (searchMatch) {
     const pair = validPair(Number(searchMatch[1]), Number(searchMatch[2]));
+    if (pair !== null) {
+      return pair;
+    }
+  }
+
+  // Try parsing JSON-LD embedded in HTML (used by modern Google Maps redirects).
+  const jsonLdMatch = text.match(/"geo"\s*:\s*{\s*"latitude"\s*:\s*(-?\d+(?:\.\d+)?)\s*,\s*"longitude"\s*:\s*(-?\d+(?:\.\d+)?)/i);
+  if (jsonLdMatch) {
+    const pair = validPair(Number(jsonLdMatch[1]), Number(jsonLdMatch[2]));
+    if (pair !== null) {
+      return pair;
+    }
+  }
+
+  // Try extracting from center=lat,lng in query string.
+  const centerMatch = text.match(/[?&]center=(-?\d+(?:\.\d+)?)[,+\s](-?\d+(?:\.\d+)?)/i);
+  if (centerMatch) {
+    const pair = validPair(Number(centerMatch[1]), Number(centerMatch[2]));
     if (pair !== null) {
       return pair;
     }
