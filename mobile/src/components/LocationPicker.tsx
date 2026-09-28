@@ -2,8 +2,15 @@ import React, { useEffect, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as Location from 'expo-location';
 import { ApiError } from '../api/client';
+import { DISABLE_LINK_RESOLVE } from '../api/config';
 import { resolveMapsLink, reverseGeocode } from '../api/geo';
-import { isInThailandApprox, isShortGoogleMapsUrl, parseCoordsFromMapsUrl, type LatLng } from '../geo/mapsLink';
+import {
+  isInThailandApprox,
+  isShortGoogleMapsUrl,
+  parseCoordsFromMapsUrl,
+  parseRawCoords,
+  type LatLng,
+} from '../geo/mapsLink';
 import { useI18n } from '../i18n';
 import { C } from '../theme';
 import { Field, PrimaryButton, SecondaryButton } from './ui';
@@ -109,8 +116,20 @@ export function LocationPicker({
       return;
     }
 
+    const raw = parseRawCoords(trimmed);
+    if (raw !== null) {
+      applyCoords(raw);
+      return;
+    }
+
     if (!isShortGoogleMapsUrl(trimmed) && !trimmed.includes('google.') && !trimmed.includes('goo.gl')) {
       setError(t.locationPicker.coordsNotInLink);
+      return;
+    }
+
+    if (DISABLE_LINK_RESOLVE) {
+      setError(`${t.locationPicker.resolveFailed} ${t.locationPicker.resolveFailedHint}`);
+      setManualOpen(true);
       return;
     }
 
@@ -161,6 +180,7 @@ export function LocationPicker({
             autoCorrect={false}
             placeholder={t.locationPicker.linkPlaceholder}
           />
+          <Text style={styles.linkHint}>{t.locationPicker.linkHint}</Text>
         </View>
         <View style={styles.linkButton}>
           <PrimaryButton
@@ -252,6 +272,7 @@ const styles = StyleSheet.create({
   label: { color: C.mute, fontSize: 13, marginBottom: 6, fontWeight: '600' },
   linkRow: { marginTop: 4 },
   linkField: {},
+  linkHint: { color: C.mute, fontSize: 12, marginTop: 4 },
   linkButton: { marginTop: 4 },
   placeBox: {
     marginTop: 8,

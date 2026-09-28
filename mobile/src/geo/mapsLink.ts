@@ -94,3 +94,13 @@ export function parseCoordsFromMapsUrl(raw: string): LatLng | null {
 
   return null;
 }
+
+/** Parse a bare "lat, lng" pair pasted without a URL, e.g. "12.69384, 101.21825". */
+export function parseRawCoords(raw: string): LatLng | null {
+  const text = raw.trim();
+  const match = text.match(/^(-?\d+(?:\.\d+)?)[,\s]+(-?\d+(?:\.\d+)?)$/);
+  if (!match) {
+    return null;
+  }
+  return validPair(Number(match[1]), Number(match[2]));
+}
