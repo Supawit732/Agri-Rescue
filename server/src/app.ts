@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import express, { type Express } from 'express';
 import { errorHandler } from './middleware/errorHandler';
 import { adminDitRouter } from './routes/adminDit';
@@ -64,6 +66,29 @@ export function createApp(): Express {
   app.use('/api/impact', impactRouter);
   app.use('/api/admin/dit', adminDitRouter);
   app.use('/api/admin', adminConsoleRouter);
+
+  const webDistDir = path.resolve(
+    (process.env.WEB_DIST_DIR ?? '').trim() || path.join(__dirname, '../public'),
+  );
+  const webIndexPath = path.join(webDistDir, 'index.html');
+  if (fs.existsSync(webIndexPath)) {
+    app.use(express.static(webDistDir));
+    // SPA fallback for client-side routes (e.g. /lots/123) that have no
+    // matching static file — but never shadow the API/uploads/health routes
+    // above, which already answered (with their own 404s) if matched.
+    app.get(/.*/, (req, res, next) => {
+      if (
+        req.path.startsWith('/api/') ||
+        req.path.startsWith('/uploads/') ||
+        req.path === '/health'
+      ) {
+        next();
+        return;
+      }
+      res.sendFile(webIndexPath);
+    });
+  }
+
   app.use(errorHandler);
   return app;
 }
