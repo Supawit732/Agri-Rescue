@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Alert, Linking, StyleSheet, Text, View } from 'react-native';
 import { ApiError } from '../../src/api/client';
 import { FormField, useFieldErrors, useFieldScroll } from '../../src/components/form';
+import { MockQrCode } from '../../src/components/MockQrCode';
 import { formatIsoSlotShort } from '../../src/components/PickupSlotPicker';
 import {
   Badge,
@@ -29,10 +30,16 @@ export default function OrderDetailScreen(): React.ReactElement {
   const router = useRouter();
   const now = useNow();
   const { data, loading, error, reload } = useApiData(() => api.getOrder(orderId), [orderId]);
+  const { data: payment, reload: reloadPayment } = useApiData(
+    () => api.getOrderPayment(orderId),
+    [orderId],
+  );
   const [busy, setBusy] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
   const [otpInput, setOtpInput] = useState('');
   const [weightInput, setWeightInput] = useState('');
+  const [paymentBusy, setPaymentBusy] = useState(false);
+  const [paymentBanner, setPaymentBanner] = useState<string | null>(null);
   const { errors, setErrors, setFieldError } = useFieldErrors();
   const { scrollRef, registerY, scrollToField } = useFieldScroll();
 
@@ -138,6 +145,28 @@ export default function OrderDetailScreen(): React.ReactElement {
             })();
           };
 
+          const paymentHoursLeft =
+            payment !== null && payment !== undefined ? hoursLeftFrom(payment.deadline_at, now) : null;
+
+          const simulatePayment = (): void => {
+            setPaymentBusy(true);
+            setPaymentBanner(null);
+            void (async () => {
+              try {
+                await api.simulateOrderPayment(order.id);
+                reloadPayment();
+              } catch (err) {
+                setPaymentBanner(
+                  err instanceof ApiError
+                    ? translateError(err.code, err.message)
+                    : t.orderDetail.paymentSimulateFailed,
+                );
+              } finally {
+                setPaymentBusy(false);
+              }
+            })();
+          };
+
           const nextAction =
             isSellerView && order.status === 'reserved'
               ? t.orderDetail.confirmDelivery
@@ -191,6 +220,66 @@ export default function OrderDetailScreen(): React.ReactElement {
                   bg={C.leafSoft}
                 />
               </Card>
+
+              {!order.is_donation && payment != null ? (
+                <>
+                  <SectionTitle>{t.orderDetail.sectionPayment}</SectionTitle>
+                  <Card>
+                    <Text style={styles.muted}>{t.orderDetail.paymentSandboxNotice}</Text>
+                    {paymentBanner !== null ? (
+                      <Text style={styles.banner}>{paymentBanner}</Text>
+                    ) : null}
+                    {payment.status === 'pending' ? (
+                      <View style={styles.qrBox}>
+                        <MockQrCode seed={`order:${String(order.id)}:${String(payment.amount)}`} />
+                      </View>
+                    ) : null}
+                    <Text style={styles.paymentAmount}>
+                      {formatTemplate(t.orderDetail.paymentAmount, {
+                        amount: formatNumber(payment.amount),
+                      })}
+                    </Text>
+                    <Badge
+                      text={
+                        payment.status === 'pending'
+                          ? t.orderDetail.paymentStatusPending
+                          : payment.status === 'paid'
+                            ? t.orderDetail.paymentStatusPaid
+                            : payment.status === 'expired'
+                              ? t.orderDetail.paymentStatusExpired
+                              : t.orderDetail.paymentStatusRefunded
+                      }
+                      fg={payment.status === 'paid' ? C.leaf : payment.status === 'expired' ? C.urgentFg : C.ink}
+                      bg={payment.status === 'paid' ? C.leafSoft : payment.status === 'expired' ? C.urgentBg : C.surface}
+                    />
+                    {payment.status === 'pending' && paymentHoursLeft !== null ? (
+                      <Text style={styles.line}>
+                        {formatTemplate(t.orderDetail.paymentDeadline, {
+                          countdown: formatCountdown(paymentHoursLeft, t.countdown),
+                        })}
+                      </Text>
+                    ) : null}
+                    {payment.status === 'paid' && payment.paid_at !== null ? (
+                      <Text style={styles.line}>
+                        {formatTemplate(t.orderDetail.paymentPaidAt, {
+                          when: formatDateTime(payment.paid_at),
+                        })}
+                      </Text>
+                    ) : null}
+                    {payment.status === 'expired' ? (
+                      <Text style={styles.muted}>{t.orderDetail.paymentExpiredHint}</Text>
+                    ) : null}
+                    {payment.status === 'pending' && !isSellerView ? (
+                      <PrimaryButton
+                        label={t.orderDetail.paymentSimulateButton}
+                        block
+                        loading={paymentBusy}
+                        onPress={simulatePayment}
+                      />
+                    ) : null}
+                  </Card>
+                </>
+              ) : null}
 
               <SectionTitle>{t.orderDetail.sectionPickup}</SectionTitle>
               <Card>
@@ -283,7 +372,12 @@ export default function OrderDetailScreen(): React.ReactElement {
                     ? ' ✓'
                     : ''}
                 </Text>
-                <Text style={styles.muted}>○ {t.orderDetail.timelinePayment}</Text>
+                {!order.is_donation ? (
+                  <Text style={payment?.status === 'paid' ? styles.step : styles.muted}>
+                    {payment?.status === 'paid' ? '●' : '○'} {t.orderDetail.timelinePayment}
+                    {payment?.status === 'paid' ? ' ✓' : ''}
+                  </Text>
+                ) : null}
                 <Text style={styles.step}>
                   {order.status === 'picked' || order.status === 'delivered' ? '●' : '○'}{' '}
                   {t.orderDetail.timelinePicked}
@@ -413,4 +507,6 @@ const styles = StyleSheet.create({
   otpBox: { backgroundColor: C.leafSoft, borderRadius: 12, padding: 12, alignItems: 'center' },
   otpLabel: { color: C.mute, marginBottom: 4 },
   otpValue: { fontSize: 40, fontWeight: '900', color: C.leaf, letterSpacing: 8 },
+  qrBox: { alignItems: 'center', marginVertical: 10 },
+  paymentAmount: { fontSize: 18, fontWeight: '800', color: C.ink, marginBottom: 6 },
 });

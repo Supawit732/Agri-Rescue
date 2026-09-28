@@ -473,6 +473,18 @@ export type Messages = {
     adviceFridge: string;
     advicePriceDrop: string;
     adviceTip: string;
+    sectionPayment: string;
+    paymentSandboxNotice: string;
+    paymentAmount: string;
+    paymentDeadline: string;
+    paymentStatusPending: string;
+    paymentStatusPaid: string;
+    paymentStatusExpired: string;
+    paymentStatusRefunded: string;
+    paymentPaidAt: string;
+    paymentExpiredHint: string;
+    paymentSimulateButton: string;
+    paymentSimulateFailed: string;
   };
   confirmBooking: {
     title: string;

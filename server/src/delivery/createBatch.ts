@@ -47,7 +47,9 @@ export async function createBatch(driverId: number): Promise<{
        JOIN harvest_lots h ON h.id = o.lot_id
        JOIN plots p ON p.id = h.plot_id
        JOIN users u ON u.id = o.buyer_id
+       LEFT JOIN payments pay ON pay.order_id = o.id
        WHERE o.status = 'reserved' AND o.batch_id IS NULL
+         AND (o.is_donation = 1 OR pay.status = 'paid')
        ORDER BY o.id
        FOR UPDATE`,
     );

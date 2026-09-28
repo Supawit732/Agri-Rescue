@@ -46,7 +46,7 @@ AI และบริการภายนอก:
 - **Reverse geocode**: Nominatim ผ่าน server พร้อม cache และ rate limit; resolve ลิงก์ Google Maps แบบกัน SSRF
 - ห้ามเรียก API ภายนอกจริงใน test
 
-ยังไม่ทำ: escrow/ชำระเงิน, ส่งพัสดุ, ข้อพิพาท, push notification, ร้านค้า/ติดตาม, ติดต่อเรา, LINE Login (อยู่ใน PLAN_V2 และ UI_PLAN)
+ยังไม่ทำ: escrow เต็มรูปแบบ (มีชำระเงินแบบจำลอง/mock แล้ว ดู DECISIONS D049), ส่งพัสดุ, ข้อพิพาท, push notification, ร้านค้า/ติดตาม, ติดต่อเรา, LINE Login (อยู่ใน PLAN_V2 และ UI_PLAN)
 
 ## 5. บัญชีเดโม (รหัสผ่าน `demo1234`)
 - `0800000001` เกษตรกร · `0800000011` ผู้ซื้อ · `0800000012` องค์กรที่อนุมัติแล้ว · `0800000005` admin

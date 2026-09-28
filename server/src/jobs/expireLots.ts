@@ -2,6 +2,7 @@ import type { RowDataPacket } from 'mysql2';
 import { pool } from '../db/pool';
 import { assertLotTransition, type LotStatus } from '../domain/lotStateMachine';
 import { expireMissedDonationProofs } from '../donors/donationService';
+import { expireDuePayments } from '../payments/paymentService';
 import { maybeRunDitDailyJob, maybeRunHourlyPriceRetry } from './ditPipeline';
 import { openSellThenDonateLots } from './openDonationWindows';
 
@@ -41,10 +42,17 @@ export async function expireOpenLots(now = new Date()): Promise<number> {
 export async function runExpireJobs(
   now = new Date(),
   opts?: { skipDit?: boolean },
-): Promise<{ lots: number; proofs: number; donationOpened: number; pricesSynced: number }> {
+): Promise<{
+  lots: number;
+  proofs: number;
+  donationOpened: number;
+  pricesSynced: number;
+  paymentsExpired: number;
+}> {
   const lots = await expireOpenLots(now);
   const proofs = await expireMissedDonationProofs(now);
   const donationOpened = await openSellThenDonateLots(now);
+  const paymentsExpired = await expireDuePayments(now);
   let pricesSynced = 0;
   if (!opts?.skipDit) {
     try {
@@ -59,7 +67,7 @@ export async function runExpireJobs(
       console.error('DIT hourly retry failed', error);
     }
   }
-  return { lots, proofs, donationOpened, pricesSynced };
+  return { lots, proofs, donationOpened, pricesSynced, paymentsExpired };
 }
 
 export function startExpireSchedule(): void {

@@ -39,6 +39,11 @@ import { notifyUser } from '../notifications/notificationService';
 import { locationDisplayLabelFor } from '../geo/locationLabel';
 import { requestLocale } from '../http/locale';
 import { buildStorageAdvice } from '../domain/storageAdvice';
+import {
+  createPendingPayment,
+  getPaymentByOrderId,
+  simulatePaymentPaid,
+} from '../payments/paymentService';
 
 export const ordersRouter = Router();
 
@@ -436,6 +441,7 @@ ordersRouter.post(
       let distributionAt: Date | null = null;
       let pickupStart: Date | null = null;
       let pickupEnd: Date | null = null;
+      let hoursLeft = 0;
       if (donation) {
         const profile = await loadDonorProfile(connection, buyerId);
         if (profile === null) {
@@ -494,7 +500,7 @@ ordersRouter.post(
             pickup_slot_start: message,
           });
         }
-        const hoursLeft = (new Date(lot.expires_at).getTime() - Date.now()) / (60 * 60 * 1000);
+        hoursLeft = (new Date(lot.expires_at).getTime() - Date.now()) / (60 * 60 * 1000);
         agreedPrice = lotPricePerKg({
           startPricePerKg: Number(lot.start_price_per_kg),
           floorPricePerKg: Number(lot.floor_price_per_kg),
@@ -521,6 +527,16 @@ ordersRouter.post(
         ],
       );
       const lotStatus = await syncLotBookableStatus(connection, lot.id, weightKg, lot.status);
+      let paymentDeadlineAt: Date | null = null;
+      if (!donation) {
+        const amount = Math.round(agreedPrice * body.quantity_kg * 100) / 100;
+        paymentDeadlineAt = await createPendingPayment(connection, {
+          orderId: result.insertId,
+          amount,
+          now: new Date(),
+          hoursUntilExpiry: hoursLeft,
+        });
+      }
       await connection.commit();
       res.status(201).json({
         order: {
@@ -539,6 +555,7 @@ ordersRouter.post(
         },
         lot_status: lotStatus,
         remaining_kg: remainingLotKg(weightKg, reservedSum + body.quantity_kg),
+        payment_deadline_at: paymentDeadlineAt?.toISOString() ?? null,
       });
       try {
         await notifyUser(
@@ -720,6 +737,91 @@ ordersRouter.get(
           : null,
       },
     });
+  }),
+);
+
+/** Mock payment status + deadline (donation orders have no payment row). */
+ordersRouter.get(
+  '/:id/payment',
+  requireCapability('buy', 'sell'),
+  asyncHandler(async (req, res) => {
+    const orderId = z.coerce.number().int().positive().parse(req.params.id);
+    const userId = req.auth?.id ?? 0;
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT o.buyer_id, p.farmer_id
+       FROM orders o
+       JOIN harvest_lots h ON h.id = o.lot_id
+       JOIN plots p ON p.id = h.plot_id
+       WHERE o.id = ?`,
+      [orderId],
+    );
+    const order = rows[0];
+    if (order === undefined) {
+      throw new HttpError(404, 'NOT_FOUND', 'ไม่พบคำสั่งซื้อ');
+    }
+    if (Number(order.buyer_id) !== userId && Number(order.farmer_id) !== userId) {
+      throw new HttpError(403, 'FORBIDDEN', 'ดูได้เฉพาะเจ้าของออเดอร์หรือเจ้าของล็อต');
+    }
+    const payment = await getPaymentByOrderId(pool, orderId);
+    res.json({
+      payment:
+        payment === null
+          ? null
+          : {
+              status: payment.status,
+              amount: Number(payment.amount),
+              deadline_at: new Date(payment.deadline_at).toISOString(),
+              paid_at: payment.paid_at === null ? null : new Date(payment.paid_at).toISOString(),
+              provider: payment.provider,
+            },
+    });
+  }),
+);
+
+/** Sandbox-only mock payment: buyer marks their own pending payment as paid. */
+ordersRouter.post(
+  '/:id/payment/simulate',
+  requireCapability('buy'),
+  asyncHandler(async (req, res) => {
+    if (process.env.NODE_ENV === 'production') {
+      throw new HttpError(403, 'FORBIDDEN', 'จำลองการชำระใช้ได้เฉพาะโหมดทดสอบ');
+    }
+    const orderId = z.coerce.number().int().positive().parse(req.params.id);
+    const buyerId = req.auth?.id ?? 0;
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [orders] = await connection.query<RowDataPacket[]>(
+        'SELECT id, buyer_id, status FROM orders WHERE id = ? FOR UPDATE',
+        [orderId],
+      );
+      const order = orders[0];
+      if (order === undefined) {
+        throw new HttpError(404, 'NOT_FOUND', 'ไม่พบคำสั่งซื้อ');
+      }
+      if (Number(order.buyer_id) !== buyerId) {
+        throw new HttpError(403, 'FORBIDDEN', 'จำลองการชำระได้เฉพาะเจ้าของคำสั่งซื้อ');
+      }
+      if (order.status !== 'reserved') {
+        throw new HttpError(409, 'CONFLICT', 'คำสั่งซื้อนี้ชำระเงินไม่ได้แล้ว');
+      }
+      const payment = await simulatePaymentPaid(connection, orderId);
+      await connection.commit();
+      res.json({
+        payment: {
+          status: payment.status,
+          amount: Number(payment.amount),
+          deadline_at: new Date(payment.deadline_at).toISOString(),
+          paid_at: payment.paid_at === null ? null : new Date(payment.paid_at).toISOString(),
+          provider: payment.provider,
+        },
+      });
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
   }),
 );
 

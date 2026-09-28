@@ -45,6 +45,7 @@ beforeAll(async () => {
     DELETE FROM org_application_docs;
     DELETE FROM impact_logs;
     DELETE FROM route_stops;
+    DELETE FROM payments;
     DELETE FROM orders;
     DELETE FROM batches;
     DELETE FROM lot_delete_logs;
