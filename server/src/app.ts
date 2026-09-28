@@ -45,6 +45,9 @@ export function createApp(): Express {
       next();
     });
   }
+  app.get('/health', (_req, res) => {
+    res.json({ ok: true });
+  });
   app.use('/api/auth', authRouter);
   app.use('/api/donors', donorsRouter);
   app.use('/api/geo', geoRouter);
