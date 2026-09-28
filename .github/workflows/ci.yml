@@ -49,6 +49,7 @@ jobs:
             'JWT_SECRET=ci-test-secret' \
             'DEPOT_LAT=13.65' \
             'DEPOT_LNG=100.62' \
+            'ALLOW_MOCK_PAYMENT=true' \
             > .env.test
       - run: npm test
       - run: npm run lint
