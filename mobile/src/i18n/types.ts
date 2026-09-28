@@ -1050,6 +1050,7 @@ export type Messages = {
     locating: string;
     orPasteLink: string;
     linkPlaceholder: string;
+    linkHint: string;
     useLink: string;
     resolvingPlace: string;
     editManual: string;
