@@ -1,6 +1,6 @@
 import type { RowDataPacket } from 'mysql2';
 import { pool } from './pool';
-import { crops, farmers } from './seedData';
+import { crops, farmers, SEED_CROP_PHOTOS } from './seedData';
 
 export async function resetDemoLots(now: Date = new Date()): Promise<number> {
   const connection = await pool.getConnection();
@@ -48,13 +48,14 @@ export async function resetDemoLots(now: Date = new Date()): Promise<number> {
         `INSERT INTO harvest_lots (
            plot_id, crop_id, weight_kg, grade, ripeness, photo_url, allow_donation,
            predicted_shelf_hours, expires_at, status, created_at
-         ) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, 'open', ?)`,
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?)`,
         [
           plot.id,
           cropRow.id,
           farmer.lot.weightKg,
           farmer.lot.grade,
           farmer.lot.ripeness,
+          SEED_CROP_PHOTOS[farmer.lot.cropKey] ?? null,
           farmer.lot.allowDonation ? 1 : 0,
           farmer.lot.hoursLeft,
           expiresAt,

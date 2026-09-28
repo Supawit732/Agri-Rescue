@@ -24,6 +24,8 @@ void ensurePublicUploadsDir().catch((err: unknown) => {
   console.error('Failed to ensure uploads directory', err);
 });
 
+const SEED_PHOTOS_DIR = path.resolve(__dirname, '../assets/seed-photos');
+
 export function createApp(): Express {
   const app = express();
   app.use((req, res, next) => {
@@ -37,6 +39,11 @@ export function createApp(): Express {
     next();
   });
   app.use(express.json({ limit: '8mb' }));
+  // Committed sample crop photos for a fresh seed/demo (server/assets/seed-photos), served
+  // at the same /uploads/... shape as a real uploaded lot photo so the client's photo URL
+  // handling doesn't need a special case. Mounted before the general uploads static so it
+  // wins for this one path even though PUBLIC_UPLOADS_DIR also has a (gitignored) uploads/seed/.
+  app.use('/uploads/seed', express.static(SEED_PHOTOS_DIR, { maxAge: '7d' }));
   app.use('/uploads', express.static(PUBLIC_UPLOADS_DIR, { fallthrough: true, maxAge: '1d' }));
   if (process.env.NODE_ENV !== 'test') {
     app.use((req, res, next) => {

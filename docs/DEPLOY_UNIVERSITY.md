@@ -130,6 +130,33 @@ curl http://119.59.102.161:3064/health
 
 Both should return `{"ok":true}`.
 
+## Optional: load sample/demo data (with real thumbnails)
+
+Skip this if the DB already has real farmer/lot data you want to keep — it
+only adds the fixed demo users, crops, and a few open lots if they're not
+already there (`npm run seed`) or additionally wipes/resets orders and lot
+expiry for a fresh demo run (`npm run seed:reset`; see `docs/DEMO.md`).
+
+```bash
+cd /app/agri-rescue/server
+npm run seed          # or: npm run seed:reset
+```
+
+The seeded lots (มะม่วง/mango, ผักบุ้ง/morning glory, มะเขือเทศ/tomato) get a
+real thumbnail instead of the crop-tinted placeholder, from a handful of
+small illustrated JPEGs committed at `server/assets/seed-photos/` and mapped
+by crop key in `SEED_CROP_PHOTOS` (`server/src/db/seedData.ts`). These are
+tracked in git like any other source file — unlike `server/uploads/` (real
+user-uploaded photos, gitignored and deliberately excluded from both the
+`git clone` and the zip/FileZilla path in step 1), so **no extra upload step
+is needed**: a normal `git pull` or re-zip already brings them over. They're
+served at `/uploads/seed/<crop-key>.jpg` by a small dedicated static mount in
+`server/src/app.ts`, kept separate from the real uploads folder so the two
+never collide. To add a photo for another crop, drop a JPEG in that folder
+and add its key to `SEED_CROP_PHOTOS`, then re-run `npm run seed` (or
+`seed:reset`) — it backfills the `photo_url` on any matching lot that
+doesn't already have one.
+
 ## 8. Build & upload the web app (so friends can use it in a browser)
 
 The server can't build the web bundle itself (`npm ci` in step 2 only
