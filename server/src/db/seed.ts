@@ -269,7 +269,7 @@ async function upsertPlot(
   return result.insertId;
 }
 
-async function upsertLot(
+export async function upsertLot(
   connection: PoolConnection,
   lot: {
     plotId: number;
