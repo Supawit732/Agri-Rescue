@@ -124,16 +124,93 @@ curl http://119.59.102.161:3064/health
 
 Both should return `{"ok":true}`.
 
-## 8. Point the mobile app at the server (Expo Go)
+## 8. Build & upload the web app (so friends can use it in a browser)
 
-On your own machine, in `mobile/.env`:
+The server can't build the web bundle itself (`npm ci` in step 2 only
+installs runtime deps for `server/`, no devDependencies, and there's no
+`scp`), so build it **on your Mac** and upload the static output with
+`sftp`.
+
+```bash
+# locally
+cd /Users/pandoda/development/agri-rescue/mobile
+npm run export:web
+```
+
+This runs `expo export --platform web` and writes static files to
+`mobile/dist/`. `mobile/src/api/config.ts` defaults `API_BASE_URL` to an
+**empty (relative) string on web** when `EXPO_PUBLIC_API_URL` isn't set, so
+this one build works from `http://119.59.102.161:3064` or any other
+host/port it's later served from — every API call and photo URL resolves
+against whatever origin the page was loaded from. You don't need a
+`mobile/.env` for this build.
+
+Upload `mobile/dist/` to the server as `server/public/`:
+
+```bash
+sftp std6730202700@119.59.102.161
+sftp> cd /app/agri-rescue/server
+sftp> put -r dist public
+sftp> bye
+```
+
+`put -r dist public` uploads the local `dist` folder and names it `public`
+on the remote side (same idea as `cp -r dist public`) — it does **not**
+collide with the server's own compiled `server/dist/` (the TypeScript
+build output from step 4), since the upload target is named `public`.
+
+`server/src/app.ts` serves that folder automatically whenever
+`server/public/index.html` exists: static files for anything that isn't
+`/api/*`, `/uploads/*`, or `/health`, with an SPA fallback to `index.html`
+for client-side routes (e.g. `/lots/123`) that have no matching static
+file. No restart is strictly required for a first upload (it's picked up
+next time the process (re)starts), but if pm2 is already running, restart
+it so the check re-runs:
+
+```bash
+pm2 restart agri-rescue
+curl http://119.59.102.161:3064/          # should return the app's HTML
+```
+
+If you'd rather serve from a different folder name, set `WEB_DIST_DIR` in
+`server/.env` to an absolute path and skip the `public` naming above.
+
+**Redeploying the web app after changes:** `put -r dist public` only
+merges into an existing remote `public/` — it won't remove files that no
+longer exist locally (stale JS bundles pile up but are otherwise
+harmless). To do a clean swap, SSH in first and clear the old build:
+
+```bash
+ssh std6730202700@119.59.102.161 "rm -rf /app/agri-rescue/server/public"
+# then re-run the sftp put -r dist public step above, and pm2 restart agri-rescue
+```
+
+**Camera/location on plain HTTP:** the site is served over `http://`, not
+`https://`, which blocks the browser's live-camera API
+(`getUserMedia`/`navigator.mediaDevices`) and often the Geolocation API
+too. This already degrades gracefully without any extra work:
+- Photo capture (`SellScreen`) uses `expo-image-picker`, whose web
+  implementation opens a plain `<input type="file" capture="camera">` —
+  this doesn't need `getUserMedia`/HTTPS, it just hands off to the phone's
+  own camera app or a file picker, so it works fine over HTTP.
+- "Use my GPS" (`LocationPicker`) already catches a failed/denied
+  `Location.getCurrentPositionAsync()` call and shows a message telling
+  the user to allow location in the browser or paste a Google Maps link
+  instead (`t.locationPicker.gpsFailedWeb`) — friends whose browser blocks
+  geolocation over HTTP can still set a plot/order location manually.
+
+## 9. Optional: point the mobile app at the server via Expo Go
+
+For native testing (not required for friends using the browser build
+above), on your own machine, in `mobile/.env`:
 
 ```
 EXPO_PUBLIC_API_URL=http://119.59.102.161:3064
 ```
 
 Then `npx expo start` and open in Expo Go as usual — `mobile/src/api/config.ts`
-already reads this var (falls back to `http://localhost:3000` if unset), and
+already reads this var (falls back to `http://localhost:3000` on native if
+unset — on web it defaults to a relative URL instead, see step 8), and
 `mobile/src/lib/media.ts` resolves photo URLs returned by the API (e.g.
 `/uploads/lots/xyz.jpg`) against the same base URL, so uploaded photos load
 from the server automatically.
@@ -147,7 +224,7 @@ policy both block plain HTTP by default in a standalone app, and you'd need
 an ATS exception / `usesCleartextTraffic` override, or (better) put the API
 behind HTTPS.
 
-## 9. Updating later
+## 10. Updating later
 
 ```bash
 cd /app/agri-rescue
@@ -162,3 +239,6 @@ pm2 logs agri-rescue --lines 30   # confirm it came back up
 If a new migration file was added since the last deploy, run
 `npm run migrate` (not `migrate:mark-applied`) before restarting — it will
 skip everything already marked applied and only run the new one(s).
+
+If the web app itself changed (not just the server), rebuild and re-upload
+it too — see "Redeploying the web app after changes" in step 8.
