@@ -1,7 +1,7 @@
 import request from 'supertest';
 import { pool } from '../../src/db/pool';
 import { lotPricePerKg } from '../../src/domain/sellerPricing';
-import { bearer, insertCrop, insertLot, insertPlot, registerUser, testApp } from '../helpers';
+import { bearer, insertCrop, insertLot, insertPlot, registerUser, testApp, pickAvailablePickupSlot } from '../helpers';
 
 describe('market', () => {
   const app = testApp();
@@ -202,5 +202,104 @@ describe('market', () => {
       (lot) => lot.id === lotId,
     );
     expect(otherViewLot?.is_mine).toBe(false);
+  });
+
+  it('uses stored profile location for purchasable check, not client-sent coords', async () => {
+    const farmer = await registerUser(app, { role: 'farmer' });
+    const buyer = await registerUser(app, { role: 'buyer', buyer_type: 'vendor' });
+    // Clear buyer profile location
+    await pool.query('UPDATE users SET lat = NULL, lng = NULL WHERE id = ?', [buyer.user.id]);
+    const cropId = await insertCrop('มะม่วง', 5, 40);
+
+    // Plot at ~10 km from coordinates (13.75, 100.611)
+    const nearPlotId = await insertPlot(farmer.user.id, 13.75, 100.611, 'แปลงใกล้');
+    const nearLotId = await insertLot({
+      plotId: nearPlotId,
+      cropId,
+      expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+    });
+
+    // Client sends nearby coords (13.75, 100.611) but profile location is null
+    const response = await request(app)
+      .get('/api/market')
+      .query({ lat: 13.75, lng: 100.611, radius_km: 15 })
+      .set(bearer(buyer.token));
+    expect(response.status).toBe(200);
+
+    const nearLot = response.body.lots.find((lot: { id: number }) => lot.id === nearLotId);
+    expect(nearLot).toBeDefined();
+    // Purchasable should be FALSE because profile location is null (not the client coords)
+    expect(nearLot.purchasable).toBe(false);
+    // Distance should still be computed from client coords (for display)
+    expect(nearLot.distance_km).toBeLessThanOrEqual(15);
+
+    // Now update profile location to match client coords
+    await pool.query('UPDATE users SET lat = ?, lng = ? WHERE id = ?', [13.75, 100.611, buyer.user.id]);
+
+    // Check market again
+    const response2 = await request(app)
+      .get('/api/market')
+      .query({ lat: 13.75, lng: 100.611, radius_km: 15 })
+      .set(bearer(buyer.token));
+    expect(response2.status).toBe(200);
+
+    const nearLot2 = response2.body.lots.find((lot: { id: number }) => lot.id === nearLotId);
+    expect(nearLot2).toBeDefined();
+    // Now purchasable should be TRUE because profile location matches
+    expect(nearLot2.purchasable).toBe(true);
+
+    // And order should succeed
+    const orderRes = await request(app)
+      .post('/api/orders')
+      .set(bearer(buyer.token))
+      .send({ lot_id: nearLotId, donation: false, quantity_kg: 5, ...pickAvailablePickupSlot() });
+    expect(orderRes.status).toBe(201);
+  });
+
+  it('returns purchasable=true for lots within delivery radius and purchasable=false for those outside', async () => {
+    const farmer = await registerUser(app, { role: 'farmer' });
+    const buyer = await registerUser(app, { role: 'buyer', buyer_type: 'vendor', lat: 13.662, lng: 100.611 });
+    const cropId = await insertCrop('มะม่วง', 5, 40);
+
+    // Plot at ~10 km distance (within 15 km delivery radius)
+    const nearPlotId = await insertPlot(farmer.user.id, 13.75, 100.611, 'แปลงใกล้');
+    const nearLotId = await insertLot({
+      plotId: nearPlotId,
+      cropId,
+      expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+    });
+
+    // Plot at ~35 km distance (outside 15 km delivery radius)
+    const farPlotId = await insertPlot(farmer.user.id, 13.662, 101.193, 'แปลงไกล');
+    const farLotId = await insertLot({
+      plotId: farPlotId,
+      cropId,
+      expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+    });
+
+    const response = await request(app)
+      .get('/api/market')
+      .query({ lat: 13.662, lng: 100.611, radius_km: 15 })
+      .set(bearer(buyer.token));
+    expect(response.status).toBe(200);
+
+    const nearLot = response.body.lots.find((lot: { id: number; purchasable: boolean }) => lot.id === nearLotId);
+    expect(nearLot).toBeDefined();
+    expect(nearLot.purchasable).toBe(true);
+    expect(nearLot.distance_km).toBeLessThanOrEqual(15);
+
+    const farLot = response.body.lots.find((lot: { id: number; purchasable: boolean }) => lot.id === farLotId);
+    expect(farLot).toBeDefined();
+    expect(farLot.purchasable).toBe(false);
+    expect(farLot.distance_km).toBeGreaterThan(15);
+
+    // Purchasable lots should appear first in the list
+    const purchasableLots = response.body.lots.filter((lot: { purchasable: boolean }) => lot.purchasable === true);
+    const nonPurchasableLots = response.body.lots.filter((lot: { purchasable: boolean }) => lot.purchasable === false);
+    if (purchasableLots.length > 0 && nonPurchasableLots.length > 0) {
+      const lastPurchasableIndex = response.body.lots.lastIndexOf(purchasableLots[purchasableLots.length - 1]);
+      const firstNonPurchasableIndex = response.body.lots.indexOf(nonPurchasableLots[0]);
+      expect(lastPurchasableIndex).toBeLessThan(firstNonPurchasableIndex);
+    }
   });
 });

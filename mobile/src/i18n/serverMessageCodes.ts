@@ -57,6 +57,8 @@ export const SERVER_MESSAGE_TO_CODE: Record<string, string> = {
   'ช่วงเวลานี้เริ่มแล้ว กรุณาเลือกช่วงถัดไป': 'PICKUP_SLOT_INVALID',
   'ช่วงรับของต้องจบก่อนล็อตหมดอายุอย่างน้อย 2 ชม.': 'PICKUP_SLOT_TOO_CLOSE',
   'กรุณาตั้งตำแหน่งผู้ซื้อที่โปรไฟล์ก่อนดูเส้นทาง': 'LOCATION_REQUIRED',
+  'สินค้านี้อยู่นอกพื้นที่จัดส่ง': 'OUT_OF_DELIVERY_RADIUS',
+  'กรุณาระบุตำแหน่งของคุณก่อนสั่งซื้อ': 'LOCATION_REQUIRED',
 };
 
 export function resolveMessageCode(codeOrMessage: string): string {

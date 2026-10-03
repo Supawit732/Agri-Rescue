@@ -194,9 +194,10 @@ export default function LotDetailScreen(): React.ReactElement {
             donateOk: t.market.badgeDonateOk,
           });
           const isMine = lot.is_mine === true;
+          const purchasable = lot.purchasable === true;
           const canDonate = !isMine && donationIntent && elig.canDonate && available.includes('donate');
           const canBuy =
-            !isMine && !donationIntent && available.includes('buy') && lot.price_per_kg !== null;
+            !isMine && !donationIntent && purchasable && available.includes('buy') && lot.price_per_kg !== null;
           const area = lotLocationLabel(lot, t.market.plotFallback);
           const cropTitle = cropName({ name_th: lot.crop_name_th, name_en: lot.crop_name_en });
           const uri = photoUri(lot);
@@ -215,6 +216,40 @@ export default function LotDetailScreen(): React.ReactElement {
               {uri !== null ? (
                 <Image source={{ uri }} style={styles.hero} resizeMode="cover" />
               ) : null}
+              {coords === null && coordsReady && !purchasable && available.includes('buy') ? (
+                <Card>
+                  <Text style={styles.locationBannerText}>{t.lot.enableLocationForLot}</Text>
+                  <PrimaryButton
+                    label={t.market.changeLocation}
+                    onPress={async () => {
+                      const permission = await Location.requestForegroundPermissionsAsync();
+                      if (permission.status === 'granted') {
+                        try {
+                          const position = await Location.getCurrentPositionAsync({
+                            accuracy: Location.Accuracy.Balanced,
+                          });
+                          const newCoords = {
+                            lat: position.coords.latitude,
+                            lng: position.coords.longitude,
+                          };
+                          setCoords(newCoords);
+                          // Save to profile if profile has no location yet
+                          if (!user?.lat || !user?.lng) {
+                            try {
+                              await api.updateProfile({ lat: newCoords.lat, lng: newCoords.lng });
+                            } catch {
+                              /* profile update failed, but local coords are set for browsing */
+                            }
+                          }
+                          void reload();
+                        } catch {
+                          /* location fetch failed */
+                        }
+                      }
+                    }}
+                  />
+                </Card>
+              ) : null}
               <Card>
                 <View style={styles.header}>
                   <Text style={styles.title}>{cropTitle}</Text>
@@ -230,6 +265,9 @@ export default function LotDetailScreen(): React.ReactElement {
                       fg={saleBadge.donate ? C.turmeric : C.leaf}
                       bg={saleBadge.donate ? C.turmericSoft : C.leafSoft}
                     />
+                  ) : null}
+                  {!purchasable ? (
+                    <Badge text={t.market.outOfDeliveryRadius} fg={C.mute} bg={C.line} />
                   ) : null}
                 </View>
                 {lot.farmer_name !== undefined && lot.farmer_name !== '' ? (
@@ -344,6 +382,11 @@ export default function LotDetailScreen(): React.ReactElement {
                       tone={donationIntent ? 'turmeric' : undefined}
                       onPress={() => goConfirm(lot)}
                     />
+                  ) : !purchasable && !donationIntent && available.includes('buy') ? (
+                    <Card>
+                      <Text style={styles.fieldError}>{t.lot.outOfDeliveryRadiusMessage}</Text>
+                      <SecondaryButton label={t.lot.backToMarket} onPress={() => router.replace('/(tabs)')} />
+                    </Card>
                   ) : (
                     <SecondaryButton label={t.lot.backToMarket} onPress={() => router.replace('/(tabs)')} />
                   )}
@@ -424,4 +467,5 @@ const styles = StyleSheet.create({
   qtyValue: { fontSize: 22, fontWeight: '800', color: C.ink, minWidth: 48, textAlign: 'center' },
   fieldError: { color: C.chili, marginBottom: 6 },
   total: { fontSize: 15, fontWeight: '700', color: C.ink, marginTop: 4 },
+  locationBannerText: { fontSize: 14, color: C.ink, fontWeight: '600', marginBottom: 12 },
 });

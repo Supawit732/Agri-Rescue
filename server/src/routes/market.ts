@@ -20,10 +20,14 @@ import { requireAuth, requireCapability } from '../middleware/auth';
 
 export const marketRouter = Router();
 
+const DELIVERY_RADIUS_KM = 15;
+const BROWSE_RADIUS_KM = 100;
+
 const querySchema = z.object({
   lat: z.coerce.number().gte(-90).lte(90),
   lng: z.coerce.number().gte(-180).lte(180),
   radius_km: z.coerce.number().positive().max(200).optional(),
+  browse_radius_km: z.coerce.number().positive().max(BROWSE_RADIUS_KM).optional(),
 });
 
 interface MarketRow extends RowDataPacket {
@@ -80,10 +84,11 @@ const MARKET_LOT_SELECT = `SELECT h.id, p.farmer_id, h.weight_kg, h.split_allowe
 
 function presentBuyerLot(
   row: MarketRow,
-  viewer: { lat: number; lng: number } | null,
+  displayViewer: { lat: number; lng: number } | null,
   now: number,
   locale: 'th' | 'en',
   viewerUserId: number,
+  purchasableViewer: { lat: number; lng: number } | null = displayViewer,
 ): {
   id: number;
   is_mine: boolean;
@@ -107,6 +112,7 @@ function presentBuyerLot(
   expires_at: string;
   hours_left: number;
   distance_km: number | null;
+  purchasable: boolean;
   price_per_kg: number | null;
   market_price_per_kg: number | null;
   price_comparison: PriceComparison | null;
@@ -140,14 +146,26 @@ function presentBuyerLot(
   const remaining = remainingLotKg(weightKg, Number(row.reserved_kg));
   const plotLat = Number(row.lat);
   const plotLng = Number(row.lng);
+  // Display distance uses client-sent coords (for browsing)
   const distanceKm =
-    viewer === null
+    displayViewer === null
       ? null
-      : haversineKm({ lat: viewer.lat, lng: viewer.lng }, { lat: plotLat, lng: plotLng });
+      : haversineKm({ lat: displayViewer.lat, lng: displayViewer.lng }, { lat: plotLat, lng: plotLng });
   const marketPrice =
     row.market_price_snapshot === null || row.market_price_snapshot === undefined
       ? null
       : Number(row.market_price_snapshot);
+  const roundedDistance = distanceKm === null ? null : Math.round(distanceKm * 10) / 10;
+
+  // Purchasable check uses stored profile location (same as orders endpoint)
+  let purchasableDistance: number | null = null;
+  if (purchasableViewer !== null) {
+    purchasableDistance = haversineKm(
+      { lat: purchasableViewer.lat, lng: purchasableViewer.lng },
+      { lat: plotLat, lng: plotLng },
+    );
+  }
+  const isPurchasable = purchasableDistance !== null && purchasableDistance <= DELIVERY_RADIUS_KM;
   return {
     id: Number(row.id),
     is_mine: Number(row.farmer_id) === viewerUserId,
@@ -170,7 +188,8 @@ function presentBuyerLot(
     donation_audience: row.donation_audience,
     expires_at: new Date(row.expires_at).toISOString(),
     hours_left: hoursLeft,
-    distance_km: distanceKm === null ? null : Math.round(distanceKm * 10) / 10,
+    distance_km: roundedDistance,
+    purchasable: isPurchasable,
     price_per_kg: pricePerKg,
     market_price_per_kg: marketPrice,
     price_comparison: isDonateOnly ? null : priceComparison(pricePerKg, marketPrice),
@@ -198,7 +217,26 @@ marketRouter.get(
   requireCapability('buy'),
   asyncHandler(async (req, res) => {
     const query = querySchema.parse(req.query);
-    const radiusKm = query.radius_km ?? 15;
+    const browseRadiusKm = query.browse_radius_km ?? BROWSE_RADIUS_KM;
+
+    // Get authenticated user's stored location for purchasable check
+    const viewerUserId = req.auth?.id ?? 0;
+    const [userRows] = await pool.query<RowDataPacket[]>(
+      'SELECT lat, lng FROM users WHERE id = ?',
+      [viewerUserId],
+    );
+    const userLocation = userRows[0];
+    const buyerLocation =
+      userLocation && userLocation.lat !== null && userLocation.lng !== null
+        ? { lat: userLocation.lat, lng: userLocation.lng }
+        : null;
+
+    // Client-sent coords for distance display/sorting only
+    const clientCoords =
+      query.lat !== undefined && query.lng !== undefined
+        ? { lat: query.lat, lng: query.lng }
+        : null;
+
     const [rows] = await pool.query<MarketRow[]>(
       `${MARKET_LOT_SELECT}
        WHERE h.status IN ('open', 'partially_reserved') AND h.expires_at > UTC_TIMESTAMP()
@@ -206,18 +244,23 @@ marketRouter.get(
        ORDER BY h.expires_at ASC, h.id ASC`,
     );
     const now = Date.now();
-    const viewer = { lat: query.lat, lng: query.lng };
     const locale = requestLocale(req.headers['accept-language'], req.query.lang);
-    const viewerUserId = req.auth?.id ?? 0;
     const lots = rows
-      .map((row) => presentBuyerLot(row, viewer, now, locale, viewerUserId))
+      .map((row) => presentBuyerLot(row, clientCoords, now, locale, viewerUserId, buyerLocation))
       .filter(
         (lot) =>
           lot.distance_km !== null &&
-          lot.distance_km <= radiusKm &&
+          lot.distance_km <= browseRadiusKm &&
           lot.hours_left > 0 &&
           lot.remaining_kg > 0,
-      );
+      )
+      .sort((a, b) => {
+        // Sort purchasable lots first, then by existing sort (expires_at)
+        if (a.purchasable !== b.purchasable) {
+          return a.purchasable ? -1 : 1;
+        }
+        return new Date(a.expires_at).getTime() - new Date(b.expires_at).getTime();
+      });
     res.json({ lots });
   }),
 );
@@ -234,6 +277,19 @@ marketRouter.get(
         lng: z.coerce.number().gte(-180).lte(180).optional(),
       })
       .parse(req.query);
+
+    // Get authenticated user's stored location for purchasable check
+    const viewerUserId = req.auth?.id ?? 0;
+    const [userRows] = await pool.query<RowDataPacket[]>(
+      'SELECT lat, lng FROM users WHERE id = ?',
+      [viewerUserId],
+    );
+    const userLocation = userRows[0];
+    const buyerLocation =
+      userLocation && userLocation.lat !== null && userLocation.lng !== null
+        ? { lat: userLocation.lat, lng: userLocation.lng }
+        : null;
+
     const [rows] = await pool.query<MarketRow[]>(
       `${MARKET_LOT_SELECT}
        WHERE h.id = ? AND h.status IN ('open', 'partially_reserved') AND h.expires_at > UTC_TIMESTAMP()
@@ -244,12 +300,12 @@ marketRouter.get(
     if (row === undefined) {
       throw new HttpError(404, 'NOT_FOUND', 'ไม่พบล็อต');
     }
-    const viewer =
+    const displayViewer =
       coords.lat !== undefined && coords.lng !== undefined
         ? { lat: coords.lat, lng: coords.lng }
         : null;
     const locale = requestLocale(req.headers['accept-language'], req.query.lang);
-    const lot = presentBuyerLot(row, viewer, Date.now(), locale, req.auth?.id ?? 0);
+    const lot = presentBuyerLot(row, displayViewer, Date.now(), locale, viewerUserId, buyerLocation);
     if (lot.remaining_kg <= 0 || lot.hours_left <= 0) {
       throw new HttpError(404, 'NOT_FOUND', 'ไม่พบล็อต');
     }

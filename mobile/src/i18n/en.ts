@@ -135,6 +135,8 @@ const en: Messages = {
     priceCompareNear: 'Close to market price',
     priceCompareHigher: 'Above market price',
     cheaperOnlyFilter: 'Cheaper than market only',
+    outOfDeliveryRadius: 'Out of delivery area',
+    enableLocationForPurchase: 'Enable location to browse nearby lots',
   },
   lot: {
     title: 'Lot details',
@@ -162,6 +164,8 @@ const en: Messages = {
     ownLotTitle: 'This is your lot',
     ownLotEdit: 'Edit lot',
     ownLotBookers: 'View bookings',
+    enableLocationForLot: 'Enable location to book this lot',
+    outOfDeliveryRadiusMessage: 'This lot is out of delivery area and cannot be purchased',
   },
   buyGate: {
     title: 'Enable buying first',
@@ -1183,6 +1187,7 @@ const en: Messages = {
     PICKUP_SLOT_INVALID: 'Invalid pickup time slot',
     PICKUP_SLOT_TOO_CLOSE: 'The slot must end at least 2 hours before the lot expires',
     LOCATION_REQUIRED: 'Set your location in the profile first',
+    OUT_OF_DELIVERY_RADIUS: 'This lot is out of delivery area',
     STOP_DONE: 'This stop was already confirmed',
     INTERNAL: 'Internal server error',
     ERROR: 'An error occurred',

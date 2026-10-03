@@ -141,6 +141,8 @@ export type Messages = {
     priceCompareNear: string;
     priceCompareHigher: string;
     cheaperOnlyFilter: string;
+    outOfDeliveryRadius: string;
+    enableLocationForPurchase: string;
   };
   lot: {
     title: string;
@@ -168,6 +170,8 @@ export type Messages = {
     ownLotTitle: string;
     ownLotEdit: string;
     ownLotBookers: string;
+    enableLocationForLot: string;
+    outOfDeliveryRadiusMessage: string;
   };
   buyGate: {
     title: string;

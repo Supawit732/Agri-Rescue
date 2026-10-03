@@ -421,4 +421,85 @@ describe('orders', () => {
     expect(bad.status).toBe(400);
   });
 
+  it('rejects order creation for lots outside delivery radius with 422 error', async () => {
+    const farmer = await registerUser(app, { role: 'farmer' });
+    const buyer = await registerUser(app, { role: 'buyer', buyer_type: 'vendor', lat: 13.662, lng: 100.611 });
+    const cropId = await insertCrop();
+
+    // Plot at ~30 km distance (outside 15 km delivery radius)
+    const farPlotId = await insertPlot(farmer.user.id, 13.662, 101.198, 'แปลงไกล');
+    const farLotId = await insertLot({
+      plotId: farPlotId,
+      cropId,
+      expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+    });
+
+    const response = await request(app)
+      .post('/api/orders')
+      .set(bearer(buyer.token))
+      .send({ lot_id: farLotId, donation: false, quantity_kg: 5, ...pickAvailablePickupSlot() });
+
+    expect(response.status).toBe(422);
+    expect(response.body.error.code).toBe('OUT_OF_DELIVERY_RADIUS');
+    expect(response.body.error.message).toBe('สินค้านี้อยู่นอกพื้นที่จัดส่ง');
+  });
+
+  it('rejects purchase order if buyer has no location', async () => {
+    const farmer = await registerUser(app, { role: 'farmer' });
+    const buyer = await registerUser(app, { role: 'buyer', buyer_type: 'vendor' });
+    // Clear buyer location (registerUser sets default 13.65, 100.62)
+    await pool.query('UPDATE users SET lat = NULL, lng = NULL WHERE id = ?', [buyer.user.id]);
+    const cropId = await insertCrop();
+    const plotId = await insertPlot(farmer.user.id, 13.662, 100.611);
+    const lotId = await insertLot({
+      plotId,
+      cropId,
+      expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+    });
+
+    const response = await request(app)
+      .post('/api/orders')
+      .set(bearer(buyer.token))
+      .send({ lot_id: lotId, donation: false, quantity_kg: 5, ...pickAvailablePickupSlot() });
+
+    expect(response.status).toBe(422);
+    expect(response.body.error.code).toBe('LOCATION_REQUIRED');
+    expect(response.body.error.message).toBe('กรุณาระบุตำแหน่งของคุณก่อนสั่งซื้อ');
+  });
+
+  it('allows donation order for far lots even when buyer has no location', async () => {
+    const farmer = await registerUser(app, { role: 'farmer' });
+    const donor = await registerUser(app, { role: 'buyer', buyer_type: 'vendor' });
+    // Clear donor location
+    await pool.query('UPDATE users SET lat = NULL, lng = NULL WHERE id = ?', [donor.user.id]);
+    // Register as donor
+    const volRes = await request(app).post('/api/donors/volunteer').set(bearer(donor.token)).send({});
+    expect(volRes.status).toBeLessThan(400);
+    const cropId = await insertCrop();
+
+    // Plot at ~30 km distance (outside 15 km delivery radius)
+    const farPlotId = await insertPlot(farmer.user.id, 13.662, 101.198);
+    const farLotId = await insertLot({
+      plotId: farPlotId,
+      cropId,
+      allowDonation: true,
+      donationAudience: 'all_donors',
+      expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+    });
+
+    const response = await request(app)
+      .post('/api/orders')
+      .set(bearer(donor.token))
+      .send({
+        lot_id: farLotId,
+        donation: true,
+        quantity_kg: 5,
+        distribution_place: 'จุดแจก',
+        distribution_at: new Date(Date.now() + 86400000).toISOString(),
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body.order.is_donation).toBe(true);
+  });
+
 });

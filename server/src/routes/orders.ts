@@ -47,6 +47,8 @@ import {
 
 export const ordersRouter = Router();
 
+const DELIVERY_RADIUS_KM = 15;
+
 const createSchema = z.object({
   lot_id: z.number().int().positive(),
   donation: z.boolean(),
@@ -385,17 +387,20 @@ ordersRouter.post(
     try {
       await connection.beginTransaction();
       const [userRows] = await connection.query<RowDataPacket[]>(
-        'SELECT id FROM users WHERE id = ? AND can_buy = 1 FOR UPDATE',
+        'SELECT id, lat, lng FROM users WHERE id = ? AND can_buy = 1 FOR UPDATE',
         [buyerId],
       );
       if (userRows[0] === undefined) {
         throw new HttpError(403, 'FORBIDDEN', 'ไม่มีสิทธิ์เข้าถึง');
       }
-      const [lots] = await connection.query<LotLock[]>(
+      const buyer = userRows[0];
+      const [lots] = await connection.query<
+        (LotLock & { plot_lat: number; plot_lng: number })[]
+      >(
         `SELECT h.id, h.status, h.grade, h.allow_donation, h.donation_audience,
                 h.start_price_per_kg, h.floor_price_per_kg, h.sale_mode, h.donation_opened,
                 h.weight_kg, h.split_allowed, h.min_order_kg, h.order_step_kg,
-                h.expires_at, c.base_shelf_days, p.farmer_id
+                h.expires_at, c.base_shelf_days, p.farmer_id, p.lat AS plot_lat, p.lng AS plot_lng
          FROM harvest_lots h
          JOIN crops c ON c.id = h.crop_id
          JOIN plots p ON p.id = h.plot_id
@@ -409,6 +414,19 @@ ordersRouter.post(
       }
       if (Number(lot.farmer_id) === buyerId) {
         throw new HttpError(403, 'FORBIDDEN', 'จองล็อตของตัวเองไม่ได้');
+      }
+      // Check if lot is within delivery radius (purchases only, not donations)
+      if (!body.donation) {
+        if (buyer.lat === null || buyer.lng === null) {
+          throw new HttpError(422, 'LOCATION_REQUIRED', 'กรุณาระบุตำแหน่งของคุณก่อนสั่งซื้อ');
+        }
+        const distanceKm = haversineKm(
+          { lat: Number(buyer.lat), lng: Number(buyer.lng) },
+          { lat: Number(lot.plot_lat), lng: Number(lot.plot_lng) },
+        );
+        if (distanceKm > DELIVERY_RADIUS_KM) {
+          throw new HttpError(422, 'OUT_OF_DELIVERY_RADIUS', 'สินค้านี้อยู่นอกพื้นที่จัดส่ง');
+        }
       }
       if (new Date(lot.expires_at).getTime() <= Date.now()) {
         throw new HttpError(409, 'LOT_EXPIRED', 'ล็อตนี้หมดอายุแล้ว');
