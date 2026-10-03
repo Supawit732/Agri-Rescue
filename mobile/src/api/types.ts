@@ -309,6 +309,8 @@ export interface MarketLot {
   expires_at: string;
   hours_left: number;
   distance_km: number | null;
+  /** True if lot is within delivery radius. */
+  purchasable: boolean;
   price_per_kg: number | null;
   market_price_per_kg?: number | null;
   market_price_label?: string | null;

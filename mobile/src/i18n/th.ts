@@ -135,6 +135,8 @@ const th: Messages = {
     priceCompareNear: 'ใกล้เคียงราคาตลาด',
     priceCompareHigher: 'สูงกว่าราคาตลาด',
     cheaperOnlyFilter: 'เฉพาะที่ถูกกว่าตลาด',
+    outOfDeliveryRadius: 'นอกพื้นที่จัดส่ง',
+    enableLocationForPurchase: 'เปิดตำแหน่งเพื่อสั่งซื้อสินค้าใกล้คุณ',
   },
   lot: {
     title: 'รายละเอียดล็อต',
@@ -162,6 +164,8 @@ const th: Messages = {
     ownLotTitle: 'นี่คือล็อตของคุณ',
     ownLotEdit: 'แก้ไขล็อต',
     ownLotBookers: 'ดูผู้จอง',
+    enableLocationForLot: 'เปิดตำแหน่งเพื่อสั่งซื้อสินค้านี้',
+    outOfDeliveryRadiusMessage: 'สินค้านี้อยู่นอกพื้นที่จัดส่ง ไม่สามารถสั่งซื้อได้',
   },
   buyGate: {
     title: 'ต้องเปิดการซื้อก่อน',
@@ -1183,6 +1187,7 @@ const th: Messages = {
     PICKUP_SLOT_INVALID: 'ช่วงเวลามารับของไม่ถูกต้อง',
     PICKUP_SLOT_TOO_CLOSE: 'ช่วงรับของต้องจบก่อนล็อตหมดอายุอย่างน้อย 2 ชม.',
     LOCATION_REQUIRED: 'กรุณาตั้งตำแหน่งที่โปรไฟล์ก่อน',
+    OUT_OF_DELIVERY_RADIUS: 'สินค้านี้อยู่นอกพื้นที่จัดส่ง',
     STOP_DONE: 'จุดนี้ยืนยันไปแล้ว',
     INTERNAL: 'เกิดข้อผิดพลาดภายในระบบ',
     ERROR: 'เกิดข้อผิดพลาด',

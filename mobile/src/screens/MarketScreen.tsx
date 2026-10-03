@@ -394,6 +394,42 @@ function MarketCatalog(): React.ReactElement {
         </Card>
       ) : null}
 
+      {coords === null && locationTried ? (
+        <Card>
+          <Text style={styles.locationBannerText}>{t.market.enableLocationForPurchase}</Text>
+          <PrimaryButton
+            label={t.market.changeLocation}
+            onPress={async () => {
+              const permission = await Location.requestForegroundPermissionsAsync();
+              if (permission.status === 'granted') {
+                try {
+                  const position = await Location.getCurrentPositionAsync({
+                    accuracy: Location.Accuracy.Balanced,
+                  });
+                  const newCoords = {
+                    lat: Number(position.coords.latitude.toFixed(6)),
+                    lng: Number(position.coords.longitude.toFixed(6)),
+                  };
+                  setCoords(newCoords);
+                  // Save to profile if profile has no location yet
+                  if (!user?.lat || !user?.lng) {
+                    try {
+                      await api.updateProfile({ lat: newCoords.lat, lng: newCoords.lng });
+                    } catch {
+                      /* profile update failed, but local coords are set for browsing */
+                    }
+                  }
+                  setFilters((f) => ({ ...f, sort: 'near' }));
+                  void reload();
+                } catch {
+                  /* location fetch failed, coords stays null */
+                }
+              }
+            }}
+          />
+        </Card>
+      ) : null}
+
       <DataState
         loading={loading}
         error={error}
@@ -408,13 +444,22 @@ function MarketCatalog(): React.ReactElement {
             style={styles.grid}
             onLayout={(e) => setGridWidth(e.nativeEvent.layout.width)}
           >
-            {lots.map((lot) => {
+            {lots
+              .sort((a, b) => {
+                // Show purchasable lots first
+                if (a.purchasable !== b.purchasable) {
+                  return a.purchasable ? -1 : 1;
+                }
+                return 0;
+              })
+              .map((lot) => {
               const hours = hoursLeftFrom(lot.expires_at, now);
               const tone = urgency(hours);
               const remaining = remainingOf(lot);
               const elig = donationEligibility(user, lot, remaining, donationEligibilityLabels(t));
               const available = availableAsOf(lot);
-              const canBuy = available.includes('buy') && lot.price_per_kg !== null && remaining > 0;
+              const purchasable = lot.purchasable === true;
+              const canBuy = purchasable && available.includes('buy') && lot.price_per_kg !== null && remaining > 0;
               const saleBadge = marketSaleBadge(lot, {
                 sell: t.market.badgeSell,
                 donate: t.market.badgeDonate,
@@ -548,7 +593,7 @@ function MarketCatalog(): React.ReactElement {
                         {lot.description}
                       </Text>
                     ) : null}
-                    {saleBadge !== null || isMine || lot.grade === 'substandard' ? (
+                    {saleBadge !== null || isMine || lot.grade === 'substandard' || !purchasable ? (
                       <View style={styles.badgeRow}>
                         {lot.grade === 'substandard' ? (
                           <Badge text={t.market.gradeSub} fg={C.turmeric} bg={C.turmericSoft} />
@@ -559,6 +604,9 @@ function MarketCatalog(): React.ReactElement {
                             fg={saleBadge.donate ? C.soonFg : C.leafDeep}
                             bg={saleBadge.donate ? C.soonBg : C.leafSoft}
                           />
+                        ) : null}
+                        {!purchasable ? (
+                          <Badge text={t.market.outOfDeliveryRadius} fg={C.mute} bg={C.line} />
                         ) : null}
                         {isMine ? (
                           <Badge text={t.market.ownLotBadge} fg={C.leafDeep} bg={C.leafSoft} />
@@ -602,12 +650,19 @@ function MarketCatalog(): React.ReactElement {
                       >
                         <Text style={styles.cardCtaText}>{t.market.bookBuy}</Text>
                       </Pressable>
-                    ) : bookingEnabled && available.includes('donate') && elig.canDonate ? (
+                    ) : bookingEnabled && available.includes('donate') && elig.canDonate && purchasable ? (
                       <Pressable
                         style={[styles.cardCta, styles.cardCtaDonate]}
                         onPress={() => router.push({ pathname: '/lots/[id]', params: { id: String(lot.id) } })}
                       >
                         <Text style={styles.cardCtaText}>{t.market.requestDonation}</Text>
+                      </Pressable>
+                    ) : bookingEnabled && !purchasable && available.includes('buy') ? (
+                      <Pressable
+                        style={[styles.cardCta, styles.cardCtaDisabled]}
+                        disabled
+                      >
+                        <Text style={styles.cardCtaText}>{t.market.outOfDeliveryRadius}</Text>
                       </Pressable>
                     ) : elig.reason !== null ? (
                       <Text style={styles.eligHint} numberOfLines={2}>
@@ -851,6 +906,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   cardCtaDonate: { backgroundColor: C.soonAccent },
+  cardCtaDisabled: { backgroundColor: C.line, opacity: 0.6 },
   cardCtaText: {
     color: C.white,
     fontWeight: '600',
@@ -859,4 +915,5 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodySemi,
   },
   eligHint: { marginTop: 6, fontSize: 11, color: C.mute, fontFamily: fonts.body },
+  locationBannerText: { fontSize: 14, color: C.ink, fontWeight: '600', marginBottom: 12, fontFamily: fonts.bodySemi },
 });
