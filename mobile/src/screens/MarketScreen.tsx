@@ -592,6 +592,13 @@ function MarketCatalog(): React.ReactElement {
                         {formatCountdown(hours, t.countdown)}
                       </Text>
                     </View>
+                    {isMine ? (
+                      <View style={[styles.ownLotBadge, { backgroundColor: C.leaf }]}>
+                        <Text style={[styles.ownLotBadgeText, { color: C.white }]}>
+                          {t.market.ownLotBadge}
+                        </Text>
+                      </View>
+                    ) : null}
                   </View>
                   <View style={styles.cardBody}>
                     <Text style={styles.cardTitle} numberOfLines={1}>
@@ -614,7 +621,7 @@ function MarketCatalog(): React.ReactElement {
                         {lot.description}
                       </Text>
                     ) : null}
-                    {saleBadge !== null || isMine || lot.grade === 'substandard' || isPurchasableExplicitlyFalse ? (
+                    {saleBadge !== null || lot.grade === 'substandard' || isPurchasableExplicitlyFalse ? (
                       <View style={styles.badgeRow}>
                         {lot.grade === 'substandard' ? (
                           <Badge text={t.market.gradeSub} fg={C.turmeric} bg={C.turmericSoft} />
@@ -628,9 +635,6 @@ function MarketCatalog(): React.ReactElement {
                         ) : null}
                         {isPurchasableExplicitlyFalse ? (
                           <Badge text={t.market.outOfDeliveryRadius} fg={C.mute} bg={C.line} />
-                        ) : null}
-                        {isMine ? (
-                          <Badge text={t.market.ownLotBadge} fg={C.leafDeep} bg={C.leafSoft} />
                         ) : null}
                       </View>
                     ) : null}
@@ -865,6 +869,17 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   timeBadgeText: { fontSize: 12, fontWeight: '600', fontFamily: fonts.bodySemi },
+  ownLotBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    height: 24,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ownLotBadgeText: { fontSize: 12, fontWeight: '600', fontFamily: fonts.bodySemi },
   cardBody: { padding: 10, gap: 3 },
   cardTitle: {
     fontFamily: fonts.title,

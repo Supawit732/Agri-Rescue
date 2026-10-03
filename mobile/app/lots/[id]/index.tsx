@@ -214,7 +214,16 @@ export default function LotDetailScreen(): React.ReactElement {
           return (
             <Body>
               {uri !== null ? (
-                <Image source={{ uri }} style={styles.hero} resizeMode="cover" />
+                <View style={styles.heroWrap}>
+                  <Image source={{ uri }} style={styles.hero} resizeMode="cover" />
+                  {isMine ? (
+                    <View style={[styles.ownLotBadge, { backgroundColor: C.leaf }]}>
+                      <Text style={[styles.ownLotBadgeText, { color: C.white }]}>
+                        {t.market.ownLotBadge}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
               ) : null}
               {coords === null && coordsReady && !purchasable && available.includes('buy') ? (
                 <Card>
@@ -423,7 +432,19 @@ export default function LotDetailScreen(): React.ReactElement {
 }
 
 const styles = StyleSheet.create({
-  hero: { width: '100%', height: 200, borderRadius: 16, marginBottom: 12, backgroundColor: C.leafSoft },
+  heroWrap: { position: 'relative', marginBottom: 12 },
+  hero: { width: '100%', height: 200, borderRadius: 16, backgroundColor: C.leafSoft },
+  ownLotBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    height: 24,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ownLotBadgeText: { fontSize: 12, fontWeight: '600', color: 'white' },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 },
   title: { fontSize: 20, fontWeight: '800', color: C.ink, flex: 1, marginRight: 8 },
