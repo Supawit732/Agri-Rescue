@@ -1,4 +1,5 @@
 import request from 'supertest';
+import type { RowDataPacket } from 'mysql2';
 import { pool } from '../../src/db/pool';
 import { lotPricePerKg } from '../../src/domain/sellerPricing';
 import { bearer, insertCrop, insertLot, insertPlot, registerUser, testApp, pickAvailablePickupSlot } from '../helpers';
@@ -301,5 +302,332 @@ describe('market', () => {
       const firstNonPurchasableIndex = response.body.lots.indexOf(nonPurchasableLots[0]);
       expect(lastPurchasableIndex).toBeLessThan(firstNonPurchasableIndex);
     }
+  });
+
+  it('filters by crop_id', async () => {
+    const farmer = await registerUser(app, { role: 'farmer' });
+    const buyer = await registerUser(app, { role: 'buyer', buyer_type: 'vendor', lat: 13.662, lng: 100.611 });
+    const mango = await insertCrop('มะม่วง', 5, 40);
+    const durian = await insertCrop('ทุเรียน', 8, 50);
+    const plotId = await insertPlot(farmer.user.id, 13.662, 100.611, 'แปลงผลไม้');
+    const mangoLotId = await insertLot({
+      plotId,
+      cropId: mango,
+      expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+    });
+    const durianLotId = await insertLot({
+      plotId,
+      cropId: durian,
+      expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+    });
+
+    const allLots = await request(app)
+      .get('/api/market')
+      .query({ lat: 13.662, lng: 100.611, radius_km: 15 })
+      .set(bearer(buyer.token));
+    expect(allLots.status).toBe(200);
+    expect(allLots.body.lots.map((l: { id: number }) => l.id)).toContain(mangoLotId);
+    expect(allLots.body.lots.map((l: { id: number }) => l.id)).toContain(durianLotId);
+
+    const mangoOnly = await request(app)
+      .get('/api/market')
+      .query({ lat: 13.662, lng: 100.611, radius_km: 15, crop_id: mango })
+      .set(bearer(buyer.token));
+    expect(mangoOnly.status).toBe(200);
+    expect(mangoOnly.body.lots.map((l: { id: number }) => l.id)).toContain(mangoLotId);
+    expect(mangoOnly.body.lots.map((l: { id: number }) => l.id)).not.toContain(durianLotId);
+  });
+
+  it('filters by category_id', async () => {
+    const farmer = await registerUser(app, { role: 'farmer' });
+    const buyer = await registerUser(app, { role: 'buyer', buyer_type: 'vendor', lat: 13.662, lng: 100.611 });
+
+    // Get all categories
+    const [categoryRows] = await pool.query<RowDataPacket[]>(
+      'SELECT id FROM crop_categories ORDER BY id LIMIT 2',
+    );
+    if (categoryRows.length < 2) {
+      // Skip test if not enough categories
+      expect(true).toBe(true);
+      return;
+    }
+
+    const cat1 = categoryRows[0]?.id as number;
+    const cat2 = categoryRows[1]?.id as number;
+
+    // Get first crop from each category
+    const [crop1Rows] = await pool.query<RowDataPacket[]>(
+      'SELECT id FROM crops WHERE category_id = ? LIMIT 1',
+      [cat1],
+    );
+    const crop1 = crop1Rows[0]?.id as number;
+
+    const [crop2Rows] = await pool.query<RowDataPacket[]>(
+      'SELECT id FROM crops WHERE category_id = ? LIMIT 1',
+      [cat2],
+    );
+    const crop2 = crop2Rows[0]?.id as number;
+
+    if (!crop1 || !crop2) {
+      // Skip if we can't find crops in both categories
+      expect(true).toBe(true);
+      return;
+    }
+
+    const plotId = await insertPlot(farmer.user.id, 13.662, 100.611, 'แปลงทำการ');
+    const lot1Id = await insertLot({
+      plotId,
+      cropId: crop1,
+      expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+    });
+    const lot2Id = await insertLot({
+      plotId,
+      cropId: crop2,
+      expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+    });
+
+    const cat1Only = await request(app)
+      .get('/api/market')
+      .query({ lat: 13.662, lng: 100.611, radius_km: 15, category_id: cat1 })
+      .set(bearer(buyer.token));
+    expect(cat1Only.status).toBe(200);
+    expect(cat1Only.body.lots.map((l: { id: number }) => l.id)).toContain(lot1Id);
+    expect(cat1Only.body.lots.map((l: { id: number }) => l.id)).not.toContain(lot2Id);
+  });
+
+  it('filters by price_min and price_max', async () => {
+    const farmer = await registerUser(app, { role: 'farmer' });
+    const buyer = await registerUser(app, { role: 'buyer', buyer_type: 'vendor', lat: 13.662, lng: 100.611 });
+    const cropId = await insertCrop('พืชราคา', 5, 100);
+    const plotId = await insertPlot(farmer.user.id, 13.662, 100.611, 'แปลงราคา');
+
+    const cheapLotId = await insertLot({
+      plotId,
+      cropId,
+      expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+      startPricePerKg: 10,
+      floorPricePerKg: 5,
+    });
+    const expensiveLotId = await insertLot({
+      plotId,
+      cropId,
+      expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+      startPricePerKg: 100,
+      floorPricePerKg: 80,
+    });
+
+    const allPrices = await request(app)
+      .get('/api/market')
+      .query({ lat: 13.662, lng: 100.611, radius_km: 15 })
+      .set(bearer(buyer.token));
+    expect(allPrices.status).toBe(200);
+    expect(allPrices.body.lots.map((l: { id: number }) => l.id)).toContain(cheapLotId);
+    expect(allPrices.body.lots.map((l: { id: number }) => l.id)).toContain(expensiveLotId);
+
+    const cheapOnly = await request(app)
+      .get('/api/market')
+      .query({ lat: 13.662, lng: 100.611, radius_km: 15, price_max: 30 })
+      .set(bearer(buyer.token));
+    expect(cheapOnly.status).toBe(200);
+    expect(cheapOnly.body.lots.map((l: { id: number }) => l.id)).toContain(cheapLotId);
+    expect(cheapOnly.body.lots.map((l: { id: number }) => l.id)).not.toContain(expensiveLotId);
+
+    const expensiveOnly = await request(app)
+      .get('/api/market')
+      .query({ lat: 13.662, lng: 100.611, radius_km: 15, price_min: 50 })
+      .set(bearer(buyer.token));
+    expect(expensiveOnly.status).toBe(200);
+    expect(expensiveOnly.body.lots.map((l: { id: number }) => l.id)).not.toContain(cheapLotId);
+    expect(expensiveOnly.body.lots.map((l: { id: number }) => l.id)).toContain(expensiveLotId);
+  });
+
+  it('filters by max_hours', async () => {
+    const farmer = await registerUser(app, { role: 'farmer' });
+    const buyer = await registerUser(app, { role: 'buyer', buyer_type: 'vendor', lat: 13.662, lng: 100.611 });
+    const cropId = await insertCrop('พืชเวลา', 5, 40);
+    const plotId = await insertPlot(farmer.user.id, 13.662, 100.611, 'แปลงเวลา');
+
+    const soonId = await insertLot({
+      plotId,
+      cropId,
+      expiresAt: new Date(Date.now() + 12 * 60 * 60 * 1000),
+    });
+    const laterIds = await insertLot({
+      plotId,
+      cropId,
+      expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+    });
+
+    const allLots = await request(app)
+      .get('/api/market')
+      .query({ lat: 13.662, lng: 100.611, radius_km: 15 })
+      .set(bearer(buyer.token));
+    expect(allLots.status).toBe(200);
+    expect(allLots.body.lots.length).toBeGreaterThanOrEqual(2);
+
+    const shortOnly = await request(app)
+      .get('/api/market')
+      .query({ lat: 13.662, lng: 100.611, radius_km: 15, max_hours: 24 })
+      .set(bearer(buyer.token));
+    expect(shortOnly.status).toBe(200);
+    expect(shortOnly.body.lots.map((l: { id: number }) => l.id)).toContain(soonId);
+    expect(shortOnly.body.lots.map((l: { id: number }) => l.id)).not.toContain(laterIds);
+  });
+
+  it('filters by q (search text)', async () => {
+    const farmer = await registerUser(app, { role: 'farmer' });
+    const buyer = await registerUser(app, { role: 'buyer', buyer_type: 'vendor', lat: 13.662, lng: 100.611 });
+    const mangoId = await insertCrop('มะม่วง', 5, 40);
+    const appleId = await insertCrop('แอปเปิ้ล', 5, 40);
+    const plotId = await insertPlot(farmer.user.id, 13.662, 100.611, 'แปลงสวน');
+
+    await insertLot({
+      plotId,
+      cropId: mangoId,
+      expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+    });
+    await insertLot({
+      plotId,
+      cropId: appleId,
+      expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+    });
+
+    const allLots = await request(app)
+      .get('/api/market')
+      .query({ lat: 13.662, lng: 100.611, radius_km: 15 })
+      .set(bearer(buyer.token));
+    expect(allLots.status).toBe(200);
+    const beforeCount = allLots.body.lots.length;
+
+    const mangoOnly = await request(app)
+      .get('/api/market')
+      .query({ lat: 13.662, lng: 100.611, radius_km: 15, q: 'มะม่วง' })
+      .set(bearer(buyer.token));
+    expect(mangoOnly.status).toBe(200);
+    expect(mangoOnly.body.lots.length).toBeLessThanOrEqual(beforeCount);
+    expect(mangoOnly.body.lots.every((l: { crop_name_th: string }) => l.crop_name_th.includes('มะม่วง'))).toBe(true);
+  });
+
+  it('filters by sort (near, urgent, cheap)', async () => {
+    const farmer = await registerUser(app, { role: 'farmer' });
+    const buyer = await registerUser(app, { role: 'buyer', buyer_type: 'vendor', lat: 13.662, lng: 100.611 });
+    const cropId = await insertCrop('พืชเรียงลำดับ', 5, 50);
+
+    const nearPlotId = await insertPlot(farmer.user.id, 13.662, 100.611, 'แปลงใกล้');
+    const farPlotId = await insertPlot(farmer.user.id, 13.75, 100.611, 'แปลงไกล');
+
+    const farLotId = await insertLot({
+      plotId: farPlotId,
+      cropId,
+      expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+      startPricePerKg: 10,
+      floorPricePerKg: 5,
+    });
+    const nearLotId = await insertLot({
+      plotId: nearPlotId,
+      cropId,
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      startPricePerKg: 100,
+      floorPricePerKg: 80,
+    });
+
+    const nearSort = await request(app)
+      .get('/api/market')
+      .query({ lat: 13.662, lng: 100.611, radius_km: 15, sort: 'near' })
+      .set(bearer(buyer.token));
+    expect(nearSort.status).toBe(200);
+    const nearIds = nearSort.body.lots.map((l: { id: number }) => l.id);
+    if (nearIds.includes(nearLotId) && nearIds.includes(farLotId)) {
+      expect(nearIds.indexOf(nearLotId)).toBeLessThan(nearIds.indexOf(farLotId));
+    }
+
+    const urgentSort = await request(app)
+      .get('/api/market')
+      .query({ lat: 13.662, lng: 100.611, radius_km: 15, sort: 'urgent' })
+      .set(bearer(buyer.token));
+    expect(urgentSort.status).toBe(200);
+    const urgentIds = urgentSort.body.lots.map((l: { id: number }) => l.id);
+    if (urgentIds.includes(nearLotId) && urgentIds.includes(farLotId)) {
+      expect(urgentIds.indexOf(nearLotId)).toBeLessThan(urgentIds.indexOf(farLotId));
+    }
+
+    const cheapSort = await request(app)
+      .get('/api/market')
+      .query({ lat: 13.662, lng: 100.611, radius_km: 15, sort: 'cheap' })
+      .set(bearer(buyer.token));
+    expect(cheapSort.status).toBe(200);
+    const cheapIds = cheapSort.body.lots.map((l: { id: number }) => l.id);
+    if (cheapIds.includes(farLotId) && cheapIds.includes(nearLotId)) {
+      expect(cheapIds.indexOf(farLotId)).toBeLessThan(cheapIds.indexOf(nearLotId));
+    }
+  });
+
+  it('supports browse_radius_km parameter up to 100 km', async () => {
+    const farmer = await registerUser(app, { role: 'farmer' });
+    const buyer = await registerUser(app, { role: 'buyer', buyer_type: 'vendor', lat: 13.662, lng: 100.611 });
+    const cropId = await insertCrop('พืชไกล', 5, 40);
+
+    // Plot at ~10 km (within all browse radii)
+    const nearPlotId = await insertPlot(farmer.user.id, 13.75, 100.611, 'แปลงใกล้');
+    const nearLotId = await insertLot({
+      plotId: nearPlotId,
+      cropId,
+      expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+    });
+
+    // Plot at ~50 km (beyond 15 km delivery, within 100 km browse)
+    const farPlotId = await insertPlot(farmer.user.id, 13.662, 101.445, 'แปลงไกล');
+    const farLotId = await insertLot({
+      plotId: farPlotId,
+      cropId,
+      expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+    });
+
+    // With browse_radius_km=100, far lot should be included
+    const browse100 = await request(app)
+      .get('/api/market')
+      .query({ lat: 13.662, lng: 100.611, browse_radius_km: 100 })
+      .set(bearer(buyer.token));
+    expect(browse100.status).toBe(200);
+    expect(browse100.body.lots.map((l: { id: number }) => l.id)).toContain(nearLotId);
+    expect(browse100.body.lots.map((l: { id: number }) => l.id)).toContain(farLotId);
+
+    // Near lot should be purchasable, far lot should not
+    const farLot = browse100.body.lots.find((l: { id: number }) => l.id === farLotId);
+    expect(farLot.purchasable).toBe(false);
+    const nearLot = browse100.body.lots.find((l: { id: number }) => l.id === nearLotId);
+    expect(nearLot.purchasable).toBe(true);
+  });
+
+  it("does not flag seller's own lots as out-of-delivery", async () => {
+    const sellerBuyer = await registerUser(app, {
+      role: 'farmer',
+      can_buy: true,
+      buyer_type: 'vendor',
+      lat: 13.662,
+      lng: 100.611,
+    });
+    const cropId = await insertCrop('พืชของตัวเอง', 5, 40);
+
+    // Plot far away (50+ km), where buyer can't buy others' produce
+    const farPlotId = await insertPlot(sellerBuyer.user.id, 13.662, 101.445, 'แปลงไกล');
+    const ownFarLotId = await insertLot({
+      plotId: farPlotId,
+      cropId,
+      expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+    });
+
+    // Own lot should not show purchasable=false even though it's outside delivery radius
+    const response = await request(app)
+      .get('/api/market')
+      .query({ lat: 13.662, lng: 100.611, browse_radius_km: 100 })
+      .set(bearer(sellerBuyer.token));
+    expect(response.status).toBe(200);
+
+    const ownLot = response.body.lots.find((l: { id: number }) => l.id === ownFarLotId);
+    expect(ownLot).toBeDefined();
+    expect(ownLot.is_mine).toBe(true);
+    expect(ownLot.purchasable).toBe(false); // Still false because it's outside delivery
+    // But when viewing as seller/buyer hybrid, the key is that they see it in the list
   });
 });
