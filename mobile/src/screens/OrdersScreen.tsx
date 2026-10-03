@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { confirmAlert } from '../lib/confirm';
 import { ApiError } from '../api/client';
 import type { Order } from '../api/types';
 import {
@@ -93,16 +94,16 @@ function OrdersList(): React.ReactElement {
   };
 
   const confirmCancel = (order: Order): void => {
-    Alert.alert(t.orderDetail.cancelTitle, t.orderDetail.cancelBody, [
-      { text: t.orderDetail.cancelNo, style: 'cancel' },
-      {
-        text: t.orderDetail.cancelYes,
-        style: 'destructive',
-        onPress: () => {
-          void cancel(order);
-        },
+    confirmAlert({
+      title: t.orderDetail.cancelTitle,
+      message: t.orderDetail.cancelBody,
+      confirmText: t.orderDetail.cancelYes,
+      cancelText: t.orderDetail.cancelNo,
+      destructive: true,
+      onConfirm: () => {
+        void cancel(order);
       },
-    ]);
+    });
   };
 
   return (

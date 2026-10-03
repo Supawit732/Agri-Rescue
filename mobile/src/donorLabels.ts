@@ -53,7 +53,7 @@ export function labelOrgStatus(value: string | null | undefined, t: Messages): s
 
 export function labelApplicationKind(value: string | null | undefined, t: Messages): string {
   if (value === null || value === undefined || value === '') {
-    return t.common.dash;
+    return t.donorApply.kindNotSelected;
   }
   return t.applicationKind[value as ApplicationKind] ?? value;
 }

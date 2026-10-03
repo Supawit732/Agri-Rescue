@@ -13,6 +13,7 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
+import { confirmAlert } from '../lib/confirm';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
@@ -170,17 +171,17 @@ export default function SellScreen(): React.ReactElement {
         return;
       }
       event.preventDefault();
-      Alert.alert(t.sell.unsavedTitle, t.sell.unsavedLeave, [
-        { text: t.sell.stay, style: 'cancel' },
-        {
-          text: t.sell.leave,
-          style: 'destructive',
-          onPress: () => {
-            setFormDirty(false);
-            navigation.dispatch(event.data.action);
-          },
+      confirmAlert({
+        title: t.sell.unsavedTitle,
+        message: t.sell.unsavedLeave,
+        confirmText: t.sell.leave,
+        cancelText: t.sell.stay,
+        destructive: true,
+        onConfirm: () => {
+          setFormDirty(false);
+          navigation.dispatch(event.data.action);
         },
-      ]);
+      });
     });
     return unsubscribe;
   }, [navigation, formDirty, tab, t]);
@@ -197,18 +198,18 @@ export default function SellScreen(): React.ReactElement {
           const next = key as 'new' | 'mine';
           if (next === 'mine') {
             if (formDirty) {
-              Alert.alert(t.sell.unsavedTitle, t.sell.unsavedSwitch, [
-                { text: t.sell.stay, style: 'cancel' },
-                {
-                  text: t.sell.switchTab,
-                  style: 'destructive',
-                  onPress: () => {
-                    setEditingLot(null);
-                    setFormDirty(false);
-                    setTab('mine');
-                  },
+              confirmAlert({
+                title: t.sell.unsavedTitle,
+                message: t.sell.unsavedSwitch,
+                confirmText: t.sell.switchTab,
+                cancelText: t.sell.stay,
+                destructive: true,
+                onConfirm: () => {
+                  setEditingLot(null);
+                  setFormDirty(false);
+                  setTab('mine');
                 },
-              ]);
+              });
               return;
             }
             setEditingLot(null);
@@ -1927,28 +1928,28 @@ function MyLots({
                       tone="danger"
                       label={t.sell.deleteLot}
                       onPress={() => {
-                        Alert.alert(t.sell.confirmDeleteTitle, t.sell.confirmDeleteBody, [
-                          { text: t.common.cancel, style: 'cancel' },
-                          {
-                            text: t.sell.confirmDeleteAction,
-                            style: 'destructive',
-                            onPress: () => {
-                              void (async () => {
-                                try {
-                                  await api.deleteLot(lot.id);
-                                  reload();
-                                } catch (err) {
-                                  Alert.alert(
-                                    t.sell.deleteFailed,
-                                    err instanceof ApiError
-                                      ? translateError(err.code, err.message)
-                                      : t.common.genericError,
-                                  );
-                                }
-                              })();
-                            },
+                        confirmAlert({
+                          title: t.sell.confirmDeleteTitle,
+                          message: t.sell.confirmDeleteBody,
+                          confirmText: t.sell.confirmDeleteAction,
+                          cancelText: t.common.cancel,
+                          destructive: true,
+                          onConfirm: () => {
+                            void (async () => {
+                              try {
+                                await api.deleteLot(lot.id);
+                                reload();
+                              } catch (err) {
+                                Alert.alert(
+                                  t.sell.deleteFailed,
+                                  err instanceof ApiError
+                                    ? translateError(err.code, err.message)
+                                    : t.common.genericError,
+                                );
+                              }
+                            })();
                           },
-                        ]);
+                        });
                       }}
                     />
                   </View>

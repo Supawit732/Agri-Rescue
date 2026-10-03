@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Linking, StyleSheet, Text, View } from 'react-native';
+import { confirmAlert } from '../../src/lib/confirm';
 import { ApiError } from '../../src/api/client';
 import { FormField, useFieldErrors, useFieldScroll } from '../../src/components/form';
 import { MockQrCode } from '../../src/components/MockQrCode';
@@ -44,31 +45,31 @@ export default function OrderDetailScreen(): React.ReactElement {
   const { scrollRef, registerY, scrollToField } = useFieldScroll();
 
   const cancel = (orderIdToCancel: number): void => {
-    Alert.alert(t.orderDetail.cancelTitle, t.orderDetail.cancelBody, [
-      { text: t.orderDetail.cancelNo, style: 'cancel' },
-      {
-        text: t.orderDetail.cancelYes,
-        style: 'destructive',
-        onPress: () => {
-          void (async () => {
-            setBusy(true);
-            setBanner(null);
-            try {
-              await api.cancelOrder(orderIdToCancel);
-              router.replace('/(tabs)/orders');
-            } catch (err) {
-              setBanner(
-                err instanceof ApiError
-                  ? translateError(err.code, err.message)
-                  : t.orderDetail.cancelFailed,
-              );
-            } finally {
-              setBusy(false);
-            }
-          })();
-        },
+    confirmAlert({
+      title: t.orderDetail.cancelTitle,
+      message: t.orderDetail.cancelBody,
+      confirmText: t.orderDetail.cancelYes,
+      cancelText: t.orderDetail.cancelNo,
+      destructive: true,
+      onConfirm: () => {
+        void (async () => {
+          setBusy(true);
+          setBanner(null);
+          try {
+            await api.cancelOrder(orderIdToCancel);
+            router.replace('/(tabs)/orders');
+          } catch (err) {
+            setBanner(
+              err instanceof ApiError
+                ? translateError(err.code, err.message)
+                : t.orderDetail.cancelFailed,
+            );
+          } finally {
+            setBusy(false);
+          }
+        })();
       },
-    ]);
+    });
   };
 
   return (

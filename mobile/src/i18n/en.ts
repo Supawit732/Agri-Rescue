@@ -677,6 +677,8 @@ const en: Messages = {
     kindLabel: 'Recipient type',
     kindIndividual: 'Individual (volunteer)',
     kindOrganization: 'Organization',
+    kindNotSelected: 'No type selected',
+    continueApplication: 'Continue application',
     fullName: 'Full name',
     phone: 'Phone',
     emailOptional: 'Email (optional)',

@@ -677,6 +677,8 @@ const th: Messages = {
     kindLabel: 'ประเภทผู้รับบริจาค',
     kindIndividual: 'บุคคล (จิตอาสา)',
     kindOrganization: 'องค์กร',
+    kindNotSelected: 'ยังไม่ได้เลือกประเภท',
+    continueApplication: 'ทำคำขอต่อ',
     fullName: 'ชื่อ-นามสกุล',
     phone: 'เบอร์โทร',
     emailOptional: 'อีเมล (ไม่บังคับ)',
