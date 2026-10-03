@@ -681,6 +681,8 @@ export type Messages = {
     kindLabel: string;
     kindIndividual: string;
     kindOrganization: string;
+    kindNotSelected: string;
+    continueApplication: string;
     fullName: string;
     phone: string;
     emailOptional: string;

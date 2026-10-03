@@ -1,9 +1,10 @@
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { ApiError } from '../src/api/client';
 import type { ApplicationKind, DocCategory, OrgStatus, OrgType } from '../src/api/types';
+import { confirmAlert } from '../src/lib/confirm';
 import { LocationPicker, type LatLng } from '../src/components/LocationPicker';
 import {
   ChipGroup,
@@ -100,7 +101,11 @@ function StatusBanner({
       })}
       {OPEN_ORG_STATUSES.has(orgStatus) ? (
         <View style={styles.statusActions}>
-          <PrimaryButton label={t.donorApply.uploadMoreDocs} onPress={onEditDocs} disabled={busy} />
+          <PrimaryButton
+            label={orgStatus === 'draft' && applicationKind === null ? t.donorApply.continueApplication : t.donorApply.uploadMoreDocs}
+            onPress={onEditDocs}
+            disabled={busy}
+          />
           {applicationKind === 'organization' ? (
             <SecondaryButton label={t.donorApply.switchIndividual} onPress={onSwitchIndividual} disabled={busy} />
           ) : null}
@@ -454,32 +459,32 @@ export default function DonorApplyScreen(): React.ReactElement {
   };
 
   const confirmWithdraw = (): void => {
-    Alert.alert(t.donorApply.withdrawTitle, t.donorApply.withdrawBody, [
-      { text: t.common.cancel, style: 'cancel' },
-      {
-        text: t.donorApply.withdraw,
-        style: 'destructive',
-        onPress: () => {
-          void (async () => {
-            setBusy(true);
-            setFormError(null);
-            try {
-              await api.withdrawDonorApplication();
-              setKind(null);
-              setStep(0);
-              setDocs([]);
-              setAdminMessages([]);
-              setHydrated(false);
-              await refreshUser();
-            } catch (err) {
-              setFormError(err instanceof ApiError ? err.message : t.donorApply.withdrawFailed);
-            } finally {
-              setBusy(false);
-            }
-          })();
-        },
+    confirmAlert({
+      title: t.donorApply.withdrawTitle,
+      message: t.donorApply.withdrawBody,
+      confirmText: t.donorApply.withdraw,
+      cancelText: t.common.cancel,
+      destructive: true,
+      onConfirm: () => {
+        void (async () => {
+          setBusy(true);
+          setFormError(null);
+          try {
+            await api.withdrawDonorApplication();
+            setKind(null);
+            setStep(0);
+            setDocs([]);
+            setAdminMessages([]);
+            setHydrated(false);
+            await refreshUser();
+          } catch (err) {
+            setFormError(err instanceof ApiError ? err.message : t.donorApply.withdrawFailed);
+          } finally {
+            setBusy(false);
+          }
+        })();
       },
-    ]);
+    });
   };
 
   const selectKind = (next: ApplicationKind): void => {
@@ -488,31 +493,31 @@ export default function DonorApplyScreen(): React.ReactElement {
       user?.application_kind === 'organization' &&
       next === 'individual'
     ) {
-      Alert.alert(t.donorApply.switchTitle, t.donorApply.switchBody, [
-          { text: t.common.cancel, style: 'cancel' },
-          {
-            text: t.common.confirm,
-            onPress: () => {
-              void (async () => {
-                setBusy(true);
-                try {
-                  await api.switchDonorApplicationKind('individual');
-                  setKind('individual');
-                  setStep(0);
-                  setDocs([]);
-                  setOrgName('');
-                  setOrgType(null);
-                  clearField('application_kind');
-                  await refreshUser();
-                } catch (err) {
-                  setFormError(err instanceof ApiError ? err.message : t.donorApply.switchFailed);
-                } finally {
-                  setBusy(false);
-                }
-              })();
-            },
-          },
-        ]);
+      confirmAlert({
+        title: t.donorApply.switchTitle,
+        message: t.donorApply.switchBody,
+        confirmText: t.common.confirm,
+        cancelText: t.common.cancel,
+        onConfirm: () => {
+          void (async () => {
+            setBusy(true);
+            try {
+              await api.switchDonorApplicationKind('individual');
+              setKind('individual');
+              setStep(0);
+              setDocs([]);
+              setOrgName('');
+              setOrgType(null);
+              clearField('application_kind');
+              await refreshUser();
+            } catch (err) {
+              setFormError(err instanceof ApiError ? err.message : t.donorApply.switchFailed);
+            } finally {
+              setBusy(false);
+            }
+          })();
+        },
+      });
       return;
     }
     setKind(next);
@@ -619,6 +624,8 @@ export default function DonorApplyScreen(): React.ReactElement {
               } else if (kind === null && user.application_kind === 'organization') {
                 setKind('organization');
                 setStep(3);
+              } else if (kind === null && user.application_kind === null) {
+                setStep(0);
               }
             }}
             onWithdraw={confirmWithdraw}
