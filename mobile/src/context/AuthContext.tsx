@@ -132,7 +132,19 @@ interface Api {
     },
   ) => Promise<unknown>;
   getMyLots: () => Promise<MyLot[]>;
-  getMarket: (lat: number, lng: number, radiusKm: number) => Promise<MarketLot[]>;
+  getMarket: (query: {
+    lat: number;
+    lng: number;
+    browse_radius_km?: number;
+    crop_id?: number;
+    category_id?: number;
+    price_min?: number;
+    price_max?: number;
+    max_hours?: number;
+    q?: string;
+    sort?: 'near' | 'urgent' | 'cheap';
+    cheaper_only?: boolean;
+  }) => Promise<MarketLot[]>;
   getMarketLot: (id: number, lat?: number, lng?: number) => Promise<MarketLot>;
   getPublicMarket: (query?: {
     lat?: number;
@@ -423,8 +435,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
       createLot: (input) => authed('POST', '/api/lots', input, AI_OR_UPLOAD_TIMEOUT_MS),
       patchLot: (id, body) => authed('PATCH', `/api/lots/${id}`, body, AI_OR_UPLOAD_TIMEOUT_MS),
       getMyLots: () => authed<{ lots: MyLot[] }>('GET', '/api/lots/mine').then((r) => r.lots),
-      getMarket: (lat, lng, radiusKm) =>
-        authed<{ lots: MarketLot[] }>('GET', `/api/market?lat=${lat}&lng=${lng}&radius_km=${radiusKm}`).then((r) => r.lots),
+      getMarket: (query) => {
+        const params = new URLSearchParams();
+        params.set('lat', String(query.lat));
+        params.set('lng', String(query.lng));
+        if (query.browse_radius_km !== undefined) {
+          params.set('browse_radius_km', String(query.browse_radius_km));
+        }
+        if (query.crop_id !== undefined) {
+          params.set('crop_id', String(query.crop_id));
+        }
+        if (query.category_id !== undefined) {
+          params.set('category_id', String(query.category_id));
+        }
+        if (query.price_min !== undefined) {
+          params.set('price_min', String(query.price_min));
+        }
+        if (query.price_max !== undefined) {
+          params.set('price_max', String(query.price_max));
+        }
+        if (query.max_hours !== undefined) {
+          params.set('max_hours', String(query.max_hours));
+        }
+        if (query.q !== undefined && query.q.trim() !== '') {
+          params.set('q', query.q.trim());
+        }
+        if (query.sort !== undefined) {
+          params.set('sort', query.sort);
+        }
+        if (query.cheaper_only === true) {
+          params.set('cheaper_only', '1');
+        }
+        const qs = params.toString();
+        return authed<{ lots: MarketLot[] }>('GET', `/api/market?${qs}`).then((r) => r.lots);
+      },
       getMarketLot: (id, lat, lng) => {
         const qs =
           lat !== undefined && lng !== undefined ? `?lat=${lat}&lng=${lng}` : '';

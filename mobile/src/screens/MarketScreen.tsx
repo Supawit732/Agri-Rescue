@@ -216,6 +216,26 @@ function MarketCatalog(): React.ReactElement {
     const sort: SortKey = coords === null && filters.sort === 'near' ? 'urgent' : filters.sort;
     const priceMin = filters.priceMin === '' ? undefined : Number(filters.priceMin);
     const priceMax = filters.priceMax === '' ? undefined : Number(filters.priceMax);
+    const loggedInBuyer = user !== null && user.can_buy;
+
+    // Use authenticated endpoint for logged-in buyers to get purchasable status
+    if (loggedInBuyer && coords !== null) {
+      return api.getMarket({
+        lat: coords.lat,
+        lng: coords.lng,
+        browse_radius_km: filters.radiusKm,
+        ...(filters.categoryId !== null ? { category_id: filters.categoryId } : {}),
+        ...(selectedCropId !== null ? { crop_id: selectedCropId } : {}),
+        ...(priceMin !== undefined && !Number.isNaN(priceMin) ? { price_min: priceMin } : {}),
+        ...(priceMax !== undefined && !Number.isNaN(priceMax) ? { price_max: priceMax } : {}),
+        ...(filters.maxHours !== null ? { max_hours: filters.maxHours } : {}),
+        ...(cropQuery.trim() !== '' ? { q: cropQuery.trim() } : {}),
+        ...(filters.cheaperOnly ? { cheaper_only: true } : {}),
+        sort,
+      });
+    }
+
+    // Fallback to public endpoint for logged-out users or when no coords
     return api.getPublicMarket({
       ...(coords !== null ? { lat: coords.lat, lng: coords.lng, radius_km: filters.radiusKm } : {}),
       ...(filters.categoryId !== null ? { category_id: filters.categoryId } : {}),
@@ -227,7 +247,7 @@ function MarketCatalog(): React.ReactElement {
       ...(filters.cheaperOnly ? { cheaper_only: true } : {}),
       sort,
     });
-  }, [api, coords, filters, selectedCropId, cropQuery]);
+  }, [api, coords, filters, selectedCropId, cropQuery, user]);
 
   const { data, loading, error, reload } = useApiData(fetchMarket, [
     coords?.lat,
@@ -459,6 +479,7 @@ function MarketCatalog(): React.ReactElement {
               const elig = donationEligibility(user, lot, remaining, donationEligibilityLabels(t));
               const available = availableAsOf(lot);
               const purchasable = lot.purchasable === true;
+              const isPurchasableExplicitlyFalse = lot.purchasable === false;
               const canBuy = purchasable && available.includes('buy') && lot.price_per_kg !== null && remaining > 0;
               const saleBadge = marketSaleBadge(lot, {
                 sell: t.market.badgeSell,
@@ -593,7 +614,7 @@ function MarketCatalog(): React.ReactElement {
                         {lot.description}
                       </Text>
                     ) : null}
-                    {saleBadge !== null || isMine || lot.grade === 'substandard' || !purchasable ? (
+                    {saleBadge !== null || isMine || lot.grade === 'substandard' || isPurchasableExplicitlyFalse ? (
                       <View style={styles.badgeRow}>
                         {lot.grade === 'substandard' ? (
                           <Badge text={t.market.gradeSub} fg={C.turmeric} bg={C.turmericSoft} />
@@ -605,7 +626,7 @@ function MarketCatalog(): React.ReactElement {
                             bg={saleBadge.donate ? C.soonBg : C.leafSoft}
                           />
                         ) : null}
-                        {!purchasable ? (
+                        {isPurchasableExplicitlyFalse ? (
                           <Badge text={t.market.outOfDeliveryRadius} fg={C.mute} bg={C.line} />
                         ) : null}
                         {isMine ? (
@@ -657,7 +678,7 @@ function MarketCatalog(): React.ReactElement {
                       >
                         <Text style={styles.cardCtaText}>{t.market.requestDonation}</Text>
                       </Pressable>
-                    ) : bookingEnabled && !purchasable && available.includes('buy') ? (
+                    ) : bookingEnabled && isPurchasableExplicitlyFalse && available.includes('buy') ? (
                       <Pressable
                         style={[styles.cardCta, styles.cardCtaDisabled]}
                         disabled
