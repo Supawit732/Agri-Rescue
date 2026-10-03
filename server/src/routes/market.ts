@@ -28,6 +28,14 @@ const querySchema = z.object({
   lng: z.coerce.number().gte(-180).lte(180),
   radius_km: z.coerce.number().positive().max(200).optional(),
   browse_radius_km: z.coerce.number().positive().max(BROWSE_RADIUS_KM).optional(),
+  crop_id: z.coerce.number().int().positive().optional(),
+  category_id: z.coerce.number().int().positive().optional(),
+  price_min: z.coerce.number().nonnegative().optional(),
+  price_max: z.coerce.number().positive().optional(),
+  max_hours: z.coerce.number().positive().optional(),
+  q: z.string().trim().max(80).optional(),
+  sort: z.enum(['near', 'urgent', 'cheap']).optional(),
+  cheaper_only: z.enum(['1', 'true']).optional(),
 });
 
 interface MarketRow extends RowDataPacket {
@@ -50,10 +58,12 @@ interface MarketRow extends RowDataPacket {
   donation_opened: number;
   market_price_snapshot: number | null;
   expires_at: Date;
+  crop_id: number;
   crop_name_th: string;
   crop_name_en: string | null;
   crop_status: string;
   base_shelf_days: number;
+  category_id: number;
   lat: number;
   lng: number;
   plot_name: string;
@@ -69,7 +79,7 @@ const MARKET_LOT_SELECT = `SELECT h.id, p.farmer_id, h.weight_kg, h.split_allowe
               h.grade, h.ripeness, h.allow_donation, h.donation_audience, h.photo_url, h.description,
               h.start_price_per_kg, h.floor_price_per_kg, h.sale_mode, h.donation_opened,
               h.market_price_snapshot, h.expires_at,
-              c.name_th AS crop_name_th, c.name_en AS crop_name_en, c.status AS crop_status, c.base_shelf_days,
+              c.id AS crop_id, c.name_th AS crop_name_th, c.name_en AS crop_name_en, c.status AS crop_status, c.base_shelf_days, c.category_id,
               p.lat, p.lng, p.name AS plot_name, p.area_rai, p.subdistrict_th, p.district_th,
               p.subdistrict_en, p.district_en,
               u.name AS farmer_name,
@@ -218,6 +228,10 @@ marketRouter.get(
   asyncHandler(async (req, res) => {
     const query = querySchema.parse(req.query);
     const browseRadiusKm = query.browse_radius_km ?? BROWSE_RADIUS_KM;
+    const sort = query.sort ?? 'urgent';
+    if (query.price_min !== undefined && query.price_max !== undefined && query.price_min > query.price_max) {
+      throw new HttpError(400, 'VALIDATION', 'ราคาต่ำสุดต้องไม่มากกว่าราคาสูงสุด');
+    }
 
     // Get authenticated user's stored location for purchasable check
     const viewerUserId = req.auth?.id ?? 0;
@@ -236,16 +250,29 @@ marketRouter.get(
       query.lat !== undefined && query.lng !== undefined
         ? { lat: query.lat, lng: query.lng }
         : null;
+    const hasCoords = clientCoords !== null;
+
+    const params: unknown[] = [];
+    let lotFilter = '';
+    if (query.crop_id !== undefined) {
+      lotFilter += ' AND h.crop_id = ?';
+      params.push(query.crop_id);
+    }
+    if (query.category_id !== undefined) {
+      lotFilter += ' AND c.category_id = ?';
+      params.push(query.category_id);
+    }
 
     const [rows] = await pool.query<MarketRow[]>(
       `${MARKET_LOT_SELECT}
        WHERE h.status IN ('open', 'partially_reserved') AND h.expires_at > UTC_TIMESTAMP()
-         AND h.deleted_at IS NULL
+         AND h.deleted_at IS NULL${lotFilter}
        ORDER BY h.expires_at ASC, h.id ASC`,
+      params,
     );
     const now = Date.now();
     const locale = requestLocale(req.headers['accept-language'], req.query.lang);
-    const lots = rows
+    let lots = rows
       .map((row) => presentBuyerLot(row, clientCoords, now, locale, viewerUserId, buyerLocation))
       .filter(
         (lot) =>
@@ -253,15 +280,88 @@ marketRouter.get(
           lot.distance_km <= browseRadiusKm &&
           lot.hours_left > 0 &&
           lot.remaining_kg > 0,
-      )
-      .sort((a, b) => {
-        // Sort purchasable lots first, then by existing sort (expires_at)
+      );
+
+    // Apply price filters
+    if (query.price_min !== undefined) {
+      const min = query.price_min;
+      lots = lots.filter((lot) => lot.price_per_kg !== null && lot.price_per_kg >= min);
+    }
+    if (query.price_max !== undefined) {
+      const max = query.price_max;
+      lots = lots.filter((lot) => lot.price_per_kg !== null && lot.price_per_kg <= max);
+    }
+
+    // Apply hours filter
+    if (query.max_hours !== undefined) {
+      const maxHours = query.max_hours;
+      lots = lots.filter((lot) => lot.hours_left <= maxHours);
+    }
+
+    // Apply search filter
+    if (query.q !== undefined && query.q.trim() !== '') {
+      const q = query.q.trim().toLowerCase();
+      lots = lots.filter((lot) => {
+        const cropTh = lot.crop_name_th.toLowerCase();
+        const cropEn = (lot.crop_name_en ?? '').toLowerCase();
+        return cropTh.includes(q) || cropEn.includes(q);
+      });
+    }
+
+    // Apply cheaper_only filter
+    if (query.cheaper_only !== undefined) {
+      lots = lots.filter((lot) => lot.price_comparison?.tone === 'cheaper');
+    }
+
+    // Sort lots
+    const sorted = [...lots];
+    const effectiveSort = sort === 'near' && !hasCoords ? 'urgent' : sort;
+    if (effectiveSort === 'near') {
+      sorted.sort((a, b) => {
+        // Sort purchasable first, then by distance
+        if (a.purchasable !== b.purchasable) {
+          return a.purchasable ? -1 : 1;
+        }
+        const da = a.distance_km ?? Number.POSITIVE_INFINITY;
+        const db = b.distance_km ?? Number.POSITIVE_INFINITY;
+        if (da !== db) {
+          return da - db;
+        }
+        return a.id - b.id;
+      });
+    } else if (effectiveSort === 'cheap') {
+      sorted.sort((a, b) => {
+        // Sort purchasable first, then by price
+        if (a.purchasable !== b.purchasable) {
+          return a.purchasable ? -1 : 1;
+        }
+        const pa = a.price_per_kg;
+        const pb = b.price_per_kg;
+        if (pa === null && pb === null) {
+          return a.id - b.id;
+        }
+        if (pa === null) {
+          return 1;
+        }
+        if (pb === null) {
+          return -1;
+        }
+        if (pa !== pb) {
+          return pa - pb;
+        }
+        return a.id - b.id;
+      });
+    } else {
+      sorted.sort((a, b) => {
+        // Sort purchasable first, then by expiration (urgent)
         if (a.purchasable !== b.purchasable) {
           return a.purchasable ? -1 : 1;
         }
         return new Date(a.expires_at).getTime() - new Date(b.expires_at).getTime();
       });
-    res.json({ lots });
+    }
+
+    res.json({ lots: sorted });
   }),
 );
 
