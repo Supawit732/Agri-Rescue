@@ -519,13 +519,22 @@ function MarketCatalog(): React.ReactElement {
                     style={[styles.rowCard, { width: cardWidth }, isMine ? styles.cardMine : null]}
                     onPress={() => router.push({ pathname: '/lots/[id]', params: { id: String(lot.id) } })}
                   >
-                    {uri !== null ? (
-                      <Image source={{ uri }} style={styles.rowThumb} resizeMode="cover" />
-                    ) : (
-                      <View style={[styles.rowThumb, styles.rowThumbPlaceholder, { backgroundColor: cropTint(lot.crop_id ?? lot.id) }]}>
-                        <Feather name="image" size={22} color={C.mute} />
-                      </View>
-                    )}
+                    <View style={styles.rowThumbWrap}>
+                      {uri !== null ? (
+                        <Image source={{ uri }} style={styles.rowThumb} resizeMode="cover" />
+                      ) : (
+                        <View style={[styles.rowThumb, styles.rowThumbPlaceholder, { backgroundColor: cropTint(lot.crop_id ?? lot.id) }]}>
+                          <Feather name="image" size={22} color={C.mute} />
+                        </View>
+                      )}
+                      {isMine ? (
+                        <View style={[styles.rowOwnLotBadge, { backgroundColor: C.leaf }]}>
+                          <Text style={[styles.rowOwnLotBadgeText, { color: C.white }]}>
+                            {t.market.ownLotBadge}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
                     <View style={styles.rowBody}>
                       <View style={styles.rowTitleRow}>
                         <Text style={styles.rowTitle} numberOfLines={1}>
@@ -901,8 +910,20 @@ const styles = StyleSheet.create({
     borderColor: C.line,
     borderRadius: radius.cardLg,
   },
+  rowThumbWrap: { position: 'relative' },
   rowThumb: { width: 96, height: 96, borderRadius: 12 },
   rowThumbPlaceholder: { alignItems: 'center', justifyContent: 'center' },
+  rowOwnLotBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    height: 20,
+    paddingHorizontal: 6,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rowOwnLotBadgeText: { fontSize: 10, fontWeight: '600', fontFamily: fonts.bodySemi },
   rowBody: { flex: 1, minWidth: 0, justifyContent: 'center', gap: 3 },
   rowTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   rowTitle: { flex: 1, fontFamily: fonts.title, fontSize: 15, fontWeight: '600', color: C.ink },
