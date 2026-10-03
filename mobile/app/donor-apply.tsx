@@ -520,6 +520,25 @@ export default function DonorApplyScreen(): React.ReactElement {
       });
       return;
     }
+    if (hasOpenApplication && user?.application_kind === null) {
+      void (async () => {
+        setBusy(true);
+        try {
+          await api.saveDonorDraft({
+            application_kind: next,
+            draft_step: 0,
+          });
+          setKind(next);
+          clearField('application_kind');
+          await refreshUser();
+        } catch (err) {
+          setFormError(err instanceof ApiError ? err.message : t.donorApply.draftFailed);
+        } finally {
+          setBusy(false);
+        }
+      })();
+      return;
+    }
     setKind(next);
     clearField('application_kind');
     setStep(0);
@@ -626,6 +645,7 @@ export default function DonorApplyScreen(): React.ReactElement {
                 setStep(3);
               } else if (kind === null && user.application_kind === null) {
                 setStep(0);
+                scrollToField('application_kind');
               }
             }}
             onWithdraw={confirmWithdraw}
@@ -635,7 +655,7 @@ export default function DonorApplyScreen(): React.ReactElement {
           />
         ) : null}
 
-        {kind === null && !hasOpenApplication ? (
+        {kind === null ? (
           <ChipGroup
             label={t.donorApply.kindLabel}
             name="application_kind"
@@ -650,10 +670,6 @@ export default function DonorApplyScreen(): React.ReactElement {
             error={fieldErr('application_kind')}
             fieldRef={registerY}
           />
-        ) : null}
-
-        {kind === null && hasOpenApplication ? (
-          <Text style={styles.muted}>{t.donorApply.openingExisting}</Text>
         ) : null}
 
         {kind === 'individual' && step === 0 ? (
