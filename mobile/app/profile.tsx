@@ -1,7 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { ApiError } from '../src/api/client';
 import { initialsOf } from '../src/components/LogoMark';
@@ -235,14 +235,20 @@ export default function ProfileScreen(): React.ReactElement {
               <Text style={styles.rowTitle}>{t.profile.roleSeller}</Text>
               <Text style={styles.muted}>{t.profile.roleSellerDesc}</Text>
             </View>
-            <Switch
-              value={user.can_sell}
-              onValueChange={() => {
-                if (!user.can_sell) void enableSell();
-              }}
-              trackColor={{ true: C.leaf, false: C.line }}
-              thumbColor={C.white}
-            />
+            {user.can_sell ? (
+              <View style={styles.roleBadge} accessibilityLabel={`✓ ${t.profile.roleSeller}`}>
+                <Text style={styles.roleBadgeText}>✓ {t.profile.roleSeller}</Text>
+              </View>
+            ) : (
+              <Pressable
+                accessibilityRole="button"
+                disabled={busy}
+                onPress={() => void enableSell()}
+                style={[styles.roleEnableBtn, busy ? styles.roleEnableBtnDisabled : null]}
+              >
+                <Text style={styles.roleEnableText}>{t.profile.roleEnable}</Text>
+              </Pressable>
+            )}
           </View>
           <View style={styles.hr} />
           <View style={styles.switchRow}>
@@ -250,14 +256,20 @@ export default function ProfileScreen(): React.ReactElement {
               <Text style={styles.rowTitle}>{t.profile.roleBuyer}</Text>
               <Text style={styles.muted}>{t.profile.roleBuyerDesc}</Text>
             </View>
-            <Switch
-              value={user.can_buy}
-              onValueChange={() => {
-                if (!user.can_buy) void enableBuy();
-              }}
-              trackColor={{ true: C.leaf, false: C.line }}
-              thumbColor={C.white}
-            />
+            {user.can_buy ? (
+              <View style={styles.roleBadge} accessibilityLabel={`✓ ${t.profile.roleBuyer}`}>
+                <Text style={styles.roleBadgeText}>✓ {t.profile.roleBuyer}</Text>
+              </View>
+            ) : (
+              <Pressable
+                accessibilityRole="button"
+                disabled={busy}
+                onPress={() => void enableBuy()}
+                style={[styles.roleEnableBtn, busy ? styles.roleEnableBtnDisabled : null]}
+              >
+                <Text style={styles.roleEnableText}>{t.profile.roleEnable}</Text>
+              </Pressable>
+            )}
           </View>
         </View>
 
@@ -464,6 +476,18 @@ const styles = StyleSheet.create({
   },
   cardTitle: { fontSize: 15, fontWeight: '600', color: C.ink, fontFamily: fonts.bodySemi },
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44 },
+  roleBadge: { backgroundColor: C.leafSoft, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
+  roleBadgeText: { color: C.leafDeep, fontSize: 13, fontWeight: '700', fontFamily: fonts.bodySemi },
+  roleEnableBtn: {
+    minHeight: 36,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: C.leaf,
+    paddingHorizontal: 12,
+    justifyContent: 'center',
+  },
+  roleEnableBtnDisabled: { opacity: 0.5 },
+  roleEnableText: { color: C.leaf, fontSize: 13, fontWeight: '700', fontFamily: fonts.bodySemi },
   switchText: { flex: 1, gap: 2, minWidth: 0 },
   rowTitle: { fontSize: 15, color: C.ink, fontFamily: fonts.body },
   hr: { height: 1, backgroundColor: C.line },

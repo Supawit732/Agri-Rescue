@@ -519,6 +519,12 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: C.leaf,
     gap: 8,
+    flexShrink: 0,
+    zIndex: 2,
+    // Edge shadow so content scrolling under the header reads as clipped by it, not overlapping.
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0 2px 6px rgba(0,0,0,0.18)' }
+      : { elevation: 3, shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } }),
   },
   backBtn: { paddingHorizontal: 8, paddingVertical: 6, minWidth: 64 },
   backBtnSpacer: { minWidth: 64 },

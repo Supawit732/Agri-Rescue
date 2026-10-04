@@ -9,7 +9,6 @@ import {
   Text,
   View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { API_BASE_URL } from '../../src/api/config';
 import type { Shop, ShopLotRow } from '../../src/api/types';
 import { LogoMark, initialsOf } from '../../src/components/LogoMark';
@@ -35,7 +34,6 @@ export default function ShopScreen(): React.ReactElement {
   const { t, formatNumber, cropName } = useI18n();
   const router = useRouter();
   const now = useNow();
-  const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<'selling' | 'sold'>('selling');
   const [busy, setBusy] = useState(false);
   const [shop, setShop] = useState<Shop | null>(null);
@@ -64,6 +62,7 @@ export default function ShopScreen(): React.ReactElement {
   }
 
   const isOwner = user?.id === userId;
+  const coverUri = shop?.cover != null ? mediaUri(shop.cover) : null;
   const following = shop?.is_following ?? false;
 
   const toggleFollow = async (): Promise<void> => {
@@ -83,29 +82,11 @@ export default function ShopScreen(): React.ReactElement {
   };
 
   return (
-    <Screen fullWidth>
-      <View style={[styles.cover, { paddingTop: insets.top }]}>
-        {shop?.cover != null && mediaUri(shop.cover) !== null ? (
-          <Image source={{ uri: mediaUri(shop.cover)! }} style={styles.coverImg} />
-        ) : shop?.avatar != null && mediaUri(shop.avatar) !== null ? (
-          <Image source={{ uri: mediaUri(shop.avatar)! }} style={styles.coverImg} />
-        ) : (
-          <View style={styles.coverFallback} />
-        )}
-        <View style={[styles.backBtnWrap, { top: insets.top + 8 }]}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t.common.back}
-            style={styles.backBtn}
-            onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))}
-          >
-            <Feather name="arrow-left" size={20} color={C.ink} />
-          </Pressable>
-        </View>
-      </View>
-
+    <Screen>
+      <StackHeader title={t.shop.title} onBack={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))} />
       <ScrollView contentContainerStyle={styles.body}>
-        <View style={styles.avatar}>
+        {coverUri !== null ? <Image source={{ uri: coverUri }} style={styles.coverImg} /> : null}
+        <View style={[styles.avatar, coverUri !== null ? styles.avatarOverCover : null]}>
           {shop?.avatar != null && mediaUri(shop.avatar) !== null ? (
             <Image source={{ uri: mediaUri(shop.avatar)! }} style={styles.avatarImg} />
           ) : (
@@ -256,18 +237,8 @@ export default function ShopScreen(): React.ReactElement {
 }
 
 const styles = StyleSheet.create({
-  cover: { height: 190, position: 'relative' },
-  coverImg: { width: '100%', height: '100%' },
-  coverFallback: { flex: 1, backgroundColor: '#D7E5D3' },
-  backBtnWrap: { position: 'absolute', left: 12 },
-  backBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: C.white,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  // Short banner, only rendered when the shop has a real cover image.
+  coverImg: { width: '100%', height: 110, borderRadius: radius.card, backgroundColor: C.leafSoft },
   body: { padding: 16, paddingBottom: 40, gap: 6 },
   avatar: {
     width: 76,
@@ -278,9 +249,9 @@ const styles = StyleSheet.create({
     borderColor: C.bg,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: -36,
     overflow: 'hidden',
   },
+  avatarOverCover: { marginTop: -32 },
   avatarImg: { width: '100%', height: '100%' },
   avatarText: { fontFamily: fonts.titleBold, fontSize: 26, fontWeight: '700', color: C.white },
   title: { fontFamily: fonts.titleBold, fontSize: 24, fontWeight: '700', color: C.ink, marginTop: 8 },

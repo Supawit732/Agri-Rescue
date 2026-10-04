@@ -1,10 +1,12 @@
+import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { ApiError } from '../src/api/client';
 import type { ApplicationKind, DocCategory, OrgStatus, OrgType } from '../src/api/types';
 import { confirmAlert } from '../src/lib/confirm';
+import { formatPhone, formatPhoneOnChange, isValidEmail, normalizeEmail, normalizePhone } from '../src/lib/phoneEmail';
 import { LocationPicker, type LatLng } from '../src/components/LocationPicker';
 import {
   ChipGroup,
@@ -27,6 +29,11 @@ import {
 } from '../src/donorLabels';
 import { formatTemplate, useI18n, type Messages } from '../src/i18n';
 import { C } from '../src/theme';
+
+const FREQUENCY_KEYS = ['daily', 'weekly', 'monthly', 'irregular'] as const;
+
+/** Digits-only phone for the API; the input shows the 099-999-9999 mask. */
+const phoneDigits = (display: string): string => normalizePhone(display);
 
 type LocalDoc = {
   id: string;
@@ -60,6 +67,7 @@ function StatusBanner({
   onWithdraw,
   onSwitchIndividual,
   busy,
+  compact,
   t,
 }: {
   orgStatus: OrgStatus;
@@ -69,10 +77,22 @@ function StatusBanner({
   onWithdraw: () => void;
   onSwitchIndividual: () => void;
   busy: boolean;
+  /** One-line status only (no admin messages / buttons) for steps after the first. */
+  compact: boolean;
   t: Messages;
 }): React.ReactElement | null {
   if (!OPEN_ORG_STATUSES.has(orgStatus) && orgStatus !== 'rejected') {
     return null;
+  }
+  if (compact) {
+    return (
+      <Text style={styles.statusCompact}>
+        {formatTemplate(t.donorApply.requestStatus, {
+          kind: labelApplicationKind(applicationKind, t),
+          status: labelOrgStatus(orgStatus, t),
+        })}
+      </Text>
+    );
   }
   return (
     <View style={styles.statusBanner}>
@@ -133,7 +153,7 @@ export default function DonorApplyScreen(): React.ReactElement {
   const [termsVersion, setTermsVersion] = useState<string | null>(null);
 
   const [contactName, setContactName] = useState(user?.name ?? '');
-  const [contactPhone, setContactPhone] = useState(user?.phone ?? '');
+  const [contactPhone, setContactPhone] = useState(formatPhone(user?.phone ?? ''));
   const [contactEmail, setContactEmail] = useState(user?.contact_email ?? '');
   const [contactTitle, setContactTitle] = useState('');
   const [coords, setCoords] = useState<LatLng | null>(
@@ -163,6 +183,11 @@ export default function DonorApplyScreen(): React.ReactElement {
   >([]);
   const [conflictExistingId, setConflictExistingId] = useState<number | null>(null);
   const [hydrated, setHydrated] = useState(false);
+  const [pendingFocus, setPendingFocus] = useState<string | null>(null);
+  const inputRefs = useRef<Record<string, TextInput | null>>({});
+  const bindInput = (name: string) => (el: TextInput | null): void => {
+    inputRefs.current[name] = el;
+  };
 
   const requested = useMemo(() => new Set(user?.requested_fields ?? []), [user?.requested_fields]);
   const hasOpenApplication =
@@ -176,6 +201,21 @@ export default function DonorApplyScreen(): React.ReactElement {
     }
     return null;
   };
+
+  const frequencyOptions = useMemo(() => {
+    const labels: Record<(typeof FREQUENCY_KEYS)[number], string> = {
+      daily: t.donorApply.freqDaily,
+      weekly: t.donorApply.freqWeekly,
+      monthly: t.donorApply.freqMonthly,
+      irregular: t.donorApply.freqIrregular,
+    };
+    const opts = FREQUENCY_KEYS.map((key) => ({ key, label: labels[key] }));
+    // Keep legacy free-text values (stored before chips existed) visible and selectable.
+    const legacy = redistributeFrequency.trim();
+    return legacy !== '' && !(FREQUENCY_KEYS as readonly string[]).includes(legacy)
+      ? [...opts, { key: legacy, label: legacy }]
+      : opts;
+  }, [t, redistributeFrequency]);
 
   const steps =
     kind === null
@@ -280,6 +320,19 @@ export default function DonorApplyScreen(): React.ReactElement {
     }
   }, [user?.draft_step, kind, totalSteps, hydrated]);
 
+  useEffect(() => {
+    if (pendingFocus === null) {
+      return;
+    }
+    // Wait a tick so the target step has rendered and registered its layout.
+    const id = setTimeout(() => {
+      scrollToField(pendingFocus);
+      inputRefs.current[pendingFocus]?.focus();
+      setPendingFocus(null);
+    }, 80);
+    return () => clearTimeout(id);
+  }, [pendingFocus, step, scrollToField]);
+
   const pickImage = async (category: DocCategory): Promise<void> => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
@@ -324,8 +377,8 @@ export default function DonorApplyScreen(): React.ReactElement {
         application_kind: kind,
         draft_step: nextStep,
         contact_name: contactName.trim() || null,
-        contact_phone: contactPhone.trim() || null,
-        contact_email: contactEmail.trim() || null,
+        contact_phone: phoneDigits(contactPhone) || null,
+        contact_email: normalizeEmail(contactEmail) || null,
         contact_title: contactTitle.trim() || null,
         org_lat: coords?.lat ?? null,
         org_lng: coords?.lng ?? null,
@@ -359,11 +412,12 @@ export default function DonorApplyScreen(): React.ReactElement {
     } catch (err) {
       if (err instanceof ApiError) {
         applyServerFields(err.fields);
-        setFormError(err.message);
+        const firstField = err.fields !== undefined ? Object.keys(err.fields)[0] ?? null : null;
+        setFormError(firstField === null ? err.message : null);
         if (err.status === 409 && typeof err.details?.existing_id === 'number') {
           setConflictExistingId(err.details.existing_id);
         }
-        scrollToField(firstErrorName());
+        if (firstField !== null) focusField(firstField, stepOfField(firstField));
       } else {
         setFormError(t.donorApply.draftFailed);
       }
@@ -373,61 +427,128 @@ export default function DonorApplyScreen(): React.ReactElement {
     }
   };
 
-  const validateStep = (): boolean => {
+  const collectErrors = (forStep: number): Record<string, string> => {
     const next: Record<string, string> = {};
-    if (kind === null && step === 0) {
+    const digits = phoneDigits(contactPhone);
+    const email = normalizeEmail(contactEmail);
+    if (kind === null && forStep === 0) {
       next.application_kind = t.donorApply.needKind;
     }
     if (kind === 'individual') {
-      if (step === 0) {
+      if (forStep === 0) {
         if (contactName.trim() === '') next.contact_name = t.donorApply.needFullName;
-        if (!/^\d{9,15}$/.test(contactPhone.trim())) next.contact_phone = t.donorApply.invalidPhone;
+        if (!/^\d{9,15}$/.test(digits)) next.contact_phone = t.donorApply.invalidPhone;
+        if (email !== '' && !isValidEmail(email)) next.contact_email = t.donorApply.invalidEmail;
       }
-      if (step === 1) {
+      if (forStep === 1) {
         if (coords === null) next.org_lat = t.donorApply.needDistributeArea;
         if (recipientGroups.length === 0) next.recipient_groups = t.donorApply.needOneGroup;
         if (purposeTh.trim() === '') next.purpose_th = t.donorApply.needPurpose;
       }
-      if (step === 2 && !termsAccepted) next.terms_accepted = t.donorApply.needTerms;
+      if (forStep === 2 && !termsAccepted) next.terms_accepted = t.donorApply.needTerms;
     }
     if (kind === 'organization') {
-      if (step === 0) {
+      if (forStep === 0) {
         if (orgName.trim() === '') next.org_name = t.donorApply.needOrgName;
         if (orgType === null) next.org_type = t.donorApply.needOrgType;
         if (registered === null) next.registered = t.donorApply.needRegistered;
         if (registeredAddress.trim() === '') next.registered_address = t.donorApply.needAddress;
         if (coords === null) next.org_lat = t.donorApply.needRealLocation;
       }
-      if (step === 1) {
+      if (forStep === 1) {
         if (contactName.trim() === '') next.contact_name = t.donorApply.needContactName;
         if (contactTitle.trim() === '') next.contact_title = t.donorApply.needTitle;
-        if (!/^\d{9,15}$/.test(contactPhone.trim())) next.contact_phone = t.donorApply.invalidPhone;
+        if (!/^\d{9,15}$/.test(digits)) next.contact_phone = t.donorApply.invalidPhone;
+        if (email === '') next.contact_email = t.donorApply.needEmail;
+        else if (!isValidEmail(email)) next.contact_email = t.donorApply.invalidEmail;
       }
-      if (step === 2) {
+      if (forStep === 2) {
         if (beneficiaryCount.trim() === '' || Number(beneficiaryCount) <= 0) {
           next.beneficiary_count = t.donorApply.needBeneficiaryCount;
         }
         if (recipientGroups.length === 0) next.recipient_groups = t.donorApply.needOneGroup;
         if (distributionMode === null) next.distribution_mode = t.donorApply.needDistributionMode;
-        if (distributionMode === 'redistribute') {
-          if (redistributePlace.trim() === '') next.redistribute_place = t.donorApply.needRedistributePlace;
-          if (redistributeFrequency.trim() === '') next.redistribute_frequency = t.donorApply.needRedistributeFrequency;
+        if (distributionMode === 'redistribute' && redistributePlace.trim() === '') {
+          next.redistribute_place = t.donorApply.needRedistributePlace;
         }
       }
-      if (step === 3) {
+      if (forStep === 3) {
         const certs = docs.filter((d) => d.doc_category === 'registration_cert' || d.doc_category === 'community_cert');
         const photos = docs.filter((d) => d.doc_category === 'site_photo');
         if (certs.length < 1) next.documents = t.donorApply.needCertFile;
         else if (photos.length < 1 || photos.length > 3) next.documents = t.donorApply.needSitePhotos;
       }
-      if (step === 4 && !termsAccepted) next.terms_accepted = t.donorApply.needTerms;
+      if (forStep === 4 && !termsAccepted) next.terms_accepted = t.donorApply.needTerms;
     }
+    return next;
+  };
+
+  /** Step that renders a given field, so server/submit errors can jump to it. */
+  const stepOfField = (name: string): number => {
+    const individualSteps: Record<string, number> = {
+      contact_name: 0,
+      contact_phone: 0,
+      contact_email: 0,
+      org_lat: 1,
+      org_lng: 1,
+      recipient_groups: 1,
+      purpose_th: 1,
+      terms_accepted: 2,
+      terms_version: 2,
+    };
+    const orgSteps: Record<string, number> = {
+      org_name: 0,
+      org_type: 0,
+      registered: 0,
+      registration_number: 0,
+      registered_address: 0,
+      org_lat: 0,
+      org_lng: 0,
+      contact_name: 1,
+      contact_title: 1,
+      contact_phone: 1,
+      contact_email: 1,
+      beneficiary_count: 2,
+      recipient_groups: 2,
+      distribution_mode: 2,
+      redistribute_place: 2,
+      redistribute_frequency: 2,
+      documents: 3,
+      terms_accepted: 4,
+      terms_version: 4,
+    };
+    const map = kind === 'organization' ? orgSteps : individualSteps;
+    return map[name] ?? step;
+  };
+
+  const focusField = (name: string, targetStep: number): void => {
+    setStep(targetStep);
+    setPendingFocus(name);
+  };
+
+  const validateStep = (): boolean => {
+    const next = collectErrors(step);
     setErrors(next);
     const first = Object.keys(next)[0] ?? null;
     if (first !== null) {
-      scrollToField(first);
+      focusField(first, step);
       return false;
     }
+    return true;
+  };
+
+  /** Validate every step; on failure jump to the first invalid field's step and focus it. */
+  const validateAll = (): boolean => {
+    for (let s = 0; s < totalSteps; s += 1) {
+      const next = collectErrors(s);
+      const first = Object.keys(next)[0] ?? null;
+      if (first !== null) {
+        setErrors(next);
+        focusField(first, s);
+        return false;
+      }
+    }
+    setErrors({});
     return true;
   };
 
@@ -545,7 +666,7 @@ export default function DonorApplyScreen(): React.ReactElement {
   };
 
   const submit = async (): Promise<void> => {
-    if (!validateStep()) {
+    if (!validateAll()) {
       return;
     }
     if (kind === null || termsVersion === null) {
@@ -570,12 +691,14 @@ export default function DonorApplyScreen(): React.ReactElement {
         terms_version: termsVersion,
         terms_accepted: true,
         contact_name: contactName.trim(),
-        contact_phone: contactPhone.trim(),
-        contact_email: contactEmail.trim() === '' ? null : contactEmail.trim(),
+        contact_phone: phoneDigits(contactPhone),
+        contact_email: normalizeEmail(contactEmail) === '' ? null : normalizeEmail(contactEmail),
         org_lat: coords?.lat,
         org_lng: coords?.lng,
         recipient_groups: recipientGroups,
-        purpose_th: purposeTh.trim(),
+        // Only the individual flow has a purpose field; organizations describe themselves
+        // through the beneficiaries step, so never send an empty purpose.
+        ...(purposeTh.trim() !== '' ? { purpose_th: purposeTh.trim() } : {}),
       };
       if (kind === 'organization') {
         const freshDocs = docs.filter((d) => d.base64 !== '');
@@ -603,12 +726,12 @@ export default function DonorApplyScreen(): React.ReactElement {
     } catch (err) {
       if (err instanceof ApiError) {
         applyServerFields(err.fields);
-        setFormError(err.message);
+        const first = err.fields !== undefined ? Object.keys(err.fields)[0] ?? null : null;
+        setFormError(first === null ? err.message : null);
         if (err.status === 409 && typeof err.details?.existing_id === 'number') {
           setConflictExistingId(err.details.existing_id);
         }
-        const first = err.fields !== undefined ? Object.keys(err.fields)[0] ?? null : null;
-        scrollToField(first);
+        if (first !== null) focusField(first, stepOfField(first));
       } else {
         setFormError(t.donorApply.submitFailed);
       }
@@ -651,6 +774,7 @@ export default function DonorApplyScreen(): React.ReactElement {
             onWithdraw={confirmWithdraw}
             onSwitchIndividual={() => selectKind('individual')}
             busy={busy}
+            compact={step > 0}
             t={t}
           />
         ) : null}
@@ -677,6 +801,7 @@ export default function DonorApplyScreen(): React.ReactElement {
             <FormField
               label={t.donorApply.fullName}
               name="contact_name"
+              inputRef={bindInput('contact_name')}
               value={contactName}
               onChangeText={(text) => {
                 setContactName(text);
@@ -691,11 +816,13 @@ export default function DonorApplyScreen(): React.ReactElement {
             <FormField
               label={t.donorApply.phone}
               name="contact_phone"
+              inputRef={bindInput('contact_phone')}
               value={contactPhone}
               onChangeText={(text) => {
-                setContactPhone(text);
+                setContactPhone((prev) => formatPhoneOnChange(prev, text));
                 clearField('contact_phone');
               }}
+              placeholder="099-999-9999"
               keyboardType="phone-pad"
               error={fieldErr('contact_phone')}
               fieldRef={registerY}
@@ -703,8 +830,12 @@ export default function DonorApplyScreen(): React.ReactElement {
             <FormField
               label={t.donorApply.emailOptional}
               name="contact_email"
+              inputRef={bindInput('contact_email')}
               value={contactEmail}
-              onChangeText={setContactEmail}
+              onChangeText={(text) => {
+                setContactEmail(text);
+                clearField('contact_email');
+              }}
               autoCapitalize="none"
               keyboardType="email-address"
               error={fieldErr('contact_email')}
@@ -735,6 +866,7 @@ export default function DonorApplyScreen(): React.ReactElement {
             <FormField
               label={t.donorApply.purposeShort}
               name="purpose_th"
+              inputRef={bindInput('purpose_th')}
               value={purposeTh}
               onChangeText={(text) => {
                 setPurposeTh(text);
@@ -751,6 +883,7 @@ export default function DonorApplyScreen(): React.ReactElement {
             <FormField
               label={t.donorApply.orgName}
               name="org_name"
+              inputRef={bindInput('org_name')}
               value={orgName}
               onChangeText={(text) => {
                 setOrgName(text);
@@ -789,6 +922,7 @@ export default function DonorApplyScreen(): React.ReactElement {
             <FormField
               label={t.donorApply.registrationNumber}
               name="registration_number"
+              inputRef={bindInput('registration_number')}
               value={registrationNumber}
               onChangeText={setRegistrationNumber}
               error={fieldErr('registration_number')}
@@ -797,6 +931,7 @@ export default function DonorApplyScreen(): React.ReactElement {
             <FormField
               label={t.donorApply.registeredAddress}
               name="registered_address"
+              inputRef={bindInput('registered_address')}
               value={registeredAddress}
               onChangeText={(text) => {
                 setRegisteredAddress(text);
@@ -817,6 +952,7 @@ export default function DonorApplyScreen(): React.ReactElement {
             <FormField
               label={t.donorApply.contactName}
               name="contact_name"
+              inputRef={bindInput('contact_name')}
               value={contactName}
               onChangeText={(text) => {
                 setContactName(text);
@@ -828,6 +964,7 @@ export default function DonorApplyScreen(): React.ReactElement {
             <FormField
               label={t.donorApply.contactTitle}
               name="contact_title"
+              inputRef={bindInput('contact_title')}
               value={contactTitle}
               onChangeText={(text) => {
                 setContactTitle(text);
@@ -839,11 +976,13 @@ export default function DonorApplyScreen(): React.ReactElement {
             <FormField
               label={t.donorApply.phone}
               name="contact_phone"
+              inputRef={bindInput('contact_phone')}
               value={contactPhone}
               onChangeText={(text) => {
-                setContactPhone(text);
+                setContactPhone((prev) => formatPhoneOnChange(prev, text));
                 clearField('contact_phone');
               }}
+              placeholder="099-999-9999"
               keyboardType="phone-pad"
               error={fieldErr('contact_phone')}
               fieldRef={registerY}
@@ -851,8 +990,12 @@ export default function DonorApplyScreen(): React.ReactElement {
             <FormField
               label={t.donorApply.email}
               name="contact_email"
+              inputRef={bindInput('contact_email')}
               value={contactEmail}
-              onChangeText={setContactEmail}
+              onChangeText={(text) => {
+                setContactEmail(text);
+                clearField('contact_email');
+              }}
               autoCapitalize="none"
               keyboardType="email-address"
               error={fieldErr('contact_email')}
@@ -866,6 +1009,7 @@ export default function DonorApplyScreen(): React.ReactElement {
             <FormField
               label={t.donorApply.beneficiaryCount}
               name="beneficiary_count"
+              inputRef={bindInput('beneficiary_count')}
               value={beneficiaryCount}
               onChangeText={(text) => {
                 setBeneficiaryCount(text);
@@ -908,6 +1052,7 @@ export default function DonorApplyScreen(): React.ReactElement {
                 <FormField
                   label={t.donorApply.redistributePlace}
                   name="redistribute_place"
+                  inputRef={bindInput('redistribute_place')}
                   value={redistributePlace}
                   onChangeText={(text) => {
                     setRedistributePlace(text);
@@ -916,12 +1061,14 @@ export default function DonorApplyScreen(): React.ReactElement {
                   error={fieldErr('redistribute_place')}
                   fieldRef={registerY}
                 />
-                <FormField
-                  label={t.donorApply.redistributeFrequency}
+                <ChipGroup
+                  label={t.donorApply.redistributeFrequencyOptional}
                   name="redistribute_frequency"
-                  value={redistributeFrequency}
-                  onChangeText={(text) => {
-                    setRedistributeFrequency(text);
+                  options={frequencyOptions}
+                  value={redistributeFrequency === '' ? null : redistributeFrequency}
+                  onChange={(v) => {
+                    // Tapping the selected chip again clears the optional value.
+                    setRedistributeFrequency(v === redistributeFrequency ? '' : (v as string));
                     clearField('redistribute_frequency');
                   }}
                   error={fieldErr('redistribute_frequency')}
@@ -1008,8 +1155,11 @@ export default function DonorApplyScreen(): React.ReactElement {
               }}
               accessibilityRole="checkbox"
               accessibilityState={{ checked: termsAccepted }}
+              aria-checked={termsAccepted}
             >
-              <View style={[styles.checkbox, termsAccepted ? styles.checkboxOn : null]} />
+              <View style={[styles.checkbox, termsAccepted ? styles.checkboxOn : null]}>
+                {termsAccepted ? <Feather name="check" size={16} color={C.white} /> : null}
+              </View>
               <Text style={styles.termsText}>
                 {t.donorApply.termsAcceptPrefix}
                 <Text style={styles.link} onPress={() => router.push('/terms/donor')}>
@@ -1092,8 +1242,11 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: C.line,
     marginTop: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   checkboxOn: { backgroundColor: C.leaf, borderColor: C.leaf },
+  statusCompact: { color: C.mute, fontSize: 13, marginBottom: 12 },
   termsText: { flex: 1, color: C.ink, lineHeight: 22 },
   link: { color: C.leaf, fontWeight: '700', textDecorationLine: 'underline' },
 });
