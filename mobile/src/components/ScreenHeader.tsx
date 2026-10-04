@@ -1,10 +1,12 @@
 import { Feather } from '@expo/vector-icons';
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { useI18n } from '../i18n';
+import { mediaUri } from '../lib/media';
 import { C, fonts } from '../theme';
+import { initialsOf } from './LogoMark';
 import { ProfileMenu } from './ProfileMenu';
 
 /**
@@ -36,6 +38,7 @@ export function ScreenHeader({
   const { t } = useI18n();
   const [menuOpen, setMenuOpen] = useState(false);
   const profile = showProfile ?? user !== null;
+  const avatarUri = user !== null ? mediaUri(user.avatar) : null;
 
   return (
     <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
@@ -63,7 +66,13 @@ export function ScreenHeader({
             onPress={onProfilePress ?? (() => setMenuOpen(true))}
             style={styles.avatarMini}
           >
-            <Feather name="user" size={16} color={C.leafDeep} />
+            {user === null ? (
+              <Feather name="user" size={16} color={C.leafDeep} />
+            ) : avatarUri !== null ? (
+              <Image source={{ uri: avatarUri }} style={styles.avatarImg} />
+            ) : (
+              <Text style={styles.avatarText}>{initialsOf(user.name)}</Text>
+            )}
           </Pressable>
         ) : null}
       </View>
@@ -118,5 +127,8 @@ const styles = StyleSheet.create({
     backgroundColor: C.leafSoft,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
+  avatarImg: { width: '100%', height: '100%' },
+  avatarText: { fontFamily: fonts.titleBold, fontWeight: '700', fontSize: 15, color: C.leafDeep },
 });
