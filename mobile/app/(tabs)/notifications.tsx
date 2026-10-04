@@ -65,19 +65,20 @@ export default function NotificationsTab(): React.ReactElement {
 
   const unread = extraUnread;
 
-  const markRead = async (n: AppNotification): Promise<void> => {
-    if (n.read_at !== null || user === null) return;
-    try {
-      const res = await api.markNotificationRead(n.id);
-      setExtraUnread(res.unread_count);
-      await reload();
-      if (n.link !== null && n.link.startsWith('/')) {
-        router.push(n.link as never);
+  const openNotification = async (n: AppNotification): Promise<void> => {
+    if (user === null) return;
+    const target = n.link !== null && n.link.startsWith('/') ? n.link : null;
+    if (n.read_at === null) {
+      try {
+        const res = await api.markNotificationRead(n.id);
+        setExtraUnread(res.unread_count);
+        void reload();
+      } catch {
+        // navigation still proceeds
       }
-    } catch {
-      if (n.link !== null && n.link.startsWith('/')) {
-        router.push(n.link as never);
-      }
+    }
+    if (target !== null) {
+      router.push(target as never);
     }
   };
 
@@ -246,21 +247,23 @@ export default function NotificationsTab(): React.ReactElement {
                 <Text style={styles.groupLabel}>{group.label}</Text>
                 {group.items.map((n) => {
                   const unreadDot = n.read_at === null;
+                  const hasTarget = n.link !== null && n.link.startsWith('/');
                   const { title, body } = titleAndBody(n);
                   const icon = iconFor(n.type);
                   return (
                     <Pressable
                       key={n.id}
-                      accessibilityRole="button"
+                      accessibilityRole={hasTarget ? 'button' : undefined}
+                      disabled={!hasTarget}
                       style={[styles.card, unreadDot ? styles.cardUnread : styles.cardRead]}
-                      onPress={() => void markRead(n)}
+                      onPress={() => void openNotification(n)}
                     >
                       <View style={[styles.icon, { backgroundColor: icon.bg }]}>
                         <Feather name={icon.icon} size={22} color={icon.fg} />
                       </View>
                       <View style={styles.cardBody}>
                         <Text style={[styles.cardCat, { color: icon.fg }]}>{title}</Text>
-                        <Text style={styles.cardText}>{body}</Text>
+                        <Text style={[styles.cardText, unreadDot ? styles.cardTextUnread : null]}>{body}</Text>
                         <Text style={styles.cardTime}>{relTime(n.created_at)}</Text>
                       </View>
                       {unreadDot ? (
@@ -353,6 +356,7 @@ const styles = StyleSheet.create({
   cardBody: { flex: 1, gap: 3, minWidth: 0 },
   cardCat: { fontSize: 12, fontWeight: '600', fontFamily: fonts.bodySemi },
   cardText: { fontSize: 15, lineHeight: 21, color: C.ink, fontFamily: fonts.body },
+  cardTextUnread: { fontWeight: '700', fontFamily: fonts.bodySemi },
   cardTime: { fontSize: 12, color: C.mute, fontFamily: fonts.body },
   dot: {
     width: 10,

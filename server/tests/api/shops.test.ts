@@ -158,6 +158,13 @@ describe('shops & follows', () => {
       .post(`/api/notifications/${buyerList.body.notifications[0].id}/read`)
       .set(bearer(buyer.token));
     expect(markOwn.status).toBe(200);
+    expect(markOwn.body.ok).toBe(true);
+    expect(markOwn.body.unread_count).toBe(0);
+    expect(buyerList.body.notifications[0].link).toMatch(/^\/lots\/\d+$/);
+    const afterRead = await request(app)
+      .get('/api/notifications')
+      .set(bearer(buyer.token));
+    expect(afterRead.body.notifications[0].read_at).not.toBeNull();
 
     // farmer cannot mark buyer's notification
     const markOther = await request(app)

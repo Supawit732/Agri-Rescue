@@ -10,6 +10,7 @@ import {
   PrimaryButton,
   Screen,
   SecondaryButton,
+  StackHeader,
   Badge,
 } from '../src/components/ui';
 import { formatIsoSlotShort } from '../src/components/PickupSlotPicker';
@@ -50,9 +51,18 @@ export default function RouteScreen(): React.ReactElement {
     [t],
   );
 
+  const goBack = (): void => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace('/(tabs)/orders');
+  };
+
   if (user === null) {
     return (
       <Screen>
+        <StackHeader title={t.route.title} onBack={goBack} />
         <LoginPrompt
           title={t.route.title}
           message={t.route.subtitle}
@@ -64,6 +74,7 @@ export default function RouteScreen(): React.ReactElement {
   if (!user.can_buy) {
     return (
       <Screen>
+        <StackHeader title={t.route.title} onBack={goBack} />
         <EmptyState
           message={t.orders.enableBuy}
           ctaLabel={t.orders.goAccount}
@@ -78,8 +89,8 @@ export default function RouteScreen(): React.ReactElement {
 
   return (
     <Screen>
+      <StackHeader title={t.route.title} onBack={goBack} />
       <View style={styles.header}>
-        <Text style={styles.h1}>{t.route.title}</Text>
         <Text style={styles.sub}>{t.route.subtitle}</Text>
       </View>
       <View style={styles.dayToggle}>
