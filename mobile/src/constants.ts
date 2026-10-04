@@ -23,3 +23,9 @@ export function gradeOptions(t: Messages): { key: Grade; label: string }[] {
     { key: 'substandard', label: t.grade.substandard },
   ];
 }
+
+/** Localized ripeness label for a 0–4 level; null when the value is missing or out of range. */
+export function ripenessLabel(t: Messages, value: number | null | undefined): string | null {
+  if (typeof value !== 'number' || !Number.isInteger(value)) return null;
+  return t.ripenessLabels[value] ?? null;
+}

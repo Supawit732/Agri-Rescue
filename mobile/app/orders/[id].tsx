@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Alert, Linking, StyleSheet, Text, View } from 'react-native';
 import { confirmAlert } from '../../src/lib/confirm';
 import { ApiError } from '../../src/api/client';
+import { ripenessLabel } from '../../src/constants';
 import { FormField, useFieldErrors, useFieldScroll } from '../../src/components/form';
 import { MockQrCode } from '../../src/components/MockQrCode';
 import { formatIsoSlotShort } from '../../src/components/PickupSlotPicker';
@@ -93,10 +94,8 @@ export default function OrderDetailScreen(): React.ReactElement {
             order.crop_name_th !== undefined
               ? cropName({ name_th: order.crop_name_th, name_en: order.crop_name_en })
               : formatTemplate(t.orderDetail.lotFallback, { id: order.lot_id });
-          const ripenessLabel =
-            order.ripeness !== undefined
-              ? t.ripenessLabels[order.ripeness] ?? String(order.ripeness)
-              : null;
+          const ripenessText =
+            ripenessLabel(t, order.ripeness);
           const pickupLabel =
             order.location_label ?? order.plot_name ?? t.orderDetail.sellerPlotFallback;
           const contact = order.contact ?? null;
@@ -200,8 +199,8 @@ export default function OrderDetailScreen(): React.ReactElement {
                 <Text style={styles.title}>{cropTitle}</Text>
                 <Text style={styles.line}>
                   {order.grade === 'substandard' ? t.grade.substandard : t.grade.normal}
-                  {ripenessLabel !== null
-                    ? ` · ${formatTemplate(t.orderDetail.ripenessLine, { label: ripenessLabel })}`
+                  {ripenessText !== null
+                    ? ` · ${formatTemplate(t.orderDetail.ripenessLine, { label: ripenessText })}`
                     : ''}
                 </Text>
                 <Text style={styles.line}>
