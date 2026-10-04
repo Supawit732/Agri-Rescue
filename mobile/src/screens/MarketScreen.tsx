@@ -14,6 +14,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { API_BASE_URL } from '../api/config';
+import { ripenessLabel } from '../constants';
 import type { Crop, CropCategory, MarketLot } from '../api/types';
 import { AppHeader } from '../components/Brand';
 import {
@@ -505,8 +506,10 @@ function MarketCatalog(): React.ReactElement {
               const title = cropName({ name_th: lot.crop_name_th, name_en: lot.crop_name_en });
               const meta = [
                 lot.grade === 'substandard' ? t.market.gradeSub : t.market.gradeNormal,
-                `${t.market.ripeness} ${lot.ripeness}`,
-              ].join(' · ');
+                ripenessLabel(t, lot.ripeness),
+              ]
+                .filter((part): part is string => part !== null)
+                .join(' · ');
               const pct =
                 lot.weight_kg > 0
                   ? Math.max(0, Math.min(100, Math.round((remaining / lot.weight_kg) * 100)))

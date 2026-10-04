@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { API_BASE_URL } from '../../src/api/config';
+import { ripenessLabel } from '../../src/constants';
 import type { Shop, ShopLotRow } from '../../src/api/types';
 import { LogoMark, initialsOf } from '../../src/components/LogoMark';
 import { Badge, Body, DataState, PrimaryButton, Screen, StackHeader } from '../../src/components/ui';
@@ -188,8 +189,10 @@ export default function ShopScreen(): React.ReactElement {
                       const title = cropName({ name_th: lot.crop_name_th, name_en: lot.crop_name_en });
                       const meta = [
                         lot.grade === 'substandard' ? t.market.gradeSub : t.market.gradeNormal,
-                        `${t.market.ripeness} ${lot.ripeness}`,
-                      ].join(' · ');
+                        ripenessLabel(t, lot.ripeness),
+                      ]
+                        .filter((part): part is string => part !== null)
+                        .join(' · ');
                       return (
                         <Pressable
                           key={lot.id}

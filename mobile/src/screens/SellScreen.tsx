@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { ApiError } from '../api/client';
+import { ripenessLabel } from '../constants';
 import { AiPhotoInput } from '../components/AiPhotoInput';
 import { ChipGroup, FormField, useFieldScroll } from '../components/form';
 import {
@@ -1878,10 +1879,9 @@ function MyLots({
                 )}
                 <Text style={styles.lotLine}>
                   {lot.grade === 'substandard' ? t.grade.substandard : t.grade.normal}
-                  {' · '}
-                  {formatTemplate(t.sell.ripenessLine, {
-                    label: t.ripenessLabels[lot.ripeness] ?? String(lot.ripeness),
-                  })}
+                  {ripenessLabel(t, lot.ripeness) !== null
+                    ? ` · ${formatTemplate(t.sell.ripenessLine, { label: ripenessLabel(t, lot.ripeness) as string })}`
+                    : ''}
                 </Text>
                 {lot.bookings !== undefined && lot.bookings.length > 0 ? (
                   <View style={styles.bookingsBox}>
