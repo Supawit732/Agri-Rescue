@@ -39,7 +39,7 @@ export default function OrdersScreen(): React.ReactElement {
 
   if (user === null) {
     return (
-      <Screen>
+      <Screen skipTopSafeArea>
         <LoginPrompt
           title={t.orders.title}
           message={t.orders.loginMessage}
@@ -51,7 +51,7 @@ export default function OrdersScreen(): React.ReactElement {
 
   if (!user.can_buy) {
     return (
-      <Screen>
+      <Screen skipTopSafeArea>
         <EmptyState
           message={t.orders.enableBuy}
           ctaLabel={t.orders.goAccount}
@@ -107,7 +107,7 @@ function OrdersList(): React.ReactElement {
   };
 
   return (
-    <Screen>
+    <Screen skipTopSafeArea>
       <View style={styles.routeBar}>
         <PrimaryButton
           label={t.orders.openRoute}

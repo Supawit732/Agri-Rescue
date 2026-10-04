@@ -7,6 +7,7 @@ import { useAuth } from '../../src/context/AuthContext';
 import { useI18n } from '../../src/i18n';
 import { C, fonts } from '../../src/theme';
 import { initialsOf } from '../../src/components/LogoMark';
+import { tabBarScreenOptions, tabItemOptions } from '../../src/components/tabBar';
 
 /**
  * Admin console shell — light header (not old green bar) + bottom tabs.
@@ -20,11 +21,14 @@ export default function AdminLayout(): React.ReactElement {
   const insets = useSafeAreaInsets();
   const [menuOpen, setMenuOpen] = useState(false);
   const [unread, setUnread] = useState(0);
+  const isAdmin = user?.is_admin === true;
 
   useEffect(() => {
+    // Admin polling only for admins; clear cached counts on logout/account switch.
+    setUnread(0);
+    if (!isAdmin) return;
     let alive = true;
     const load = async () => {
-      if (user === null) return;
       try {
         const res = await api.getAdminInbox();
         if (alive) setUnread(res.counts.total);
@@ -38,29 +42,18 @@ export default function AdminLayout(): React.ReactElement {
       alive = false;
       clearInterval(id);
     };
-  }, [api, user, segments]);
+  }, [api, isAdmin, user?.id, segments]);
 
 
   // Nested routes (e.g. /admin/orgs) belong to the inbox tab.
   const activeTab = segments[1] === 'orgs' ? 'inbox' : (segments[1] ?? 'index');
-  const tabOptions = (name: string, label: string, icon: React.ComponentProps<typeof Feather>['name']) => {
-    const active = activeTab === name;
-    return {
-      title: label,
-      tabBarIcon: ({ size }: { size: number }) => (
-        <View style={[styles.pill, active ? styles.pillOn : null]}>
-          <Feather name={icon} size={size} color={active ? C.leaf : C.mute} />
-        </View>
-      ),
-      tabBarLabel: () => (
-        <Text numberOfLines={1} style={[styles.tabLabel, active ? styles.tabLabelOn : null]}>
-          {label}
-        </Text>
-      ),
-    };
-  };
+  const tabOptions = (name: string, label: string, icon: React.ComponentProps<typeof Feather>['name']) =>
+    tabItemOptions(label, icon, activeTab === name);
 
   const badge = unread > 0 ? (unread > 99 ? '99+' : String(unread)) : undefined;
+
+  // Non-admins are redirected by AuthGate; never mount admin screens (and their API calls) for them.
+  if (!isAdmin) return <View style={styles.root} />;
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'left', 'right']}>
@@ -80,20 +73,7 @@ export default function AdminLayout(): React.ReactElement {
       </View>
 
       <Tabs
-        screenOptions={{
-          headerShown: false,
-          tabBarActiveTintColor: C.leaf,
-          tabBarInactiveTintColor: C.mute,
-          tabBarStyle: {
-            backgroundColor: C.surface,
-            borderTopColor: C.line,
-            height: 64 + Math.max(insets.bottom, 8),
-            paddingTop: 6,
-            paddingBottom: Math.max(insets.bottom, 8),
-          },
-          tabBarItemStyle: { paddingVertical: 0 },
-          sceneStyle: { backgroundColor: C.bg },
-        }}
+        screenOptions={tabBarScreenOptions(insets.bottom)}
       >
         <Tabs.Screen name="index" options={tabOptions('index', t.admin.tabOverview, 'home')} />
         <Tabs.Screen name="market" options={tabOptions('market', t.admin.tabMarket, 'shopping-bag')} />
@@ -165,16 +145,6 @@ function LanguageChips(): React.ReactElement {
 }
 
 const styles = StyleSheet.create({
-  pill: {
-    width: 52,
-    height: 30,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pillOn: { backgroundColor: C.leafSoft },
-  tabLabel: { fontSize: 12, lineHeight: 16, fontWeight: '500', color: C.mute, fontFamily: fonts.body },
-  tabLabelOn: { fontWeight: '700', color: C.leaf, fontFamily: fonts.bodySemi },
   root: { flex: 1, backgroundColor: C.bg },
   header: {
     flexDirection: 'row',
