@@ -166,7 +166,10 @@ export function SupportInboxPanel(): React.ReactElement {
   );
 }
 
-export function OrgApplicationsPanel({ userId }: { userId?: number } = {}): React.ReactElement {
+export function OrgApplicationsPanel({
+  userId,
+  onOrgName,
+}: { userId?: number; onOrgName?: (name: string | null) => void } = {}): React.ReactElement {
   const { api } = useAuth();
   const { t, formatDateTime } = useI18n();
   const reasons = quickReasons(t);
@@ -182,6 +185,12 @@ export function OrgApplicationsPanel({ userId }: { userId?: number } = {}): Reac
 
   const { data, loading, error: loadError, reload } = useApiData(() => api.listOrgApplications(), [api, refreshKey]);
   const bump = useCallback(() => setRefreshKey((v) => v + 1), []);
+
+  useEffect(() => {
+    if (onOrgName === undefined || userId === undefined || data === null || data === undefined) return;
+    const hit = data.find((a) => a.user_id === userId);
+    onOrgName(hit === undefined ? null : (hit.org_name ?? hit.contact_name ?? hit.name));
+  }, [data, userId, onOrgName]);
 
   const openDoc = async (docId: number): Promise<void> => {
     const token = await loadToken();
@@ -464,10 +473,11 @@ export function OrgApplicationsPanel({ userId }: { userId?: number } = {}): Reac
                       </View>
                     </>
                   ) : (
-                    <View style={adminPanelStyles.actions}>
+                    <View style={adminPanelStyles.actionsStack}>
                       {entry.org_status !== 'needs_more_info' ? (
-                        <View style={adminPanelStyles.slot}>
+                        <View style={adminPanelStyles.stackSlot}>
                           <PrimaryButton
+                            block
                             label={t.admin.approve}
                             onPress={() => void approve(entry.user_id)}
                             loading={actingId === entry.user_id}
@@ -475,8 +485,9 @@ export function OrgApplicationsPanel({ userId }: { userId?: number } = {}): Reac
                           />
                         </View>
                       ) : null}
-                      <View style={adminPanelStyles.slot}>
+                      <View style={adminPanelStyles.stackSlot}>
                         <SecondaryButton
+                          block
                           label={t.admin.requestMoreInfo}
                           onPress={() => {
                             setActionMode({ userId: entry.user_id, kind: 'more' });
@@ -486,8 +497,10 @@ export function OrgApplicationsPanel({ userId }: { userId?: number } = {}): Reac
                           disabled={actingId !== null || entry.org_status === 'needs_more_info'}
                         />
                       </View>
-                      <View style={adminPanelStyles.slot}>
+                      <View style={adminPanelStyles.stackSlot}>
                         <SecondaryButton
+                          block
+                          tone="danger"
                           label={t.admin.reject}
                           onPress={() => {
                             setActionMode({ userId: entry.user_id, kind: 'reject' });
@@ -975,6 +988,8 @@ export const adminPanelStyles = StyleSheet.create({
   banner: { color: C.leaf, marginBottom: 8, fontWeight: '600' },
   row: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 8, marginBottom: 4, gap: 6 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  actionsStack: { flexDirection: 'column', alignItems: 'stretch', gap: 8, marginTop: 10 },
+  stackSlot: { alignSelf: 'stretch' },
   slot: { flexGrow: 1, flexBasis: '30%', minWidth: 100 },
   slotWide: { marginTop: 8 },
   suggestionBox: {

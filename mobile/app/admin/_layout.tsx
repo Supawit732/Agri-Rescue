@@ -2,7 +2,7 @@ import { Tabs, useRouter, useSegments } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/context/AuthContext';
 import { useI18n } from '../../src/i18n';
 import { C, fonts } from '../../src/theme';
@@ -17,6 +17,7 @@ export default function AdminLayout(): React.ReactElement {
   const { user, api, logout } = useAuth();
   const router = useRouter();
   const segments = useSegments();
+  const insets = useSafeAreaInsets();
   const [menuOpen, setMenuOpen] = useState(false);
   const [unread, setUnread] = useState(0);
 
@@ -38,6 +39,26 @@ export default function AdminLayout(): React.ReactElement {
       clearInterval(id);
     };
   }, [api, user, segments]);
+
+
+  // Nested routes (e.g. /admin/orgs) belong to the inbox tab.
+  const activeTab = segments[1] === 'orgs' ? 'inbox' : (segments[1] ?? 'index');
+  const tabOptions = (name: string, label: string, icon: React.ComponentProps<typeof Feather>['name']) => {
+    const active = activeTab === name;
+    return {
+      title: label,
+      tabBarIcon: ({ size }: { size: number }) => (
+        <View style={[styles.pill, active ? styles.pillOn : null]}>
+          <Feather name={icon} size={size} color={active ? C.leaf : C.mute} />
+        </View>
+      ),
+      tabBarLabel: () => (
+        <Text numberOfLines={1} style={[styles.tabLabel, active ? styles.tabLabelOn : null]}>
+          {label}
+        </Text>
+      ),
+    };
+  };
 
   const badge = unread > 0 ? (unread > 99 ? '99+' : String(unread)) : undefined;
 
@@ -63,49 +84,28 @@ export default function AdminLayout(): React.ReactElement {
           headerShown: false,
           tabBarActiveTintColor: C.leaf,
           tabBarInactiveTintColor: C.mute,
-          tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
-          tabBarStyle: { backgroundColor: C.surface, borderTopColor: C.line },
+          tabBarStyle: {
+            backgroundColor: C.surface,
+            borderTopColor: C.line,
+            height: 64 + Math.max(insets.bottom, 8),
+            paddingTop: 6,
+            paddingBottom: Math.max(insets.bottom, 8),
+          },
+          tabBarItemStyle: { paddingVertical: 0 },
           sceneStyle: { backgroundColor: C.bg },
         }}
       >
-        <Tabs.Screen
-          name="index"
-          options={{
-            title: t.admin.tabOverview,
-            tabBarIcon: ({ color, size, focused }) => (
-              <Feather name="home" size={size} color={focused ? C.leaf : C.mute} />
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="market"
-          options={{
-            title: t.admin.tabMarket,
-            tabBarIcon: ({ color, size, focused }) => (
-              <Feather name="shopping-bag" size={size} color={focused ? C.leaf : C.mute} />
-            ),
-          }}
-        />
+        <Tabs.Screen name="index" options={tabOptions('index', t.admin.tabOverview, 'home')} />
+        <Tabs.Screen name="market" options={tabOptions('market', t.admin.tabMarket, 'shopping-bag')} />
         <Tabs.Screen
           name="inbox"
           options={{
-            title: t.admin.tabInbox,
+            ...tabOptions('inbox', t.admin.tabInbox, 'inbox'),
             tabBarBadge: badge,
             tabBarBadgeStyle: { backgroundColor: C.danger, color: C.white, fontSize: 11 },
-            tabBarIcon: ({ color, size, focused }) => (
-              <Feather name="inbox" size={size} color={focused ? C.leaf : C.mute} />
-            ),
           }}
         />
-        <Tabs.Screen
-          name="system"
-          options={{
-            title: t.admin.tabSystem,
-            tabBarIcon: ({ color, size, focused }) => (
-              <Feather name="server" size={size} color={focused ? C.leaf : C.mute} />
-            ),
-          }}
-        />
+        <Tabs.Screen name="system" options={tabOptions('system', t.admin.tabSystem, 'server')} />
         <Tabs.Screen name="orgs" options={{ href: null, title: t.admin.queueOrg }} />
       </Tabs>
 
@@ -165,6 +165,16 @@ function LanguageChips(): React.ReactElement {
 }
 
 const styles = StyleSheet.create({
+  pill: {
+    width: 52,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pillOn: { backgroundColor: C.leafSoft },
+  tabLabel: { fontSize: 12, lineHeight: 16, fontWeight: '500', color: C.mute, fontFamily: fonts.body },
+  tabLabelOn: { fontWeight: '700', color: C.leaf, fontFamily: fonts.bodySemi },
   root: { flex: 1, backgroundColor: C.bg },
   header: {
     flexDirection: 'row',

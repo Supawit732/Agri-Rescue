@@ -231,6 +231,16 @@ async function insertDocs(
   documents: DocInput[],
 ): Promise<void> {
   for (const doc of documents) {
+    // Idempotent: a re-sent identical file (same category + name + size) is not stored twice.
+    const incomingSize = Buffer.from(doc.base64, 'base64').length;
+    const [dupes] = await connection.query<RowDataPacket[]>(
+      `SELECT id FROM org_application_docs
+       WHERE user_id = ? AND doc_category = ? AND original_name = ? AND size_bytes = ? LIMIT 1`,
+      [userId, doc.doc_category, doc.filename, incomingSize],
+    );
+    if (dupes.length > 0) {
+      continue;
+    }
     const saved = await savePrivateUpload({
       userId,
       originalName: doc.filename,
