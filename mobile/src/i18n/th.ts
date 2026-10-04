@@ -75,6 +75,13 @@ const th: Messages = {
     followedEmpty: 'ยังไม่ได้ติดตามร้านใด',
     editShopName: 'แก้ไขชื่อร้าน',
     editShopNameHint: 'ชื่อร้านที่ผู้ซื้อเห็นในตลาด',
+    coverTitle: 'รูปปกร้าน',
+    coverChange: 'เปลี่ยนรูปปกร้าน',
+    coverRemove: 'ลบรูปปก',
+    coverHint: 'แนะนำรูปแนวนอนกว้าง (ประมาณ 3:1) ระบบจะครอบให้พอดีกับแบนเนอร์',
+    coverTapToChange: 'เปลี่ยนรูปปก',
+    coverFailed: 'อัปเดตรูปปกร้านไม่สำเร็จ',
+    coverRemoveConfirm: 'ลบรูปปกร้านใช่หรือไม่?',
   },
   market: {
     title: 'ตลาดด่วน',

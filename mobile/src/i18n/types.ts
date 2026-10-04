@@ -81,6 +81,13 @@ export type Messages = {
     followedEmpty: string;
     editShopName: string;
     editShopNameHint: string;
+    coverTitle: string;
+    coverChange: string;
+    coverRemove: string;
+    coverHint: string;
+    coverTapToChange: string;
+    coverFailed: string;
+    coverRemoveConfirm: string;
   };
   market: {
     title: string;

@@ -75,6 +75,13 @@ const en: Messages = {
     followedEmpty: 'You are not following any shops yet',
     editShopName: 'Edit shop name',
     editShopNameHint: 'Shop name buyers see in the market',
+    coverTitle: 'Shop cover image',
+    coverChange: 'Change shop cover',
+    coverRemove: 'Remove cover',
+    coverHint: 'Wide image works best (about 3:1). It is cropped to fit the banner.',
+    coverTapToChange: 'Change cover',
+    coverFailed: 'Could not update the shop cover',
+    coverRemoveConfirm: 'Remove the shop cover image?',
   },
   market: {
     title: 'Flash market',

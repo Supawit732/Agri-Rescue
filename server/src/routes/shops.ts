@@ -4,6 +4,7 @@ import { asyncHandler } from '../http/asyncHandler';
 import { HttpError } from '../http/errors';
 import { requireAuth, requireCapability } from '../middleware/auth';
 import { requestLocale } from '../http/locale';
+import { saveShopCoverPhoto } from '../storage/publicUploads';
 import {
   ensureShop,
   followShop,
@@ -80,7 +81,7 @@ shopsRouter.get(
   }),
 );
 
-/** PATCH /api/shops/mine — owner edits name/description. */
+/** PATCH /api/shops/mine — owner edits name/description/cover (cover: null clears). */
 shopsRouter.patch(
   '/mine',
   requireAuth,
@@ -90,8 +91,16 @@ shopsRouter.patch(
       .object({
         name: z.string().trim().min(1, 'กรุณากรอกชื่อร้าน').max(120).optional(),
         description: z.string().trim().max(500).nullable().optional(),
+        // Only our own uploads (or null to clear) — never arbitrary external URLs.
+        cover: z
+          .string()
+          .trim()
+          .max(1024)
+          .regex(/^\/uploads\/covers\/[\w.-]+$/, 'รูปปกไม่ถูกต้อง')
+          .nullable()
+          .optional(),
       })
-      .refine((b) => b.name !== undefined || b.description !== undefined, {
+      .refine((b) => b.name !== undefined || b.description !== undefined || b.cover !== undefined, {
         message: 'ไม่มีข้อมูลที่จะอัปเดต',
       })
       .parse(req.body);
@@ -99,6 +108,23 @@ shopsRouter.patch(
     await updateShop(userId, body);
     const shop = await loadPublicShop(userId, null, userId);
     res.json({ shop });
+  }),
+);
+
+/** POST /api/shops/mine/cover — upload a cover banner and set it on the owner's shop. */
+shopsRouter.post(
+  '/mine/cover',
+  requireAuth,
+  requireCapability('sell'),
+  asyncHandler(async (req, res) => {
+    const body = z
+      .object({ base64: z.string().min(1), mime: z.string().min(1).max(128) })
+      .parse(req.body);
+    const userId = req.auth?.id ?? 0;
+    const saved = await saveShopCoverPhoto({ base64: body.base64, mime: body.mime });
+    await updateShop(userId, { cover: saved.url });
+    const shop = await loadPublicShop(userId, null, userId);
+    res.json({ shop, cover: saved.url });
   }),
 );
 

@@ -78,11 +78,10 @@ export function lotPhotoPublicUrl(storagePath: string): string {
   return `/uploads/${storagePath.replace(/^\/+/, '')}`;
 }
 
-/** Save a profile avatar (same store as lot photos, avatars/ folder). */
-export async function saveAvatarPhoto(input: {
-  base64: string;
-  mime: string;
-}): Promise<{ path: string; url: string; sizeBytes: number }> {
+async function savePhotoIn(
+  folder: string,
+  input: { base64: string; mime: string },
+): Promise<{ path: string; url: string; sizeBytes: number }> {
   const mime = input.mime.toLowerCase();
   const ext = mimeToExt[mime];
   if (ext === undefined) {
@@ -100,9 +99,25 @@ export async function saveAvatarPhoto(input: {
   if (buffer.length > PUBLIC_PHOTO_MAX_BYTES) {
     throw new HttpError(400, 'VALIDATION', 'รูปใหญ่เกิน 1MB หลังย่อ');
   }
-  const relative = `avatars/${randomUUID()}.${ext}`;
+  const relative = `${folder}/${randomUUID()}.${ext}`;
   const fullPath = path.join(PUBLIC_UPLOADS_DIR, relative);
   await mkdir(path.dirname(fullPath), { recursive: true });
   await writeFile(fullPath, buffer);
   return { path: relative, url: `/uploads/${relative}`, sizeBytes: buffer.length };
+}
+
+/** Save a profile avatar (same store as lot photos, avatars/ folder). */
+export function saveAvatarPhoto(input: {
+  base64: string;
+  mime: string;
+}): Promise<{ path: string; url: string; sizeBytes: number }> {
+  return savePhotoIn('avatars', input);
+}
+
+/** Save a shop cover banner (covers/ folder; same limits as avatars). */
+export function saveShopCoverPhoto(input: {
+  base64: string;
+  mime: string;
+}): Promise<{ path: string; url: string; sizeBytes: number }> {
+  return savePhotoIn('covers', input);
 }

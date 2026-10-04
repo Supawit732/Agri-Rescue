@@ -39,6 +39,50 @@ describe('shops & follows', () => {
     });
   });
 
+  it('uploads, sets and clears the shop cover; rejects foreign cover URLs', async () => {
+    const farmer = await registerUser(app, { role: 'farmer', name: 'ร้านมีปก' });
+    const buyer = await registerUser(app, { role: 'buyer' });
+    const png = Buffer.from('89504e470d0a1a0a', 'hex').toString('base64');
+
+    const up = await request(app)
+      .post('/api/shops/mine/cover')
+      .set(bearer(farmer.token))
+      .send({ base64: png, mime: 'image/png' });
+    expect(up.status).toBe(200);
+    expect(up.body.cover).toMatch(/^\/uploads\/covers\/[\w-]+\.png$/);
+    expect(up.body.shop.cover).toBe(up.body.cover);
+
+    const pub = await request(app).get(`/api/shops/${farmer.user.id}`);
+    expect(pub.body.shop.cover).toBe(up.body.cover);
+    const served = await request(app).get(up.body.cover);
+    expect(served.status).toBe(200);
+
+    const external = await request(app)
+      .patch('/api/shops/mine')
+      .set(bearer(farmer.token))
+      .send({ cover: 'https://evil.example/x.jpg' });
+    expect(external.status).toBe(400);
+
+    const bad = await request(app)
+      .post('/api/shops/mine/cover')
+      .set(bearer(farmer.token))
+      .send({ base64: png, mime: 'image/gif' });
+    expect(bad.status).toBe(400);
+
+    const denied = await request(app)
+      .post('/api/shops/mine/cover')
+      .set(bearer(buyer.token))
+      .send({ base64: png, mime: 'image/png' });
+    expect(denied.status).toBe(403);
+
+    const cleared = await request(app)
+      .patch('/api/shops/mine')
+      .set(bearer(farmer.token))
+      .send({ cover: null });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.shop.cover).toBeNull();
+  });
+
   it('prefers subdistrict/district labels for location_label when present', async () => {
     const farmer = await registerUser(app, { role: 'farmer', name: 'ร้านป้ายตำบล' });
     await insertPlot(farmer.user.id, 13.662, 100.611, 'แปลงเดิม');

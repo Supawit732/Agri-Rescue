@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { ApiError } from '../src/api/client';
@@ -9,7 +9,9 @@ import { FormField, useFieldErrors, useFieldScroll } from '../src/components/for
 import { LocationPicker, type LatLng } from '../src/components/LocationPicker';
 import { PhoneEmailField } from '../src/components/PhoneEmailField';
 import { Body, PrimaryButton, Screen, StackHeader } from '../src/components/ui';
+import type { Shop } from '../src/api/types';
 import { useAuth } from '../src/context/AuthContext';
+import { COVER_ASPECT, useShopCover } from '../src/hooks/useShopCover';
 import { donorStatusLabel } from '../src/donorLabels';
 import { formatTemplate, useI18n } from '../src/i18n';
 import { formatPhone, isValidEmail, normalizeEmail } from '../src/lib/phoneEmail';
@@ -30,6 +32,21 @@ export default function ProfileScreen(): React.ReactElement {
   const [coords, setCoords] = useState<LatLng | null>(() =>
     user?.lat != null && user?.lng != null ? { lat: user.lat, lng: user.lng } : null,
   );
+  const [shop, setShop] = useState<Shop | null>(null);
+  const shopCover = useShopCover(setShop);
+  const userId = user?.id ?? null;
+  const canSell = user?.can_sell === true;
+  const loadShop = useCallback(async (): Promise<void> => {
+    if (userId === null || !canSell) return;
+    try {
+      setShop(await api.getShop(userId));
+    } catch {
+      setShop(null);
+    }
+  }, [api, userId, canSell]);
+  useEffect(() => {
+    void loadShop();
+  }, [loadShop]);
   const { errors, setErrors, setFieldError, applyServerFields } = useFieldErrors();
   const { scrollRef, registerY, scrollToField } = useFieldScroll();
 
@@ -288,6 +305,46 @@ export default function ProfileScreen(): React.ReactElement {
             </View>
             <Feather name="chevron-right" size={18} color={C.mute} />
           </Pressable>
+          {canSell ? (
+            <View style={styles.coverBlock}>
+              <Text style={styles.rowTitle}>{t.shop.coverTitle}</Text>
+              <Pressable
+                onPress={shopCover.change}
+                disabled={shopCover.busy}
+                accessibilityRole="button"
+                accessibilityLabel={t.shop.coverChange}
+                style={styles.coverPreview}
+              >
+                {mediaUri(shop?.cover) !== null ? (
+                  <Image source={{ uri: mediaUri(shop?.cover)! }} style={styles.coverPreviewImg} />
+                ) : null}
+              </Pressable>
+              <Text style={styles.muted}>{t.shop.coverHint}</Text>
+              <View style={styles.coverActions}>
+                <Pressable
+                  style={styles.coverBtn}
+                  onPress={shopCover.change}
+                  disabled={shopCover.busy}
+                  accessibilityRole="button"
+                >
+                  <Feather name="image" size={16} color={C.leafDeep} />
+                  <Text style={styles.coverBtnText}>{t.shop.coverChange}</Text>
+                </Pressable>
+                {shop?.cover != null ? (
+                  <Pressable
+                    style={styles.coverBtn}
+                    onPress={shopCover.remove}
+                    disabled={shopCover.busy}
+                    accessibilityRole="button"
+                  >
+                    <Feather name="trash-2" size={16} color={C.mute} />
+                    <Text style={styles.coverBtnText}>{t.shop.coverRemove}</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+              {shopCover.error !== null ? <Text style={styles.coverError}>{shopCover.error}</Text> : null}
+            </View>
+          ) : null}
           <FormField
             label={t.shop.editShopName}
             name="shop_name"
@@ -435,6 +492,29 @@ export default function ProfileScreen(): React.ReactElement {
 
 const styles = StyleSheet.create({
   body: { padding: 16, paddingBottom: 40, gap: 12 },
+  coverBlock: { gap: 8 },
+  coverPreview: {
+    width: '100%',
+    aspectRatio: COVER_ASPECT[0] / COVER_ASPECT[1],
+    borderRadius: radius.card,
+    backgroundColor: C.leaf,
+    overflow: 'hidden',
+  },
+  coverPreviewImg: { width: '100%', height: '100%', resizeMode: 'cover' },
+  coverActions: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  coverBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    height: 40,
+    borderRadius: radius.control,
+    borderWidth: 1,
+    borderColor: C.line,
+    backgroundColor: C.surface,
+  },
+  coverBtnText: { fontSize: 14, color: C.leafDeep, fontFamily: fonts.bodySemi },
+  coverError: { fontSize: 13, color: C.soonFg, fontFamily: fonts.body },
   hero: { alignItems: 'center', gap: 8, marginBottom: 8 },
   avatar: {
     width: 92,

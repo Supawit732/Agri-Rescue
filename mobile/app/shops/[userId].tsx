@@ -15,6 +15,7 @@ import type { Shop, ShopLotRow } from '../../src/api/types';
 import { LogoMark, initialsOf } from '../../src/components/LogoMark';
 import { Badge, Body, DataState, PrimaryButton, Screen, StackHeader } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
+import { useShopCover } from '../../src/hooks/useShopCover';
 import { useApiData } from '../../src/hooks/useApiData';
 import { formatCountdown, hoursLeftFrom, useNow } from '../../src/hooks/useNow';
 import { formatTemplate, useI18n } from '../../src/i18n';
@@ -38,6 +39,8 @@ export default function ShopScreen(): React.ReactElement {
   const [tab, setTab] = useState<'selling' | 'sold'>('selling');
   const [busy, setBusy] = useState(false);
   const [shop, setShop] = useState<Shop | null>(null);
+
+  const shopCover = useShopCover(setShop);
 
   const fetchShop = useCallback(() => api.getShop(userId, lat, lng), [api, userId, lat, lng]);
   const { data, loading, error, reload } = useApiData(fetchShop, [userId, lat, lng]);
@@ -86,11 +89,25 @@ export default function ShopScreen(): React.ReactElement {
     <Screen>
       <StackHeader title={t.shop.title} onBack={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))} />
       <ScrollView contentContainerStyle={styles.body}>
-        {coverUri !== null ? (
-          <Image source={{ uri: coverUri }} style={styles.coverImg} />
-        ) : (
-          <View style={styles.coverBanner} />
-        )}
+        <Pressable
+          onPress={isOwner && user?.can_sell === true ? shopCover.change : undefined}
+          disabled={!isOwner || user?.can_sell !== true || shopCover.busy}
+          accessibilityRole={isOwner ? 'button' : undefined}
+          accessibilityLabel={isOwner ? t.shop.coverTapToChange : undefined}
+        >
+          {coverUri !== null ? (
+            <Image source={{ uri: coverUri }} style={styles.coverImg} />
+          ) : (
+            <View style={styles.coverBanner} />
+          )}
+          {isOwner && user?.can_sell === true ? (
+            <View style={styles.coverEdit}>
+              <Feather name="camera" size={14} color={C.white} />
+              <Text style={styles.coverEditText}>{t.shop.coverTapToChange}</Text>
+            </View>
+          ) : null}
+        </Pressable>
+        {shopCover.error !== null ? <Text style={styles.coverError}>{shopCover.error}</Text> : null}
         <View style={[styles.avatar, styles.avatarOverCover]}>
           {shop?.avatar != null && mediaUri(shop.avatar) !== null ? (
             <Image source={{ uri: mediaUri(shop.avatar)! }} style={styles.avatarImg} />
@@ -246,7 +263,21 @@ export default function ShopScreen(): React.ReactElement {
 const styles = StyleSheet.create({
   // Brand-colored fallback banner when the shop has no cover image.
   coverBanner: { width: '100%', height: 80, borderRadius: radius.card, backgroundColor: C.leaf },
-  coverImg: { width: '100%', height: 110, borderRadius: radius.card, backgroundColor: C.leafSoft },
+  coverImg: { width: '100%', height: 80, borderRadius: radius.card, backgroundColor: C.leafSoft, resizeMode: 'cover' },
+  coverEdit: {
+    position: 'absolute',
+    right: 8,
+    bottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  coverEditText: { fontSize: 12, color: C.white, fontFamily: fonts.body },
+  coverError: { fontSize: 13, color: C.soonFg, fontFamily: fonts.body },
   body: { padding: 16, paddingBottom: 40, gap: 6 },
   avatar: {
     width: 76,
