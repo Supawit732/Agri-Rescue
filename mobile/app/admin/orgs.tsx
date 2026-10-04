@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React from 'react';
+import React, { useState } from 'react';
 import { View } from 'react-native';
 import { OrgApplicationsPanel } from '../../src/admin/OldAdminPanels';
 import { StackHeader } from '../../src/components/ui';
@@ -12,10 +12,12 @@ export default function AdminOrgsScreen(): React.ReactElement {
   const router = useRouter();
   const params = useLocalSearchParams<{ user?: string }>();
   const parsed = params.user !== undefined ? Number(params.user) : NaN;
+  const [orgName, setOrgName] = useState<string | null>(null);
+  const userId = Number.isFinite(parsed) ? parsed : undefined;
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
-      <StackHeader title={t.admin.queueOrg} onBack={() => router.navigate('/admin/inbox' as never)} />
-      <OrgApplicationsPanel userId={Number.isFinite(parsed) ? parsed : undefined} />
+      <StackHeader title={orgName ?? t.admin.queueOrg} onBack={() => router.navigate('/admin/inbox' as never)} />
+      <OrgApplicationsPanel userId={userId} onOrgName={setOrgName} />
     </View>
   );
 }

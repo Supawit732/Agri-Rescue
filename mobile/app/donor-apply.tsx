@@ -366,6 +366,25 @@ export default function DonorApplyScreen(): React.ReactElement {
     clearField('documents');
   };
 
+  /** Replace local docs with the server's rows so saved files are never re-uploaded. */
+  const syncSavedDocs = async (): Promise<void> => {
+    try {
+      const mine = await api.getMyDonorApplication();
+      setDocs(
+        mine.documents.map((doc) => ({
+          id: `existing-${doc.id}`,
+          name: doc.original_name,
+          mime: (doc.mime === 'image/png' ? 'image/png' : doc.mime === 'application/pdf' ? 'application/pdf' : 'image/jpeg') as LocalDoc['mime'],
+          base64: '',
+          doc_category: (doc.doc_category as DocCategory) ?? 'other',
+          existingId: doc.id,
+        })),
+      );
+    } catch {
+      // Keep local docs; the server dedupes identical re-sent files.
+    }
+  };
+
   const saveDraft = async (nextStep: number): Promise<boolean> => {
     if (kind === null) {
       return true;
@@ -408,6 +427,9 @@ export default function DonorApplyScreen(): React.ReactElement {
           : {}),
       });
       await refreshUser();
+      if (docs.some((d) => d.base64 !== '')) {
+        await syncSavedDocs();
+      }
       return true;
     } catch (err) {
       if (err instanceof ApiError) {

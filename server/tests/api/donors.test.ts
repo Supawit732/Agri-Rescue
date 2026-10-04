@@ -767,4 +767,29 @@ describe('donors 6.1d formal apply', () => {
     expect(updateKind.body.user.application_kind).toBe('individual');
     expect(updateKind.body.user.org_status).toBe('draft');
   });
+  it('draft save with the same document twice does not duplicate it', async () => {
+    const buyer = await registerUser(app, { role: 'buyer', buyer_type: 'shop' });
+    const payload = {
+      application_kind: 'organization',
+      draft_step: 1,
+      org_name: 'องค์กรทดสอบเอกสาร',
+      documents: [
+        {
+          filename: 'cert.jpg',
+          mime: 'image/jpeg',
+          base64: Buffer.from('same-bytes').toString('base64'),
+          doc_category: 'registration_cert',
+        },
+      ],
+    };
+    for (let i = 0; i < 3; i += 1) {
+      const res = await request(app)
+        .post('/api/donors/org-applications/draft')
+        .set(bearer(buyer.token))
+        .send(payload);
+      expect(res.status).toBe(200);
+    }
+    const mine = await request(app).get('/api/donors/org-applications/mine').set(bearer(buyer.token));
+    expect(mine.body.documents).toHaveLength(1);
+  });
 });
