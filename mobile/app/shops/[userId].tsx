@@ -86,8 +86,12 @@ export default function ShopScreen(): React.ReactElement {
     <Screen>
       <StackHeader title={t.shop.title} onBack={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))} />
       <ScrollView contentContainerStyle={styles.body}>
-        {coverUri !== null ? <Image source={{ uri: coverUri }} style={styles.coverImg} /> : null}
-        <View style={[styles.avatar, coverUri !== null ? styles.avatarOverCover : null]}>
+        {coverUri !== null ? (
+          <Image source={{ uri: coverUri }} style={styles.coverImg} />
+        ) : (
+          <View style={styles.coverBanner} />
+        )}
+        <View style={[styles.avatar, styles.avatarOverCover]}>
           {shop?.avatar != null && mediaUri(shop.avatar) !== null ? (
             <Image source={{ uri: mediaUri(shop.avatar)! }} style={styles.avatarImg} />
           ) : (
@@ -240,7 +244,8 @@ export default function ShopScreen(): React.ReactElement {
 }
 
 const styles = StyleSheet.create({
-  // Short banner, only rendered when the shop has a real cover image.
+  // Brand-colored fallback banner when the shop has no cover image.
+  coverBanner: { width: '100%', height: 80, borderRadius: radius.card, backgroundColor: C.leaf },
   coverImg: { width: '100%', height: 110, borderRadius: radius.card, backgroundColor: C.leafSoft },
   body: { padding: 16, paddingBottom: 40, gap: 6 },
   avatar: {
@@ -254,7 +259,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  avatarOverCover: { marginTop: -32 },
+  avatarOverCover: { marginTop: -38, marginLeft: 16 },
   avatarImg: { width: '100%', height: '100%' },
   avatarText: { fontFamily: fonts.titleBold, fontSize: 26, fontWeight: '700', color: C.white },
   title: { fontFamily: fonts.titleBold, fontSize: 24, fontWeight: '700', color: C.ink, marginTop: 8 },
