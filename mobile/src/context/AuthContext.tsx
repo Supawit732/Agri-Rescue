@@ -162,7 +162,12 @@ interface Api {
   getCropCategories: () => Promise<CropCategory[]>;
   getPublicMarketLot: (id: number, lat?: number, lng?: number) => Promise<MarketLot>;
   getShop: (userId: number, lat?: number, lng?: number) => Promise<Shop>;
-  updateMyShop: (input: { name?: string; description?: string | null }) => Promise<Shop>;
+  updateMyShop: (input: {
+    name?: string;
+    description?: string | null;
+    cover?: string | null;
+  }) => Promise<Shop>;
+  uploadShopCover: (input: { base64: string; mime: string }) => Promise<Shop>;
   ensureMyShop: () => Promise<Shop>;
   followShop: (userId: number) => Promise<Shop>;
   unfollowShop: (userId: number) => Promise<Shop>;
@@ -529,6 +534,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
       },
       updateMyShop: (input) =>
         authed<{ shop: Shop }>('PATCH', '/api/shops/mine', input).then((r) => r.shop),
+      uploadShopCover: (input) =>
+        authed<{ shop: Shop }>('POST', '/api/shops/mine/cover', input, AI_OR_UPLOAD_TIMEOUT_MS).then(
+          (r) => r.shop,
+        ),
       ensureMyShop: () => authed<{ shop: Shop }>('POST', '/api/shops/mine/ensure').then((r) => r.shop),
       followShop: (userId) =>
         authed<{ shop: Shop }>('POST', `/api/shops/${userId}/follow`).then((r) => r.shop),
