@@ -3,6 +3,7 @@ import { Alert, Platform } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../context/AuthContext';
 import { useI18n } from '../i18n';
+import { confirmAlert } from '../lib/confirm';
 import { resizeToBase64 } from '../lib/media';
 import type { Shop } from '../api/types';
 
@@ -78,18 +79,14 @@ export function useShopCover(onChanged: (shop: Shop) => void): {
   }, [t, uploadFrom]);
 
   const remove = useCallback((): void => {
-    if (Platform.OS === 'web') {
-      void run(() => api.updateMyShop({ cover: null }));
-      return;
-    }
-    Alert.alert(t.shop.coverRemoveConfirm, undefined, [
-      {
-        text: t.shop.coverRemove,
-        style: 'destructive',
-        onPress: () => void run(() => api.updateMyShop({ cover: null })),
-      },
-      { text: t.common.cancel, style: 'cancel' },
-    ]);
+    void confirmAlert({
+      title: t.shop.coverRemove,
+      message: t.shop.coverRemoveConfirm,
+      confirmText: t.shop.coverRemove,
+      cancelText: t.common.cancel,
+      destructive: true,
+      onConfirm: () => void run(() => api.updateMyShop({ cover: null })),
+    });
   }, [api, run, t]);
 
   return { busy, error, change, remove };
