@@ -676,4 +676,34 @@ describe('donors 6.1d formal apply', () => {
     expect(submit.body.user.org_status).toBe('approved');
     expect(submit.body.user.application_kind).toBe('individual');
   });
+
+  it('allows setting kind on a draft with null application_kind', async () => {
+    const buyer = await registerUser(app, { role: 'buyer', buyer_type: 'shop' });
+    const saveDraft = await request(app)
+      .post('/api/donors/org-applications/draft')
+      .set(bearer(buyer.token))
+      .send({
+        draft_step: 0,
+        org_lat: 13.7,
+        org_lng: 100.5,
+      });
+    expect(saveDraft.status).toBe(200);
+    expect(saveDraft.body.user.org_status).toBe('draft');
+    expect(saveDraft.body.user.application_kind).toBeNull();
+    const meResult = await request(app)
+      .get('/api/auth/me')
+      .set(bearer(buyer.token));
+    expect(meResult.status).toBe(200);
+    expect(meResult.body.user.application_kind).toBeNull();
+    const updateKind = await request(app)
+      .post('/api/donors/org-applications/draft')
+      .set(bearer(buyer.token))
+      .send({
+        application_kind: 'individual',
+        draft_step: 0,
+      });
+    expect(updateKind.status).toBe(200);
+    expect(updateKind.body.user.application_kind).toBe('individual');
+    expect(updateKind.body.user.org_status).toBe('draft');
+  });
 });
