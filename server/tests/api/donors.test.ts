@@ -436,6 +436,7 @@ describe('donors 6.1d formal apply', () => {
         contact_name: 'เอ',
         contact_title: 'ผอ',
         contact_phone: '0891111111',
+        contact_email: 'org@example.com',
         org_lat: 13.7,
         org_lng: 100.5,
         beneficiary_count: 10,
@@ -460,6 +461,7 @@ describe('donors 6.1d formal apply', () => {
         contact_name: 'เอ',
         contact_title: 'ผอ',
         contact_phone: '0891111111',
+        contact_email: 'org@example.com',
         org_lat: 13.7,
         org_lng: 100.5,
         beneficiary_count: 10,
@@ -476,6 +478,63 @@ describe('donors 6.1d formal apply', () => {
       });
     expect(missingDocs.status).toBe(400);
     expect(missingDocs.body.error.fields.documents).toContain('รูปสถานที่');
+  });
+
+  it('org apply: email required, frequency optional, purpose not required; individual still needs purpose', async () => {
+    const orgBody = {
+      application_kind: 'organization',
+      terms_version: DONOR_TERMS_VERSION,
+      terms_accepted: true,
+      org_name: 'มูลนิธิ',
+      org_type: 'foundation',
+      registered: true,
+      registered_address: 'กทม',
+      contact_name: 'เอ',
+      contact_title: 'ผอ',
+      contact_phone: '0891111111',
+      org_lat: 13.7,
+      org_lng: 100.5,
+      beneficiary_count: 10,
+      recipient_groups: ['community'],
+      distribution_mode: 'redistribute',
+      redistribute_place: 'ศาลา',
+      redistribute_frequency: null,
+      purpose_th: '',
+      documents: [
+        { filename: 'c.pdf', mime: 'application/pdf', base64: Buffer.from('%PDF').toString('base64'), doc_category: 'registration_cert' },
+        { filename: 's.jpg', mime: 'image/jpeg', base64: tinyPng, doc_category: 'site_photo' },
+      ],
+    };
+    const orgUser = await registerUser(app, { role: 'buyer', buyer_type: 'shop' });
+    const noEmail = await request(app).post('/api/donors/org-applications').set(bearer(orgUser.token)).send(orgBody);
+    expect(noEmail.status).toBe(400);
+    expect(noEmail.body.error.fields.contact_email).toBeTruthy();
+    expect(noEmail.body.error.fields.redistribute_frequency).toBeUndefined();
+    expect(noEmail.body.error.fields.purpose_th).toBeUndefined();
+
+    const ok = await request(app)
+      .post('/api/donors/org-applications')
+      .set(bearer(orgUser.token))
+      .send({ ...orgBody, contact_email: 'org@example.com' });
+    expect(ok.status).toBe(201);
+
+    const indiv = await registerUser(app, { role: 'buyer', buyer_type: 'shop' });
+    const noPurpose = await request(app)
+      .post('/api/donors/org-applications')
+      .set(bearer(indiv.token))
+      .send({
+        application_kind: 'individual',
+        terms_version: DONOR_TERMS_VERSION,
+        terms_accepted: true,
+        contact_name: 'สมหญิง',
+        contact_phone: '0892222222',
+        org_lat: 13.75,
+        org_lng: 100.55,
+        recipient_groups: ['elderly'],
+        purpose_th: '',
+      });
+    expect(noPurpose.status).toBe(400);
+    expect(noPurpose.body.error.fields.purpose_th).toBeTruthy();
   });
 
   it('individual formal submit activates volunteer immediately', async () => {
@@ -517,6 +576,7 @@ describe('donors 6.1d formal apply', () => {
         contact_name: 'พี่เขียว',
         contact_title: 'ประธาน',
         contact_phone: '0893333333',
+        contact_email: 'ok3@example.com',
         org_lat: 18.7,
         org_lng: 98.9,
         beneficiary_count: 20,
@@ -568,6 +628,7 @@ describe('donors 6.1d formal apply', () => {
       contact_name: 'เอ',
       contact_title: 'ผอ',
       contact_phone: '0894444444',
+      contact_email: 'ok4@example.com',
       org_lat: 13.7,
       org_lng: 100.5,
       beneficiary_count: 12,

@@ -48,6 +48,8 @@ type FormFieldProps = {
   fieldRef?: (name: string, y: number) => void;
   /** Show eye toggle inside the field (password fields). */
   secureToggle?: boolean;
+  /** Ref to the underlying TextInput (used to focus the first invalid field). */
+  inputRef?: React.Ref<TextInput>;
 } & TextInputProps;
 
 export function FormField({
@@ -60,6 +62,7 @@ export function FormField({
   style,
   secureToggle,
   secureTextEntry,
+  inputRef,
   ...rest
 }: FormFieldProps): React.ReactElement {
   const { t } = useI18n();
@@ -77,6 +80,7 @@ export function FormField({
       <Text style={styles.label}>{label}</Text>
       <View style={[styles.inputWrap, hasError ? styles.inputError : null, style as object]}>
         <TextInput
+          ref={inputRef}
           style={styles.inputInner}
           placeholderTextColor={C.mute}
           accessibilityState={hasError ? { selected: false } : undefined}

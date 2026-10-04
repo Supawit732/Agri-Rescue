@@ -77,7 +77,8 @@ const orgApplyBase = z.object({
   org_lat: z.number().gte(-90).lte(90),
   org_lng: z.number().gte(-180).lte(180),
   recipient_groups: z.array(recipientGroupSchema).min(1, 'เลือกอย่างน้อยหนึ่งกลุ่มผู้รับ'),
-  purpose_th: z.string().trim().min(1, 'กรุณาระบุวัตถุประสงค์').max(512).optional(),
+  // Required for individuals only (superRefine); organizations have no purpose field.
+  purpose_th: z.string().trim().max(512).optional().nullable(),
   // Org-only (validated in superRefine)
   org_name: z.string().trim().max(255).optional(),
   org_type: orgTypeSchema.optional(),
@@ -101,12 +102,15 @@ const orgApplySchema = orgApplyBase.superRefine((body, ctx) => {
     });
   }
   if (body.application_kind === 'individual') {
-    if (body.purpose_th === undefined || body.purpose_th.trim() === '') {
+    if (body.purpose_th === undefined || body.purpose_th === null || body.purpose_th.trim() === '') {
       ctx.addIssue({ code: 'custom', message: 'กรุณาระบุวัตถุประสงค์', path: ['purpose_th'] });
     }
     return;
   }
   // organization
+  if (body.contact_email === undefined || body.contact_email === null || body.contact_email.trim() === '') {
+    ctx.addIssue({ code: 'custom', message: 'กรุณากรอกอีเมล', path: ['contact_email'] });
+  }
   if (body.org_name === undefined || body.org_name.trim() === '') {
     ctx.addIssue({ code: 'custom', message: 'กรุณากรอกชื่อองค์กร', path: ['org_name'] });
   }
@@ -131,13 +135,6 @@ const orgApplySchema = orgApplyBase.superRefine((body, ctx) => {
   if (body.distribution_mode === 'redistribute') {
     if (body.redistribute_place === undefined || body.redistribute_place === null || body.redistribute_place.trim() === '') {
       ctx.addIssue({ code: 'custom', message: 'กรุณาระบุสถานที่แจกประจำ', path: ['redistribute_place'] });
-    }
-    if (
-      body.redistribute_frequency === undefined ||
-      body.redistribute_frequency === null ||
-      body.redistribute_frequency.trim() === ''
-    ) {
-      ctx.addIssue({ code: 'custom', message: 'กรุณาระบุความถี่การแจก', path: ['redistribute_frequency'] });
     }
   }
   const docs = body.documents ?? [];

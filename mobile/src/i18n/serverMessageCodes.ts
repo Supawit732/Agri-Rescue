@@ -37,6 +37,7 @@ export const SERVER_MESSAGE_TO_CODE: Record<string, string> = {
   'กรุณายอมรับข้อกำหนดฉบับล่าสุด': 'terms_required',
   'กรุณาระบุวัตถุประสงค์': 'REQUIRED',
   'กรุณากรอกชื่อองค์กร': 'REQUIRED',
+  'กรุณากรอกอีเมล': 'REQUIRED',
   'กรุณาเลือกประเภทองค์กร': 'MUST_SELECT',
   'กรุณาระบุว่าจดทะเบียนหรือไม่': 'MUST_SELECT',
   'กรุณากรอกที่อยู่ตามทะเบียน': 'REQUIRED',

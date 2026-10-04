@@ -546,6 +546,7 @@ export type Messages = {
     roleSellerDesc: string;
     roleBuyer: string;
     roleBuyerDesc: string;
+    roleEnable: string;
     myShop: string;
     myShopDesc: string;
     contactTitle: string;
@@ -668,6 +669,13 @@ export type Messages = {
     needDistributionMode: string;
     needRedistributePlace: string;
     needRedistributeFrequency: string;
+    needEmail: string;
+    invalidEmail: string;
+    redistributeFrequencyOptional: string;
+    freqDaily: string;
+    freqWeekly: string;
+    freqMonthly: string;
+    freqIrregular: string;
     needCertFile: string;
     needSitePhotos: string;
     withdrawTitle: string;
