@@ -166,7 +166,7 @@ export function SupportInboxPanel(): React.ReactElement {
   );
 }
 
-export function OrgApplicationsPanel(): React.ReactElement {
+export function OrgApplicationsPanel({ userId }: { userId?: number } = {}): React.ReactElement {
   const { api } = useAuth();
   const { t, formatDateTime } = useI18n();
   const reasons = quickReasons(t);
@@ -286,9 +286,9 @@ export function OrgApplicationsPanel(): React.ReactElement {
         emptyText={t.admin.emptyOrgs}
         isEmpty={(rows) => rows.length === 0}
       >
-        {(apps: OrgApplication[]) => (
+        {(all: OrgApplication[]) => (
           <>
-            {apps.map((entry) => {
+            {all.filter((a) => userId === undefined || a.user_id === userId).map((entry) => {
               const checklist = checklists[entry.user_id] ??
                 (entry.checklist as OrgChecklist | null) ?? {
                   name_matches_docs: false,

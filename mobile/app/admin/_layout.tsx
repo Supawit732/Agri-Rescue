@@ -63,6 +63,7 @@ export default function AdminLayout(): React.ReactElement {
           headerShown: false,
           tabBarActiveTintColor: C.leaf,
           tabBarInactiveTintColor: C.mute,
+          tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
           tabBarStyle: { backgroundColor: C.surface, borderTopColor: C.line },
           sceneStyle: { backgroundColor: C.bg },
         }}
@@ -71,14 +72,18 @@ export default function AdminLayout(): React.ReactElement {
           name="index"
           options={{
             title: t.admin.tabOverview,
-            tabBarIcon: ({ color, size }) => <Feather name="home" size={size} color={color} />,
+            tabBarIcon: ({ color, size, focused }) => (
+              <Feather name="home" size={size} color={focused ? C.leaf : C.mute} />
+            ),
           }}
         />
         <Tabs.Screen
           name="market"
           options={{
             title: t.admin.tabMarket,
-            tabBarIcon: ({ color, size }) => <Feather name="shopping-bag" size={size} color={color} />,
+            tabBarIcon: ({ color, size, focused }) => (
+              <Feather name="shopping-bag" size={size} color={focused ? C.leaf : C.mute} />
+            ),
           }}
         />
         <Tabs.Screen
@@ -87,16 +92,21 @@ export default function AdminLayout(): React.ReactElement {
             title: t.admin.tabInbox,
             tabBarBadge: badge,
             tabBarBadgeStyle: { backgroundColor: C.danger, color: C.white, fontSize: 11 },
-            tabBarIcon: ({ color, size }) => <Feather name="inbox" size={size} color={color} />,
+            tabBarIcon: ({ color, size, focused }) => (
+              <Feather name="inbox" size={size} color={focused ? C.leaf : C.mute} />
+            ),
           }}
         />
         <Tabs.Screen
           name="system"
           options={{
             title: t.admin.tabSystem,
-            tabBarIcon: ({ color, size }) => <Feather name="server" size={size} color={color} />,
+            tabBarIcon: ({ color, size, focused }) => (
+              <Feather name="server" size={size} color={focused ? C.leaf : C.mute} />
+            ),
           }}
         />
+        <Tabs.Screen name="orgs" options={{ href: null, title: t.admin.queueOrg }} />
       </Tabs>
 
       <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
