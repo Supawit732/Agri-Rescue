@@ -15,7 +15,7 @@ export default function SellTab(): React.ReactElement {
 
   if (user === null) {
     return (
-      <Screen>
+      <Screen skipTopSafeArea>
         <LoginPrompt
           title={t.sell.loginTitle}
           message={t.sell.loginMessage}
@@ -43,7 +43,7 @@ export default function SellTab(): React.ReactElement {
       }
     };
     return (
-      <Screen>
+      <Screen skipTopSafeArea>
         <View style={styles.box}>
           <Text style={styles.title}>{t.account.enableSell}</Text>
           <Text style={styles.body}>{t.sell.enableHint}</Text>

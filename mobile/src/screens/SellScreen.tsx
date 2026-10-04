@@ -188,7 +188,7 @@ export default function SellScreen(): React.ReactElement {
   }, [navigation, formDirty, tab, t]);
 
   return (
-    <Screen>
+    <Screen skipTopSafeArea>
       <Segmented
         options={[
           { key: 'new', label: editingLot !== null ? t.sell.editTab : t.sell.newTab },

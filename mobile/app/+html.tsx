@@ -29,6 +29,8 @@ export default function Root({ children }: { children: ReactNode }) {
 }
 
 const responsiveBackground = `
+[role="tab"] { outline: none; }
+[role="tab"]:focus-visible { outline: 2px solid #2E6040; outline-offset: -2px; border-radius: 12px; }
 body {
   background-color: #F6F8F2;
 }

@@ -1,4 +1,4 @@
-import { Tabs, usePathname, useRouter } from 'expo-router';
+import { Tabs, usePathname, useRouter, useSegments } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
@@ -6,6 +6,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/context/AuthContext';
 import { useI18n } from '../../src/i18n';
 import { C, fonts } from '../../src/theme';
+import { tabBarScreenOptions, tabItemOptions } from '../../src/components/tabBar';
+import { TabHeader } from '../../src/components/TabHeader';
 
 const SIDEBAR_BREAKPOINT = 900;
 
@@ -16,6 +18,8 @@ export default function TabsLayout(): React.ReactElement {
   const { t } = useI18n();
   const { user, api } = useAuth();
   const isAdmin = user?.is_admin === true;
+  const segments = useSegments();
+  const activeName = segments[0] === '(tabs)' ? (segments[1] ?? 'index') : 'index';
   const [unread, setUnread] = useState(0);
 
   const refreshUnread = useCallback(async () => {
@@ -64,38 +68,18 @@ export default function TabsLayout(): React.ReactElement {
       <View style={styles.tabsWrap}>
         <Tabs
           screenOptions={{
-            headerShown: false,
-            tabBarActiveTintColor: C.leaf,
-            tabBarInactiveTintColor: C.mute,
-            tabBarStyle: isWide
-              ? { display: 'none' }
-              : {
-                  backgroundColor: C.surface,
-                  borderTopColor: C.line,
-                  paddingBottom: insets.bottom + 4,
-                  height: 64 + (insets.bottom ?? 0),
-                },
-            tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
-            sceneStyle: { backgroundColor: C.bg },
+            ...tabBarScreenOptions(insets.bottom),
+            ...(isWide ? { tabBarStyle: { display: 'none' as const } } : null),
           }}
         >
-          <Tabs.Screen
-            name="index"
-            options={{
-              title: t.tabs.market,
-              tabBarIcon: ({ color, size, focused }) => (
-                <Feather name="home" size={size} color={color} style={focused ? styles.iconOn : null} />
-              ),
-            }}
-          />
+          <Tabs.Screen name="index" options={tabItemOptions(t.tabs.market, 'home', activeName === 'index')} />
           {!isAdmin ? (
             <Tabs.Screen
               name="sell"
               options={{
-                title: t.tabs.sell,
-                tabBarIcon: ({ color, size }) => (
-                  <Feather name="plus-circle" size={size} color={color} />
-                ),
+                ...tabItemOptions(t.tabs.sell, 'plus-circle', activeName === 'sell'),
+                headerShown: true,
+                header: () => <TabHeader title={t.tabs.sell} />,
               }}
             />
           ) : (
@@ -105,10 +89,9 @@ export default function TabsLayout(): React.ReactElement {
             <Tabs.Screen
               name="orders"
               options={{
-                title: t.tabs.orders,
-                tabBarIcon: ({ color, size }) => (
-                  <Feather name="file-text" size={size} color={color} />
-                ),
+                ...tabItemOptions(t.tabs.orders, 'file-text', activeName === 'orders'),
+                headerShown: true,
+                header: () => <TabHeader title={t.tabs.orders} />,
               }}
             />
           ) : (
@@ -117,10 +100,9 @@ export default function TabsLayout(): React.ReactElement {
           <Tabs.Screen
             name="notifications"
             options={{
-              title: t.tabs.notifications,
+              ...tabItemOptions(t.tabs.notifications, 'bell', activeName === 'notifications'),
               tabBarBadge: badgeLabel,
               tabBarBadgeStyle: { backgroundColor: C.danger, color: C.white, fontSize: 11 },
-              tabBarIcon: ({ color, size }) => <Feather name="bell" size={size} color={color} />,
             }}
           />
           {/* Account lives in the header profile menu; keep the route out of the tab bar. */}
@@ -221,5 +203,4 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   sideBadgeText: { color: C.white, fontSize: 11, fontWeight: '700' },
-  iconOn: { fontWeight: '700' },
 });
