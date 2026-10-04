@@ -2,7 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { View } from 'react-native';
 import { OrgApplicationsPanel } from '../../src/admin/OldAdminPanels';
-import { StackHeader } from '../../src/components/ui';
+import { Screen, StackHeader } from '../../src/components/ui';
 import { useI18n } from '../../src/i18n';
 import { C } from '../../src/theme';
 
@@ -15,9 +15,9 @@ export default function AdminOrgsScreen(): React.ReactElement {
   const [orgName, setOrgName] = useState<string | null>(null);
   const userId = Number.isFinite(parsed) ? parsed : undefined;
   return (
-    <View style={{ flex: 1, backgroundColor: C.bg }}>
+    <Screen fullWidth>
       <StackHeader title={orgName ?? t.admin.queueOrg} onBack={() => router.navigate('/admin/inbox' as never)} />
       <OrgApplicationsPanel userId={userId} onOrgName={setOrgName} />
-    </View>
+    </Screen>
   );
 }
