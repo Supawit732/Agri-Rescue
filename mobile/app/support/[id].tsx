@@ -77,10 +77,18 @@ export default function SupportTicketScreen(): React.ReactElement {
     }
   };
 
+  const leave = (): void => {
+    if (user?.is_admin === true) {
+      router.replace('/admin/inbox' as never);
+      return;
+    }
+    router.replace('/contact-us');
+  };
+
   if (user === null) {
     return (
       <Screen>
-        <StackHeader title={t.support.title} onBack={() => router.replace('/contact-us')} />
+        <StackHeader title={t.support.title} onBack={leave} />
         <View style={styles.pad}>
           <Text style={styles.muted}>{t.support.loginRequired}</Text>
           <PrimaryButton
@@ -96,7 +104,7 @@ export default function SupportTicketScreen(): React.ReactElement {
 
   return (
     <Screen>
-      <StackHeader title={t.support.title} onBack={() => router.replace('/contact-us')} />
+      <StackHeader title={t.support.title} onBack={leave} />
       <ScrollView ref={scrollRef} contentContainerStyle={styles.body}>
         {loading || ticket === undefined ? (
           <Text style={styles.muted}>{t.common.loading}</Text>
