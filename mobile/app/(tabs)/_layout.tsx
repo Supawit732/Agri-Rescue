@@ -7,7 +7,7 @@ import { useAuth } from '../../src/context/AuthContext';
 import { useI18n } from '../../src/i18n';
 import { C, fonts } from '../../src/theme';
 import { tabBarScreenOptions, tabItemOptions } from '../../src/components/tabBar';
-import { TabHeader } from '../../src/components/TabHeader';
+import { ScreenHeader } from '../../src/components/ScreenHeader';
 
 const SIDEBAR_BREAKPOINT = 900;
 
@@ -79,7 +79,7 @@ export default function TabsLayout(): React.ReactElement {
               options={{
                 ...tabItemOptions(t.tabs.sell, 'plus-circle', activeName === 'sell'),
                 headerShown: true,
-                header: () => <TabHeader title={t.tabs.sell} />,
+                header: () => <ScreenHeader title={t.tabs.sell} />,
               }}
             />
           ) : (
@@ -91,7 +91,7 @@ export default function TabsLayout(): React.ReactElement {
               options={{
                 ...tabItemOptions(t.tabs.orders, 'file-text', activeName === 'orders'),
                 headerShown: true,
-                header: () => <TabHeader title={t.tabs.orders} />,
+                header: () => <ScreenHeader title={t.tabs.orders} />,
               }}
             />
           ) : (

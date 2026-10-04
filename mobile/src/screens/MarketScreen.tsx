@@ -16,7 +16,8 @@ import {
 import { API_BASE_URL } from '../api/config';
 import { ripenessLabel } from '../constants';
 import type { Crop, CropCategory, MarketLot } from '../api/types';
-import { AppHeader } from '../components/Brand';
+import { MarketBrand } from '../components/Brand';
+import { ScreenHeader } from '../components/ScreenHeader';
 import {
   MarketFilterSheet,
   countActiveFilters,
@@ -68,7 +69,7 @@ export default function MarketScreen(): React.ReactElement {
 
   return (
     <Screen fullWidth skipTopSafeArea>
-      <AppHeader />
+      <ScreenHeader left={<MarketBrand />} />
       {user === null ? (
         <View style={styles.guestBanner}>
           <Text style={styles.guestText}>{t.market.guestBanner}</Text>

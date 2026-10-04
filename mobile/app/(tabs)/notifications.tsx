@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { AppNotification, NotificationFilter } from '../../src/api/types';
 import { DataState, PrimaryButton, Screen } from '../../src/components/ui';
-import { ProfileMenu } from '../../src/components/ProfileMenu';
+import { HeaderAction, ScreenHeader } from '../../src/components/ScreenHeader';
 import { useAuth } from '../../src/context/AuthContext';
 import { useApiData } from '../../src/hooks/useApiData';
 import { formatRelativeTime, formatTemplate, useI18n } from '../../src/i18n';
@@ -49,7 +49,6 @@ export default function NotificationsTab(): React.ReactElement {
   const router = useRouter();
   const [filter, setFilter] = useState<FilterKey>('all');
   const [extraUnread, setExtraUnread] = useState(0);
-  const [menuOpen, setMenuOpen] = useState(false);
 
   const fetchList = useCallback(
     () => api.listNotifications(filter),
@@ -168,10 +167,8 @@ export default function NotificationsTab(): React.ReactElement {
 
   if (user === null) {
     return (
-      <Screen>
-        <View style={styles.header}>
-          <Text style={styles.h1}>{t.tabs.notifications}</Text>
-        </View>
+      <Screen skipTopSafeArea>
+        <ScreenHeader title={t.tabs.notifications} />
         <View style={styles.guest}>
           <Text style={styles.guestText}>{t.notifications.loginRequired}</Text>
           <PrimaryButton
@@ -186,32 +183,12 @@ export default function NotificationsTab(): React.ReactElement {
   }
 
   return (
-    <Screen fullWidth>
-      <ProfileMenu visible={menuOpen} onClose={() => setMenuOpen(false)} />
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.h1}>{t.tabs.notifications}</Text>
-          {unread > 0 ? <View style={styles.headerBadge}><Text style={styles.headerBadgeText}>{unread}</Text></View> : null}
-        </View>
-        <View style={styles.headerRight}>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => void markAll()}
-            hitSlop={8}
-            style={styles.markAllHit}
-          >
-            <Text style={styles.markAll}>{t.notifications.markAll}</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t.shell.openAccountMenu}
-            onPress={() => setMenuOpen(true)}
-            style={styles.avatarMini}
-          >
-            <Feather name="user" size={16} color={C.leafDeep} />
-          </Pressable>
-        </View>
-      </View>
+    <Screen fullWidth skipTopSafeArea>
+      <ScreenHeader
+        title={t.tabs.notifications}
+        badge={unread}
+        actions={<HeaderAction label={t.notifications.markAll} onPress={() => void markAll()} />}
+      />
 
       <View style={styles.filters}>
         {FILTERS.map((f) => {
@@ -282,37 +259,6 @@ export default function NotificationsTab(): React.ReactElement {
 }
 
 const styles = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 8,
-  },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  h1: { fontFamily: fonts.titleBold, fontSize: 24, fontWeight: '700', color: C.ink },
-  headerBadge: {
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: C.danger,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 4,
-  },
-  headerBadgeText: { color: C.white, fontSize: 11, fontWeight: '700' },
-  markAll: { color: C.leaf, fontWeight: '600', fontSize: 14, fontFamily: fonts.bodySemi },
-  markAllHit: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 4 },
-  avatarMini: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: C.leafSoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   filters: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingBottom: 12 },
   chip: {
     minHeight: 44,

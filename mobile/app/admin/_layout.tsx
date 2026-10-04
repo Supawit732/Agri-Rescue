@@ -6,7 +6,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAuth } from '../../src/context/AuthContext';
 import { useI18n } from '../../src/i18n';
 import { C, fonts } from '../../src/theme';
-import { initialsOf } from '../../src/components/LogoMark';
+import { ScreenHeader } from '../../src/components/ScreenHeader';
 import { tabBarScreenOptions, tabItemOptions } from '../../src/components/tabBar';
 
 /**
@@ -56,44 +56,36 @@ export default function AdminLayout(): React.ReactElement {
   if (!isAdmin) return <View style={styles.root} />;
 
   return (
-    <SafeAreaView style={styles.root} edges={['top', 'left', 'right']}>
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.kicker}>AGRI-RESCUE</Text>
-          <Text style={styles.title}>{t.admin.title}</Text>
-        </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t.shell.openAccountMenu}
-          style={styles.avatar}
-          onPress={() => setMenuOpen(true)}
-        >
-          <Text style={styles.avatarText}>{initialsOf(user?.name ?? 'AD')}</Text>
-        </Pressable>
-      </View>
-
+    <SafeAreaView style={styles.root} edges={['left', 'right']}>
       <Tabs
-        screenOptions={tabBarScreenOptions(insets.bottom)}
+        screenOptions={{
+          ...tabBarScreenOptions(insets.bottom),
+          headerShown: true,
+          header: ({ options }) => (
+            <ScreenHeader title={String(options.title ?? '')} onProfilePress={() => setMenuOpen(true)} />
+          ),
+        }}
       >
-        <Tabs.Screen name="index" options={tabOptions('index', t.admin.tabOverview, 'home')} />
-        <Tabs.Screen name="market" options={tabOptions('market', t.admin.tabMarket, 'shopping-bag')} />
+        <Tabs.Screen name="index" options={{ ...tabOptions('index', t.admin.tabOverview, 'home'), title: t.admin.tabOverview }} />
+        <Tabs.Screen name="market" options={{ ...tabOptions('market', t.admin.tabMarket, 'shopping-bag'), title: t.admin.tabMarket }} />
         <Tabs.Screen
           name="inbox"
           options={{
             ...tabOptions('inbox', t.admin.tabInbox, 'inbox'),
+            title: t.admin.tabInbox,
             tabBarBadge: badge,
             tabBarBadgeStyle: { backgroundColor: C.danger, color: C.white, fontSize: 11 },
           }}
         />
-        <Tabs.Screen name="system" options={tabOptions('system', t.admin.tabSystem, 'server')} />
-        <Tabs.Screen name="orgs" options={{ href: null, title: t.admin.queueOrg }} />
+        <Tabs.Screen name="system" options={{ ...tabOptions('system', t.admin.tabSystem, 'server'), title: t.admin.tabSystem }} />
+        <Tabs.Screen name="orgs" options={{ href: null, title: t.admin.queueOrg, headerShown: false }} />
       </Tabs>
 
       <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setMenuOpen(false)} accessibilityLabel={t.common.close}>
           <View style={{ flex: 1 }} />
         </Pressable>
-        <View style={[styles.sheet, { top: 70 }]} pointerEvents="box-none">
+        <View style={[styles.sheet, { top: insets.top + 70 }]} pointerEvents="box-none">
           <View style={styles.menu} accessibilityRole="menu">
             <Text style={styles.menuName}>{user?.name ?? 'admin'}</Text>
             <View style={styles.divider} />
@@ -146,26 +138,6 @@ function LanguageChips(): React.ReactElement {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 4,
-    paddingBottom: 8,
-    backgroundColor: C.bg,
-  },
-  kicker: { fontSize: 12, color: C.mute, fontWeight: '600', fontFamily: fonts.bodySemi },
-  title: { fontFamily: fonts.titleBold, fontSize: 24, fontWeight: '700', color: C.ink },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: C.leafDeep,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: { color: C.white, fontWeight: '700', fontSize: 15, fontFamily: fonts.titleBold },
   backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: C.overlay },
   sheet: { position: 'absolute', right: 12, left: 12, alignItems: 'flex-end' },
   menu: {
