@@ -69,6 +69,7 @@ function presentTicket(row: RowDataPacket): Record<string, unknown> {
     created_at: new Date(row.created_at as Date).toISOString(),
     updated_at: new Date(row.updated_at as Date).toISOString(),
     user_name: row.user_name === undefined || row.user_name === null ? undefined : String(row.user_name),
+    user_phone: row.user_phone == null ? undefined : String(row.user_phone),
     order_status: row.order_status === undefined || row.order_status === null ? undefined : String(row.order_status),
     order_crop_th: row.order_crop_th == null ? undefined : String(row.order_crop_th),
     order_crop_en:
@@ -144,7 +145,7 @@ supportRouter.get(
     const [rows] = await pool.query<RowDataPacket[]>(
       `SELECT t.id, t.user_id, t.topic, t.topic_label, t.order_id, t.status, t.reply_via,
               t.has_new_reply, t.created_at, t.updated_at,
-              u.name AS user_name,
+              u.name AS user_name, u.phone AS user_phone,
               o.status AS order_status,
               c.name_th AS order_crop_th, c.name_en AS order_crop_en, o.quantity_kg AS order_qty_kg,
               CONCAT(COALESCE(c.name_th, ''), ' ', COALESCE(o.quantity_kg, ''), ' กก.') AS order_summary
@@ -275,7 +276,7 @@ supportRouter.get(
     const [tickets] = await pool.query<RowDataPacket[]>(
       `SELECT t.id, t.user_id, t.topic, t.topic_label, t.order_id, t.status, t.reply_via,
               t.has_new_reply, t.created_at, t.updated_at,
-              u.name AS user_name,
+              u.name AS user_name, u.phone AS user_phone,
               o.status AS order_status,
               c.name_th AS order_crop_th, c.name_en AS order_crop_en, o.quantity_kg AS order_qty_kg,
               CONCAT(COALESCE(c.name_th, ''), ' ', COALESCE(o.quantity_kg, ''), ' กก.') AS order_summary

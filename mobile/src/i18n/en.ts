@@ -979,6 +979,8 @@ const en: Messages = {
     removePhoto: 'Remove photo',
     photoCount: '{count} / {max} photos',
     photoInvalidType: 'Only JPEG, PNG or WebP photos can be attached',
+    ticketTitle: 'Ticket #{id}',
+    reportedBy: 'Reported by',
     viewPhoto: 'View photo',
     newTicket: 'New ticket',
     replyWithin: 'We reply within 1 business day',

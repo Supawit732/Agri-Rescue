@@ -68,12 +68,17 @@ export default function ContactUsScreen(): React.ReactElement {
   const { errors, setErrors, setFieldError } = useFieldErrors();
   const { scrollRef, registerY, scrollToField } = useFieldScroll();
 
+  // User-only queries: skip for guests and admins so they never produce 401/403.
+  const canQuery = user !== null && user.is_admin !== true;
   const fetchTickets = useCallback(
-    () => api.listSupportTickets({ mine: true }),
-    [api],
+    () => (canQuery ? api.listSupportTickets({ mine: true }) : Promise.resolve({ tickets: [], unread_count: 0 })),
+    [api, canQuery],
   );
-  const tickets = useApiData(fetchTickets, [user?.id ?? null]);
-  const orders = useApiData(() => api.getMyOrders(), [user?.id ?? null]);
+  const tickets = useApiData(fetchTickets, [user?.id ?? null, canQuery]);
+  const orders = useApiData(
+    () => (canQuery ? api.getMyOrders() : Promise.resolve([])),
+    [user?.id ?? null, canQuery],
+  );
 
   const topicConfig = TOPICS.find((item) => item.key === topic) ?? TOPICS[0]!;
 

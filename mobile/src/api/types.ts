@@ -698,6 +698,7 @@ export interface SupportTicket {
   created_at: string;
   updated_at: string;
   user_name?: string;
+  user_phone?: string;
   order_status?: string;
   order_crop_th?: string;
   order_crop_en?: string | null;
