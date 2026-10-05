@@ -875,7 +875,8 @@ const en: Messages = {
     auditCount: '{shown} of {total}',
     auditLoadMore: 'Load more',
     auditReason: 'Reason: {reason}',
-    auditUnknownAdmin: 'Deleted admin',
+    auditUnknownAdmin: 'Admin (unknown)',
+    auditBackfilled: 'Backfilled',
     auditActions: {
       org_approve: 'Approved organization',
       org_reject: 'Rejected organization',

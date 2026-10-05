@@ -602,7 +602,12 @@ export interface AdminAuditItem {
   target_type: string | null;
   target_id: string | null;
   summary: string;
-  metadata: { reason?: string | null; target_label?: string | null } | null;
+  metadata: {
+    reason?: string | null;
+    target_label?: string | null;
+    backfilled?: boolean;
+    admin_unknown?: boolean;
+  } | null;
   created_at: string;
 }
 

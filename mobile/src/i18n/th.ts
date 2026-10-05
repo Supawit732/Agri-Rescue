@@ -875,7 +875,8 @@ const th: Messages = {
     auditCount: '{shown} จาก {total} รายการ',
     auditLoadMore: 'โหลดเพิ่ม',
     auditReason: 'เหตุผล: {reason}',
-    auditUnknownAdmin: 'แอดมินที่ถูกลบ',
+    auditUnknownAdmin: 'แอดมิน (ไม่ทราบชื่อ)',
+    auditBackfilled: 'ย้อนหลัง',
     auditActions: {
       org_approve: 'อนุมัติองค์กร',
       org_reject: 'ปฏิเสธองค์กร',
