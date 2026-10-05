@@ -1,8 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ApiError } from '../src/api/client';
 import { initialsOf } from '../src/components/LogoMark';
 import { FormField, useFieldErrors, useFieldScroll } from '../src/components/form';
@@ -16,6 +15,7 @@ import { donorStatusLabel } from '../src/donorLabels';
 import { formatTemplate, useI18n } from '../src/i18n';
 import { formatPhone, isValidEmail, normalizeEmail } from '../src/lib/phoneEmail';
 import { mediaUri, resizeToBase64 } from '../src/lib/media';
+import { pickImages } from '../src/lib/pickImages';
 import { C, fonts, radius } from '../src/theme';
 
 export default function ProfileScreen(): React.ReactElement {
@@ -167,52 +167,37 @@ export default function ProfileScreen(): React.ReactElement {
   };
 
   const pickAndUploadAvatar = (): void => {
-    Alert.alert(t.profile.takePhoto, undefined, [
-      {
-        text: t.sell.takePhoto,
-        onPress: () => {
-          void uploadFrom(ImagePicker.launchCameraAsync);
+    void (async () => {
+      const picked = await pickImages({
+        labels: {
+          title: t.profile.takePhoto,
+          takePhoto: t.sell.takePhoto,
+          library: t.sell.photoLibrary,
+          cancel: t.common.cancel,
         },
-      },
-      {
-        text: t.sell.photoLibrary,
-        onPress: () => {
-          void uploadFrom(ImagePicker.launchImageLibraryAsync);
-        },
-      },
-      { text: t.common.cancel, style: 'cancel' },
-    ]);
-  };
-
-  const uploadFrom = async (
-    launcher: typeof ImagePicker.launchCameraAsync,
-  ): Promise<void> => {
-    try {
-      const permission =
-        launcher === ImagePicker.launchCameraAsync
-          ? await ImagePicker.requestCameraPermissionsAsync()
-          : await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
+      });
+      if (picked.status === 'denied') {
         setError(t.profile.photoDenied);
         return;
       }
-      const picked = await launcher({ mediaTypes: ['images'], quality: 0.9 });
-      if (picked.canceled || picked.assets[0] === undefined) {
+      const asset = picked.status === 'picked' ? picked.assets[0] : undefined;
+      if (asset === undefined) {
         return;
       }
-      const asset = picked.assets[0];
       setBusy(true);
       setError(null);
       setMessage(null);
-      const prepared = await resizeToBase64(asset.uri, asset.width, asset.height, 512);
-      await api.uploadAvatar({ base64: prepared.base64, mime: prepared.mime });
-      await refreshUser();
-      setMessage(t.profile.saved);
-    } catch {
-      setError(t.profile.photoFailed);
-    } finally {
-      setBusy(false);
-    }
+      try {
+        const prepared = await resizeToBase64(asset.uri, asset.width, asset.height, 512);
+        await api.uploadAvatar({ base64: prepared.base64, mime: prepared.mime });
+        await refreshUser();
+        setMessage(t.profile.saved);
+      } catch {
+        setError(t.profile.photoFailed);
+      } finally {
+        setBusy(false);
+      }
+    })();
   };
 
   return (

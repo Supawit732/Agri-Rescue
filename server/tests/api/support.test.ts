@@ -1,7 +1,16 @@
 import request from 'supertest';
 import { pool } from '../../src/db/pool';
 import { resetSupportCreateRateLimit } from '../../src/middleware/supportRateLimit';
-import { registerUser, testApp, bearer, nextPhone } from '../helpers';
+import {
+  registerUser,
+  testApp,
+  bearer,
+  nextPhone,
+  insertCrop,
+  insertLot,
+  insertPlot,
+  pickAvailablePickupSlot,
+} from '../helpers';
 import bcrypt from 'bcryptjs';
 
 const tinyPng = Buffer.from(
@@ -20,15 +29,35 @@ describe('support tickets', () => {
     await pool.query('DELETE FROM notifications');
   });
 
+  /** Books a lot as `buyer` and returns the order id (support tickets can reference it). */
+  async function bookOrder(buyerToken: string): Promise<number> {
+    const farmer = await registerUser(app, { role: 'farmer' });
+    const cropId = await insertCrop();
+    const plotId = await insertPlot(farmer.user.id, 13.66, 100.61);
+    const lotId = await insertLot({
+      plotId,
+      cropId,
+      expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+    });
+    const res = await request(app)
+      .post('/api/orders')
+      .set(bearer(buyerToken))
+      .send({ lot_id: lotId, donation: false, quantity_kg: 5, ...pickAvailablePickupSlot() });
+    expect(res.status).toBe(201);
+    return res.body.order.id as number;
+  }
+
   it('user creates ticket and only sees own tickets', async () => {
-    const alice = await registerUser(app, { role: 'buyer', name: 'Alice' });
+    const alice = await registerUser(app, { role: 'buyer', name: 'Alice', buyer_type: 'shop' });
     const bob = await registerUser(app, { role: 'buyer', name: 'Bob' });
+    const aliceOrderId = await bookOrder(alice.token);
 
     const created = await request(app)
       .post('/api/support/tickets')
       .set(bearer(alice.token))
       .send({
         topic: 'item_mismatch',
+        order_id: aliceOrderId,
         details: 'ของไม่ตรงตามรูป ยังไม่ได้ให้ OTP',
         reply_via: 'app',
       });
@@ -99,7 +128,8 @@ describe('support tickets', () => {
   });
 
   it('admin reply notifies user and can change status', async () => {
-    const farmer = await registerUser(app, { role: 'farmer', name: 'ผู้ขาย' });
+    const buyer = await registerUser(app, { role: 'buyer', buyer_type: 'shop' });
+    const buyerOrderId = await bookOrder(buyer.token);
     // coordinator with is_admin from seed path — create via staff helper style
     const phone = nextPhone();
     const passwordHash = await bcrypt.hash('demo1234', 10);
@@ -116,8 +146,8 @@ describe('support tickets', () => {
 
     const created = await request(app)
       .post('/api/support/tickets')
-      .set(bearer(farmer.token))
-      .send({ topic: 'order_pickup', details: 'ผู้ขายไม่อยู่แปลง', reply_via: 'app' });
+      .set(bearer(buyer.token))
+      .send({ topic: 'order_pickup', order_id: buyerOrderId, details: 'ผู้ขายไม่อยู่แปลง', reply_via: 'app' });
     const ticketId = created.body.ticket.id as number;
 
     const reply = await request(app)
@@ -129,7 +159,7 @@ describe('support tickets', () => {
 
     const notifs = await request(app)
       .get('/api/notifications')
-      .set(bearer(farmer.token));
+      .set(bearer(buyer.token));
     expect(notifs.body.unread_count).toBeGreaterThan(0);
     const supportNotif = notifs.body.notifications.find(
       (n: { type: string }) => n.type === 'support_reply',
@@ -154,7 +184,7 @@ describe('support tickets', () => {
     // user cannot change status
     const userPatch = await request(app)
       .patch(`/api/support/tickets/${ticketId}`)
-      .set(bearer(farmer.token))
+      .set(bearer(buyer.token))
       .send({ status: 'closed' });
     expect(userPatch.status).toBe(403);
   });
@@ -189,5 +219,64 @@ describe('support tickets', () => {
       .set(bearer(buyer.token))
       .send({ topic: 'other', details: 'x'.repeat(1001), reply_via: 'app' });
     expect(long.status).toBe(400);
+  });
+
+  describe('topic-dependent related order', () => {
+    const post = (token: string, body: Record<string, unknown>) =>
+      request(app)
+        .post('/api/support/tickets')
+        .set(bearer(token))
+        .send({ details: 'รายละเอียด', reply_via: 'app', ...body });
+
+    it.each(['order_pickup', 'item_mismatch', 'weight_mismatch'])(
+      'requires a related order for %s',
+      async (topic) => {
+        const buyer = await registerUser(app, { role: 'buyer', buyer_type: 'shop' });
+        const missing = await post(buyer.token, { topic });
+        expect(missing.status).toBe(400);
+        expect(missing.body.error.fields.order_id).toBeDefined();
+        const nulled = await post(buyer.token, { topic, order_id: null });
+        expect(nulled.status).toBe(400);
+
+        const orderId = await bookOrder(buyer.token);
+        const ok = await post(buyer.token, { topic, order_id: orderId });
+        expect(ok.status).toBe(201);
+        expect(ok.body.ticket.order_id).toBe(orderId);
+      },
+    );
+
+    it.each(['payment', 'donation', 'other'])('keeps the order optional for %s', async (topic) => {
+      const buyer = await registerUser(app, { role: 'buyer', buyer_type: 'shop' });
+      const without = await post(buyer.token, { topic });
+      expect(without.status).toBe(201);
+      expect(without.body.ticket.order_id).toBeNull();
+      const orderId = await bookOrder(buyer.token);
+      const withOrder = await post(buyer.token, { topic, order_id: orderId });
+      expect(withOrder.status).toBe(201);
+      expect(withOrder.body.ticket.order_id).toBe(orderId);
+    });
+
+    it('drops any order id on account_login tickets', async () => {
+      const buyer = await registerUser(app, { role: 'buyer', buyer_type: 'shop' });
+      const orderId = await bookOrder(buyer.token);
+      const res = await post(buyer.token, { topic: 'account_login', order_id: orderId });
+      expect(res.status).toBe(201);
+      expect(res.body.ticket.order_id).toBeNull();
+    });
+
+    it('never requires photos, and still rejects a foreign order', async () => {
+      const buyer = await registerUser(app, { role: 'buyer', buyer_type: 'shop' });
+      const other = await registerUser(app, { role: 'buyer', buyer_type: 'vendor' });
+      const foreign = await bookOrder(other.token);
+      const stolen = await post(buyer.token, { topic: 'weight_mismatch', order_id: foreign });
+      expect(stolen.status).toBe(400);
+      const orderId = await bookOrder(buyer.token);
+      const noPhotos = await post(buyer.token, {
+        topic: 'weight_mismatch',
+        order_id: orderId,
+        attachments: [],
+      });
+      expect(noPhotos.status).toBe(201);
+    });
   });
 });

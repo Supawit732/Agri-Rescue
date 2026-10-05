@@ -2,6 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -9,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import type { SupportTicketStatus } from '../../src/api/types';
+import { AuthImage } from '../../src/components/AuthImage';
 import { FormField, useFieldErrors, useFieldScroll } from '../../src/components/form';
 import { Badge, PrimaryButton, Screen, StackHeader } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
@@ -34,6 +36,7 @@ export default function SupportTicketScreen(): React.ReactElement {
   const { errors, setErrors, setFieldError } = useFieldErrors();
   const { scrollRef, registerY, scrollToField } = useFieldScroll();
   const [nonce, setNonce] = useState(0);
+  const [viewing, setViewing] = useState<{ uri: string; headers: Record<string, string> } | null>(null);
 
   const fetchDetail = useCallback(
     () => api.getSupportTicket(ticketId),
@@ -159,12 +162,18 @@ export default function SupportTicketScreen(): React.ReactElement {
                 {msg.attachments.length > 0 ? (
                   <View style={styles.attachRow}>
                     {msg.attachments.map((att) => (
-                      <View key={att.id} style={styles.attachChip}>
-                        <Feather name="image" size={14} color={C.mute} />
-                        <Text style={styles.attachName} numberOfLines={1}>
-                          {att.original_name ?? `#${att.id}`}
-                        </Text>
-                      </View>
+                      <Pressable
+                        key={att.id}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${t.support.viewPhoto}: ${att.original_name ?? `#${att.id}`}`}
+                        onPress={() => setViewing(api.supportAttachmentSource(ticketId, att.id))}
+                      >
+                        <AuthImage
+                          source={api.supportAttachmentSource(ticketId, att.id)}
+                          style={styles.attachThumb}
+                          resizeMode="cover"
+                        />
+                      </Pressable>
                     ))}
                   </View>
                 ) : null}
@@ -219,6 +228,18 @@ export default function SupportTicketScreen(): React.ReactElement {
         )}
         {error !== null ? <Text style={styles.error}>{error}</Text> : null}
       </ScrollView>
+      <Modal visible={viewing !== null} transparent animationType="fade" onRequestClose={() => setViewing(null)}>
+        <Pressable
+          style={styles.viewer}
+          onPress={() => setViewing(null)}
+          accessibilityRole="button"
+          accessibilityLabel={t.common.close}
+        >
+          {viewing !== null ? (
+            <AuthImage source={viewing} style={styles.viewerImage} resizeMode="contain" />
+          ) : null}
+        </Pressable>
+      </Modal>
     </Screen>
   );
 }
@@ -262,6 +283,22 @@ const styles = StyleSheet.create({
   bubbleRole: { fontSize: 12, fontWeight: '600', color: C.leaf, fontFamily: fonts.bodySemi },
   bubbleBody: { fontSize: 14, lineHeight: 21, color: C.ink, fontFamily: fonts.body },
   bubbleTime: { fontSize: 11, color: C.mute, fontFamily: fonts.body },
+  attachThumb: {
+    width: 88,
+    height: 88,
+    borderRadius: radius.control,
+    borderWidth: 1,
+    borderColor: C.line,
+    backgroundColor: C.leafSoft,
+  },
+  viewer: {
+    flex: 1,
+    backgroundColor: C.overlay,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  viewerImage: { width: '100%', height: '100%' },
   attachRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   attachChip: {
     flexDirection: 'row',

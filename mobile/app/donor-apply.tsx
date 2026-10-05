@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
+import { pickImages } from '../src/lib/pickImages';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -334,17 +334,22 @@ export default function DonorApplyScreen(): React.ReactElement {
   }, [pendingFocus, step, scrollToField]);
 
   const pickImage = async (category: DocCategory): Promise<void> => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      setFormError(t.donorApply.photoDenied);
-      return;
-    }
-    const picked = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
+    const picked = await pickImages({
+      labels: {
+        title: '',
+        takePhoto: t.sell.takePhoto,
+        library: t.sell.photoLibrary,
+        cancel: t.common.cancel,
+      },
+      sources: 'library',
       base64: true,
       quality: 0.8,
     });
-    if (picked.canceled || picked.assets[0] === undefined) {
+    if (picked.status === 'denied') {
+      setFormError(t.donorApply.photoDenied);
+      return;
+    }
+    if (picked.status !== 'picked' || picked.assets[0] === undefined) {
       return;
     }
     const asset = picked.assets[0];

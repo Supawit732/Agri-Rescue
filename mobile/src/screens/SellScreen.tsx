@@ -16,7 +16,7 @@ import {
 import { confirmAlert } from '../lib/confirm';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImageManipulator from 'expo-image-manipulator';
-import * as ImagePicker from 'expo-image-picker';
+import { pickImages } from '../lib/pickImages';
 import { ApiError } from '../api/client';
 import { ripenessLabel } from '../constants';
 import { AiPhotoInput } from '../components/AiPhotoInput';
@@ -829,51 +829,25 @@ function NewLotForm({
   };
 
   const pickPhoto = (): void => {
-    Alert.alert(t.sell.aiPhotoTitle, t.sell.aiPhotoPickSource, [
-      {
-        text: t.sell.takePhoto,
-        onPress: () => {
-          void (async () => {
-            const permission = await ImagePicker.requestCameraPermissionsAsync();
-            if (!permission.granted) {
-              setAiMessage(t.sell.cameraDenied);
-              return;
-            }
-            const picked = await ImagePicker.launchCameraAsync({
-              mediaTypes: ['images'],
-              quality: 0.9,
-            });
-            if (picked.canceled || picked.assets[0] === undefined) {
-              return;
-            }
-            const asset = picked.assets[0];
-            await runAssessment(asset.uri, asset.width, asset.height);
-          })();
+    void (async () => {
+      const picked = await pickImages({
+        labels: {
+          title: t.sell.aiPhotoTitle,
+          takePhoto: t.sell.takePhoto,
+          library: t.sell.photoLibrary,
+          cancel: t.common.cancel,
         },
-      },
-      {
-        text: t.sell.photoLibrary,
-        onPress: () => {
-          void (async () => {
-            const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-            if (!permission.granted) {
-              setAiMessage(t.sell.libraryDenied);
-              return;
-            }
-            const picked = await ImagePicker.launchImageLibraryAsync({
-              mediaTypes: ['images'],
-              quality: 0.9,
-            });
-            if (picked.canceled || picked.assets[0] === undefined) {
-              return;
-            }
-            const asset = picked.assets[0];
-            await runAssessment(asset.uri, asset.width, asset.height);
-          })();
-        },
-      },
-      { text: t.common.cancel, style: 'cancel' },
-    ]);
+      });
+      if (picked.status === 'denied') {
+        setAiMessage(picked.source === 'camera' ? t.sell.cameraDenied : t.sell.libraryDenied);
+        return;
+      }
+      const asset = picked.status === 'picked' ? picked.assets[0] : undefined;
+      if (asset === undefined) {
+        return;
+      }
+      await runAssessment(asset.uri, asset.width, asset.height);
+    })();
   };
 
   const onChangeSaleMode = (next: SaleMode): void => {
