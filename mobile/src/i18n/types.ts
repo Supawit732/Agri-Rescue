@@ -879,6 +879,7 @@ export type Messages = {
     auditLoadMore: string;
     auditReason: string;
     auditUnknownAdmin: string;
+    auditBackfilled: string;
     auditActions: {
       org_approve: string;
       org_reject: string;

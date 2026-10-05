@@ -116,9 +116,16 @@ export default function AdminAuditScreen(): React.ReactElement {
               <View key={item.id} style={styles.card}>
                 <Text style={styles.time}>{formatDateTime(item.created_at)}</Text>
                 <Text style={styles.action}>{actionLabel(item, t)}</Text>
-                <Text style={styles.meta} numberOfLines={1}>
-                  {item.admin_name ?? t.admin.auditUnknownAdmin}
-                </Text>
+                <View style={styles.adminRow}>
+                  <Text style={[styles.meta, styles.adminName]} numberOfLines={1}>
+                    {item.admin_name === null || item.metadata?.admin_unknown === true
+                      ? t.admin.auditUnknownAdmin
+                      : item.admin_name}
+                  </Text>
+                  {item.metadata?.backfilled === true ? (
+                    <Text style={styles.tag}>{t.admin.auditBackfilled}</Text>
+                  ) : null}
+                </View>
                 {target !== null ? (
                   route !== null ? (
                     <Pressable
@@ -181,6 +188,19 @@ const styles = StyleSheet.create({
   time: { fontSize: 12, color: C.mute, fontFamily: fonts.body },
   action: { fontSize: 14, fontWeight: '600', color: C.ink, fontFamily: fonts.bodySemi },
   meta: { fontSize: 12, color: C.mute, fontFamily: fonts.body },
+  adminRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  adminName: { flexShrink: 1 },
+  tag: {
+    fontSize: 11,
+    color: C.mute,
+    fontFamily: fonts.body,
+    borderWidth: 1,
+    borderColor: C.line,
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    overflow: 'hidden',
+  },
   targetLink: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 32 },
   targetText: { flexShrink: 1, fontSize: 13, color: C.leafDeep, fontFamily: fonts.bodySemi, fontWeight: '600' },
   muted: { color: C.mute, fontFamily: fonts.body, fontSize: 12 },
