@@ -180,6 +180,77 @@ describe('donors 6.1b', () => {
       });
     expect(overCap.status).toBe(403);
     expect(overCap.body.error.message).toContain('เพดาน');
+    expect(overCap.body.error.message).toContain('สมัครเป็นองค์กร');
+    expect(overCap.body.error.details).toMatchObject({
+      reason: 'over_cap',
+      tier: 'volunteer',
+      cap_kg: 10,
+      remaining_kg: 5,
+      upgrade_options: ['verified_org'],
+      kg_per_beneficiary: 0.5,
+    });
+  });
+
+  it('GET /quota exposes tier rules and the caller quota per tier', async () => {
+    const none = await registerUser(app, { role: 'buyer', buyer_type: 'vendor' });
+    const noneRes = await request(app).get('/api/donors/quota').set(bearer(none.token));
+    expect(noneRes.status).toBe(200);
+    const rules = noneRes.body.tiers as { tier: string; weekly_cap_kg: number | null; kg_per_beneficiary: number | null; method: string; proofs_required: number | null }[];
+    expect(rules.map((r) => r.tier)).toEqual(['volunteer', 'trusted_volunteer', 'verified_org']);
+    expect(rules[0]).toMatchObject({ weekly_cap_kg: 10, method: 'instant' });
+    expect(rules[1]).toMatchObject({ weekly_cap_kg: 30, method: 'auto', proofs_required: 5 });
+    expect(rules[2]).toMatchObject({ weekly_cap_kg: null, kg_per_beneficiary: 0.5, method: 'admin_review' });
+    expect(noneRes.body.me).toMatchObject({
+      tier: null,
+      cap_kg: null,
+      remaining_kg: null,
+      upgrade_options: ['volunteer', 'verified_org'],
+    });
+
+    const volunteer = await registerUser(app, { role: 'buyer', buyer_type: 'vendor' });
+    await request(app).post('/api/donors/volunteer').set(bearer(volunteer.token)).send({});
+    const lot = await openDonationLot({ audience: 'all_donors', weightKg: 4 });
+    const order = await request(app)
+      .post('/api/orders')
+      .set(bearer(volunteer.token))
+      .send({
+        lot_id: lot,
+        donation: true,
+        quantity_kg: 4,
+        distribution_place: 'ตลาดชุมชน',
+        distribution_at: new Date(Date.now() + 86400000).toISOString(),
+      });
+    expect(order.status).toBe(201);
+    const volRes = await request(app).get('/api/donors/quota').set(bearer(volunteer.token));
+    expect(volRes.body.me).toMatchObject({
+      tier: 'volunteer',
+      cap_kg: 10,
+      used_kg: 4,
+      remaining_kg: 6,
+      upgrade_options: ['verified_org'],
+    });
+
+    const org = await registerUser(app, { role: 'buyer', buyer_type: 'shop' });
+    await applyOrg(org.token);
+    const pending = await request(app).get('/api/donors/quota').set(bearer(org.token));
+    expect(pending.body.me).toMatchObject({ tier: null, org_status: 'pending', upgrade_options: [] });
+    const admin = await loginStaff(app, 'coordinator', 'แอดมินตรวจเอกสาร');
+    await request(app)
+      .post(`/api/donors/admin/org-applications/${org.user.id}/approve`)
+      .set(bearer(admin.token))
+      .send({});
+    const approved = await request(app).get('/api/donors/quota').set(bearer(org.token));
+    expect(approved.body.me).toMatchObject({
+      tier: 'verified_org',
+      beneficiary_count: 40,
+      cap_kg: 20,
+      used_kg: 0,
+      remaining_kg: 20,
+      upgrade_options: [],
+    });
+
+    const anon = await request(app).get('/api/donors/quota');
+    expect(anon.status).toBe(401);
   });
 
   it('approving an org upgrades tier, quota and charity flag atomically and links the notification to the profile', async () => {

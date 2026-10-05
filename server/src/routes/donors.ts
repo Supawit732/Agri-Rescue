@@ -4,9 +4,16 @@ import type { PoolConnection } from 'mysql2/promise';
 import { z } from 'zod';
 import { assessRipenessFromPhoto } from '../ai/vision';
 import { pool } from '../db/pool';
-import { DONOR_CONFIG, ORG_REVIEW_QUICK_REASONS } from '../domain/donorRules';
+import {
+  activeDonorTier,
+  DONOR_CONFIG,
+  donorTierRules,
+  ORG_REVIEW_QUICK_REASONS,
+  remainingWeeklyKg,
+  upgradeOptions,
+} from '../domain/donorRules';
 import { DONOR_TERMS_TITLE, DONOR_TERMS_VERSION } from '../domain/donorTerms';
-import { unlockDonorSuspension, recordProofResult } from '../donors/donationService';
+import { unlockDonorSuspension, recordProofResult, usedDonationKgThisWeek } from '../donors/donationService';
 import { asyncHandler } from '../http/asyncHandler';
 import { contentDisposition } from '../http/contentDisposition';
 import { HttpError } from '../http/errors';
@@ -439,6 +446,40 @@ donorsRouter.get(
       review_quick_reasons: ORG_REVIEW_QUICK_REASONS,
       terms_version: DONOR_TERMS_VERSION,
       terms_title: DONOR_TERMS_TITLE,
+    });
+  }),
+);
+
+/** Tier rules (from DONOR_CONFIG) plus the caller's own quota this week. */
+donorsRouter.get(
+  '/quota',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const userId = req.auth?.id ?? 0;
+    const user = await loadPublicUser(userId);
+    const tier = activeDonorTier({ donor_tier: user.donor_tier, org_status: user.org_status });
+    const capKg = tier === null ? null : user.donation_weekly_cap_kg;
+    const usedKg = capKg === null ? null : await usedDonationKgThisWeek(pool, userId);
+    const remainingKg =
+      capKg === null || usedKg === null ? null : user.donation_suspended ? 0 : remainingWeeklyKg(capKg, usedKg);
+    res.json({
+      tiers: donorTierRules(),
+      proof_deadline_hours: DONOR_CONFIG.proofDeadlineHours,
+      suspend_fail_count: DONOR_CONFIG.suspendFailCount,
+      suspend_window_days: DONOR_CONFIG.suspendWindowDays,
+      org_doc_max_files: DONOR_CONFIG.orgDocMaxFiles,
+      me: {
+        tier,
+        org_status: user.org_status,
+        application_kind: user.application_kind,
+        suspended: user.donation_suspended,
+        beneficiary_count: user.beneficiary_count,
+        trusted_proof_count: user.trusted_proof_count,
+        cap_kg: capKg,
+        used_kg: usedKg === null ? null : Math.round(usedKg * 10) / 10,
+        remaining_kg: remainingKg,
+        upgrade_options: upgradeOptions({ donor_tier: user.donor_tier, org_status: user.org_status }),
+      },
     });
   }),
 );

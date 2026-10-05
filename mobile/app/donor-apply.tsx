@@ -16,6 +16,7 @@ import {
   useFieldScroll,
 } from '../src/components/form';
 import { Body, PrimaryButton, Screen, SecondaryButton, StackHeader } from '../src/components/ui';
+import { ApplyCompare, useDonorQuota } from '../src/components/DonorQuota';
 import { useAuth } from '../src/context/AuthContext';
 import {
   labelApplicationKind,
@@ -139,6 +140,7 @@ function StatusBanner({
 
 export default function DonorApplyScreen(): React.ReactElement {
   const { user, api, refreshUser } = useAuth();
+  const quota = useDonorQuota();
   const { t, formatDate } = useI18n();
   const router = useRouter();
   const orgTypes = useMemo(() => orgTypeOptions(t), [t]);
@@ -878,6 +880,8 @@ export default function DonorApplyScreen(): React.ReactElement {
             t={t}
           />
         ) : null}
+
+        {kind === null && quota !== null ? <ApplyCompare quota={quota} /> : null}
 
         {kind === null ? (
           <ChipGroup

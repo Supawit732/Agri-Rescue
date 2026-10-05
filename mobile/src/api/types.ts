@@ -139,6 +139,50 @@ export interface OrgApplication {
   review_logs?: OrgReviewLog[];
 }
 
+export type QuotaRequirement =
+  | 'accept_terms'
+  | 'contact_info'
+  | 'distribution_area'
+  | 'recipient_groups'
+  | 'purpose'
+  | 'be_volunteer'
+  | 'proof_photos'
+  | 'org_info'
+  | 'beneficiary_count'
+  | 'distribution_mode'
+  | 'registration_or_community_cert'
+  | 'site_photos';
+
+export interface DonorTierRule {
+  tier: DonorTier;
+  weekly_cap_kg: number | null;
+  kg_per_beneficiary: number | null;
+  method: 'instant' | 'auto' | 'admin_review';
+  requirements: QuotaRequirement[];
+  proofs_required: number | null;
+  can_book_org_only_lots: boolean;
+}
+
+export interface DonorQuota {
+  tiers: DonorTierRule[];
+  proof_deadline_hours: number;
+  suspend_fail_count: number;
+  suspend_window_days: number;
+  org_doc_max_files: number;
+  me: {
+    tier: DonorTier | null;
+    org_status: OrgStatus;
+    application_kind: ApplicationKind | null;
+    suspended: boolean;
+    beneficiary_count: number | null;
+    trusted_proof_count: number;
+    cap_kg: number | null;
+    used_kg: number | null;
+    remaining_kg: number | null;
+    upgrade_options: DonorTier[];
+  };
+}
+
 export interface DonorTermsMeta {
   version: string;
   title: string;

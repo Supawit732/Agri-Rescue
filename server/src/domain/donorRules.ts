@@ -71,7 +71,12 @@ export type DonationBlockReason =
   | 'audience'
   | 'over_cap';
 
-export function donationBlockMessage(reason: DonationBlockReason, remainingKg?: number, capKg?: number): string {
+export function donationBlockMessage(
+  reason: DonationBlockReason,
+  remainingKg?: number,
+  capKg?: number,
+  tier?: DonorTier,
+): string {
   switch (reason) {
     case 'lot_closed':
       return 'ล็อตนี้ไม่เปิดรับบริจาค';
@@ -90,8 +95,105 @@ export function donationBlockMessage(reason: DonationBlockReason, remainingKg?: 
     case 'audience':
       return 'ล็อตนี้เปิดรับเฉพาะองค์กรที่ยืนยันแล้ว';
     case 'over_cap':
-      return `เกินเพดานสัปดาห์นี้ คงเหลือ ${remainingKg ?? 0} กก. จากเพดาน ${capKg ?? 0} กก.`;
+      return `เกินเพดานสัปดาห์นี้ คงเหลือ ${remainingKg ?? 0} กก. จากเพดาน ${capKg ?? 0} กก.${overCapHint(tier)}`;
   }
+}
+
+function overCapHint(tier: DonorTier | undefined): string {
+  if (tier === 'volunteer') {
+    return ` สมัครเป็นองค์กรเพื่อรับได้ตามจำนวนผู้รับประโยชน์ (คนละ ${DONOR_CONFIG.verifiedOrgKgPerBeneficiary} กก./สัปดาห์) หรือส่งรูปยืนยันครบ ${DONOR_CONFIG.trustedPromotePasses} ครั้งเพื่อรับได้ ${DONOR_CONFIG.trustedVolunteerWeeklyKg} กก./สัปดาห์`;
+  }
+  if (tier === 'trusted_volunteer') {
+    return ` สมัครเป็นองค์กรเพื่อรับได้ตามจำนวนผู้รับประโยชน์ (คนละ ${DONOR_CONFIG.verifiedOrgKgPerBeneficiary} กก./สัปดาห์)`;
+  }
+  return '';
+}
+
+/** Tiers a user may still apply for, given their current state. */
+export function upgradeOptions(input: {
+  donor_tier: DonorTier | null;
+  org_status: OrgStatus | string | null | undefined;
+}): DonorTier[] {
+  const status = input.org_status ?? 'none';
+  if (status === 'pending' || status === 'needs_more_info') {
+    return [];
+  }
+  const active = activeDonorTier(input);
+  if (active === 'verified_org') {
+    return [];
+  }
+  if (active === 'volunteer' || active === 'trusted_volunteer') {
+    return ['verified_org'];
+  }
+  return ['volunteer', 'verified_org'];
+}
+
+export type QuotaRequirement =
+  | 'accept_terms'
+  | 'contact_info'
+  | 'distribution_area'
+  | 'recipient_groups'
+  | 'purpose'
+  | 'be_volunteer'
+  | 'proof_photos'
+  | 'org_info'
+  | 'beneficiary_count'
+  | 'distribution_mode'
+  | 'registration_or_community_cert'
+  | 'site_photos';
+
+export interface TierRule {
+  tier: DonorTier;
+  /** Fixed weekly cap; null when derived from beneficiaries. */
+  weekly_cap_kg: number | null;
+  /** Per-beneficiary weekly kg for verified_org; null otherwise. */
+  kg_per_beneficiary: number | null;
+  /** instant = granted on submit, auto = promoted by the system, admin_review = needs approval. */
+  method: 'instant' | 'auto' | 'admin_review';
+  requirements: QuotaRequirement[];
+  proofs_required: number | null;
+  can_book_org_only_lots: boolean;
+}
+
+/** Public tier rules — every number is read from DONOR_CONFIG. */
+export function donorTierRules(): TierRule[] {
+  return [
+    {
+      tier: 'volunteer',
+      weekly_cap_kg: DONOR_CONFIG.volunteerWeeklyKg,
+      kg_per_beneficiary: null,
+      method: 'instant',
+      requirements: ['accept_terms', 'contact_info', 'distribution_area', 'recipient_groups', 'purpose'],
+      proofs_required: null,
+      can_book_org_only_lots: canBookDonationAudience('volunteer', 'verified_org_only'),
+    },
+    {
+      tier: 'trusted_volunteer',
+      weekly_cap_kg: DONOR_CONFIG.trustedVolunteerWeeklyKg,
+      kg_per_beneficiary: null,
+      method: 'auto',
+      requirements: ['be_volunteer', 'proof_photos'],
+      proofs_required: DONOR_CONFIG.trustedPromotePasses,
+      can_book_org_only_lots: canBookDonationAudience('trusted_volunteer', 'verified_org_only'),
+    },
+    {
+      tier: 'verified_org',
+      weekly_cap_kg: null,
+      kg_per_beneficiary: DONOR_CONFIG.verifiedOrgKgPerBeneficiary,
+      method: 'admin_review',
+      requirements: [
+        'accept_terms',
+        'org_info',
+        'contact_info',
+        'beneficiary_count',
+        'distribution_mode',
+        'registration_or_community_cert',
+        'site_photos',
+      ],
+      proofs_required: null,
+      can_book_org_only_lots: canBookDonationAudience('verified_org', 'verified_org_only'),
+    },
+  ];
 }
 
 export function evaluateDonationRequest(input: {
@@ -103,7 +205,14 @@ export function evaluateDonationRequest(input: {
   org_status: OrgStatus | string | null | undefined;
   donation_suspended: boolean | number;
   beneficiary_count: number | null;
-}): { ok: true; tier: DonorTier; capKg: number; remainingKg: number } | { ok: false; reason: DonationBlockReason; message: string } {
+}): { ok: true; tier: DonorTier; capKg: number; remainingKg: number } | {
+    ok: false;
+    reason: DonationBlockReason;
+    message: string;
+    tier?: DonorTier;
+    capKg?: number;
+    remainingKg?: number;
+  } {
   if (!input.allowDonation) {
     return { ok: false, reason: 'lot_closed', message: donationBlockMessage('lot_closed') };
   }
@@ -136,7 +245,10 @@ export function evaluateDonationRequest(input: {
     return {
       ok: false,
       reason: 'over_cap',
-      message: donationBlockMessage('over_cap', remainingKg, capKg),
+      message: donationBlockMessage('over_cap', remainingKg, capKg, tier),
+      tier,
+      capKg,
+      remainingKg,
     };
   }
   return { ok: true, tier, capKg, remainingKg };
