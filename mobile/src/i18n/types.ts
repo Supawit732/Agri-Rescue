@@ -985,6 +985,7 @@ export type Messages = {
     ticketTitle: string;
     reportedBy: string;
     viewPhoto: string;
+    staffBadge: string;
     newTicket: string;
     replyWithin: string;
     details: string;
