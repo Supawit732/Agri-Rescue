@@ -26,8 +26,25 @@ void ensurePublicUploadsDir().catch((err: unknown) => {
 
 const SEED_PHOTOS_DIR = path.resolve(__dirname, '../assets/seed-photos');
 
+/**
+ * Number of reverse-proxy hops in front of the app (nginx = 1) so req.ip is the real client
+ * IP from X-Forwarded-For. TRUST_PROXY overrides: a hop count, "true"/"false", or an
+ * Express trust-proxy value such as "loopback". Defaults to 1 in production, off otherwise.
+ */
+export function resolveTrustProxy(env: NodeJS.ProcessEnv = process.env): boolean | number | string {
+  const raw = (env.TRUST_PROXY ?? '').trim();
+  if (raw === '') {
+    return env.NODE_ENV === 'production' ? 1 : false;
+  }
+  if (raw === 'true') return true;
+  if (raw === 'false') return false;
+  if (/^\d+$/.test(raw)) return Number(raw);
+  return raw;
+}
+
 export function createApp(): Express {
   const app = express();
+  app.set('trust proxy', resolveTrustProxy());
   app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
