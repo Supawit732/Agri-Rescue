@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import express, { type Express } from 'express';
+import { adminAudit } from './middleware/adminAudit';
 import { errorHandler } from './middleware/errorHandler';
 import { adminDitRouter } from './routes/adminDit';
 import { authRouter } from './routes/auth';
@@ -74,6 +75,7 @@ export function createApp(): Express {
   app.get('/health', (_req, res) => {
     res.json({ ok: true });
   });
+  app.use('/api', adminAudit);
   app.use('/api/auth', authRouter);
   app.use('/api/donors', donorsRouter);
   app.use('/api/geo', geoRouter);

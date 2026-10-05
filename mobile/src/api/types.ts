@@ -592,6 +592,25 @@ export interface AdminOrgListPayload {
   items: AdminOrgListItem[];
 }
 
+export type AdminAuditType = 'all' | 'org' | 'support' | 'lot' | 'dit' | 'other';
+
+export interface AdminAuditItem {
+  id: number;
+  admin_id: number;
+  admin_name: string | null;
+  action: string;
+  target_type: string | null;
+  target_id: string | null;
+  summary: string;
+  metadata: { reason?: string | null; target_label?: string | null } | null;
+  created_at: string;
+}
+
+export interface AdminAuditPayload {
+  total: number;
+  items: AdminAuditItem[];
+}
+
 export interface AdminInboxPayload {
   counts: {
     org: number;

@@ -47,7 +47,12 @@ export default function AdminLayout(): React.ReactElement {
 
   // Nested routes (e.g. /admin/orgs) belong to the inbox tab.
   const segment = segments[1] as string | undefined;
-  const activeTab = segment === 'orgs' || segment === 'org-list' ? 'inbox' : (segment ?? 'index');
+  const activeTab =
+    segment === 'orgs' || segment === 'org-list'
+      ? 'inbox'
+      : segment === 'audit'
+        ? 'system'
+        : (segment ?? 'index');
   const tabOptions = (name: string, label: string, icon: React.ComponentProps<typeof Feather>['name']) =>
     tabItemOptions(label, icon, activeTab === name);
 
@@ -80,6 +85,7 @@ export default function AdminLayout(): React.ReactElement {
         />
         <Tabs.Screen name="system" options={{ ...tabOptions('system', t.admin.tabSystem, 'server'), title: t.admin.tabSystem }} />
         <Tabs.Screen name="orgs" options={{ href: null, title: t.admin.queueOrg, headerShown: false }} />
+        <Tabs.Screen name="audit" options={{ href: null, title: t.admin.auditTitle, headerShown: false }} />
         <Tabs.Screen name="org-list" options={{ href: null, title: t.admin.orgListTitle, headerShown: false }} />
       </Tabs>
 

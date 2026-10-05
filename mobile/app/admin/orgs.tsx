@@ -16,7 +16,7 @@ export default function AdminOrgsScreen(): React.ReactElement {
   const userId = Number.isFinite(parsed) ? parsed : undefined;
   return (
     <Screen fullWidth>
-      <StackHeader title={orgName ?? t.admin.queueOrg} onBack={() => router.navigate((params.from === 'list' ? '/admin/org-list' : '/admin/inbox') as never)} />
+      <StackHeader title={orgName ?? t.admin.queueOrg} onBack={() => router.navigate((params.from === 'list' ? '/admin/org-list' : params.from === 'audit' ? '/admin/audit' : '/admin/inbox') as never)} />
       <OrgApplicationsPanel userId={userId} onOrgName={setOrgName} />
     </Screen>
   );
