@@ -61,6 +61,7 @@ beforeAll(async () => {
     DELETE FROM support_attachments;
     DELETE FROM support_messages;
     DELETE FROM support_tickets;
+    DELETE FROM admin_audit_log;
     DELETE FROM users;
   `);
 });

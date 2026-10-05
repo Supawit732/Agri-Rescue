@@ -41,6 +41,8 @@ import type {
   SupportTicketStatus,
   AdminOverview,
   AdminInboxPayload,
+  AdminAuditPayload,
+  AdminAuditType,
   AdminOrgListPayload,
   AdminOrgStatusFilter,
   AdminLotRow,
@@ -236,6 +238,14 @@ interface Api {
     limit?: number;
     offset?: number;
   }) => Promise<AdminOrgListPayload>;
+  listAdminAuditLog: (query?: {
+    type?: AdminAuditType;
+    admin_id?: number;
+    from?: string;
+    to?: string;
+    limit?: number;
+    offset?: number;
+  }) => Promise<AdminAuditPayload>;
   approveOrg: (userId: number) => Promise<User>;
   rejectOrg: (userId: number, reason: string) => Promise<User>;
   requestMoreOrgInfo: (userId: number, reason: string, requested_fields?: string[]) => Promise<User>;
@@ -697,6 +707,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
         if (query.offset !== undefined) params.set('offset', String(query.offset));
         const qs = params.toString();
         return authed<AdminOrgListPayload>('GET', `/api/admin/org-applications${qs === '' ? '' : `?${qs}`}`);
+      },
+      listAdminAuditLog: (query = {}) => {
+        const params = new URLSearchParams();
+        if (query.type !== undefined && query.type !== 'all') params.set('type', query.type);
+        if (query.admin_id !== undefined) params.set('admin_id', String(query.admin_id));
+        if (query.from !== undefined) params.set('from', query.from);
+        if (query.to !== undefined) params.set('to', query.to);
+        if (query.limit !== undefined) params.set('limit', String(query.limit));
+        if (query.offset !== undefined) params.set('offset', String(query.offset));
+        const qs = params.toString();
+        return authed<AdminAuditPayload>('GET', `/api/admin/audit-log${qs === '' ? '' : `?${qs}`}`);
       },
       approveOrg: (userId) =>
         authed<{ user: User }>('POST', `/api/donors/admin/org-applications/${userId}/approve`).then((r) => r.user),

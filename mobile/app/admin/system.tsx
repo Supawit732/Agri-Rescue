@@ -1,4 +1,5 @@
 import { Feather } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { DataState, SectionTitle } from '../../src/components/ui';
@@ -12,6 +13,7 @@ import { DitMappingPanel } from '../../src/admin/OldAdminPanels';
 export default function AdminSystemScreen(): React.ReactElement {
   const { api } = useAuth();
   const { t, formatDateTime } = useI18n();
+  const router = useRouter();
   const [q, setQ] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
   const users = useApiData(
@@ -22,6 +24,15 @@ export default function AdminSystemScreen(): React.ReactElement {
   return (
     <ScrollView contentContainerStyle={styles.body}>
       <SectionTitle>{t.admin.tabSystem}</SectionTitle>
+      <Pressable
+        accessibilityRole="link"
+        style={styles.auditLink}
+        onPress={() => router.push('/admin/audit' as never)}
+      >
+        <Feather name="clock" size={18} color={C.leafDeep} />
+        <Text style={styles.auditLinkText}>{t.admin.auditTitle}</Text>
+        <Feather name="chevron-right" size={16} color={C.mute} />
+      </Pressable>
       <SectionTitle>{t.admin.ditLead}</SectionTitle>
       <DitMappingPanel />
 
@@ -152,6 +163,18 @@ function WeightsHint({ refreshKey }: { refreshKey: number }): React.ReactElement
 }
 
 const styles = StyleSheet.create({
+  auditLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    minHeight: 48,
+    paddingHorizontal: 14,
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.line,
+    borderRadius: 16,
+  },
+  auditLinkText: { flex: 1, fontSize: 14, fontFamily: fonts.bodySemi, fontWeight: '600', color: C.ink },
   body: { padding: 16, paddingBottom: 32, gap: 8 },
   searchBox: {
     height: 44,

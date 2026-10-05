@@ -444,6 +444,86 @@ adminConsoleRouter.post(
   }),
 );
 
+/** Admin activity log, newest first. `type` is the action prefix; `other` = everything not listed. */
+const AUDIT_TYPES = ['org', 'support', 'lot', 'dit'] as const;
+
+adminConsoleRouter.get(
+  '/audit-log',
+  asyncHandler(async (req, res) => {
+    const query = z
+      .object({
+        type: z.enum(['all', ...AUDIT_TYPES, 'other']).default('all'),
+        action: z.string().trim().max(64).optional(),
+        admin_id: z.coerce.number().int().positive().optional(),
+        from: z.coerce.date().optional(),
+        to: z.coerce.date().optional(),
+        limit: z.coerce.number().int().min(1).max(100).default(20),
+        offset: z.coerce.number().int().min(0).default(0),
+      })
+      .parse(req.query);
+
+    const params: unknown[] = [];
+    let where = '1 = 1';
+    if (query.type === 'other') {
+      where += ` AND ${AUDIT_TYPES.map(() => 'l.action NOT LIKE ?').join(' AND ')}`;
+      params.push(...AUDIT_TYPES.map((t) => `${t}.%`));
+    } else if (query.type !== 'all') {
+      where += ' AND l.action LIKE ?';
+      params.push(`${query.type}.%`);
+    }
+    if (query.action !== undefined && query.action !== '') {
+      where += ' AND l.action = ?';
+      params.push(query.action);
+    }
+    if (query.admin_id !== undefined) {
+      where += ' AND l.admin_id = ?';
+      params.push(query.admin_id);
+    }
+    if (query.from !== undefined) {
+      where += ' AND l.created_at >= ?';
+      params.push(query.from);
+    }
+    if (query.to !== undefined) {
+      where += ' AND l.created_at <= ?';
+      params.push(query.to);
+    }
+
+    const [countRows] = await pool.query<RowDataPacket[]>(
+      `SELECT COUNT(*) AS total FROM admin_audit_log l WHERE ${where}`,
+      params,
+    );
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT l.id, l.admin_id, u.name AS admin_name, l.action, l.target_type, l.target_id,
+              l.summary, l.metadata_json, l.created_at
+       FROM admin_audit_log l
+       LEFT JOIN users u ON u.id = l.admin_id
+       WHERE ${where}
+       ORDER BY l.created_at DESC, l.id DESC
+       LIMIT ? OFFSET ?`,
+      [...params, query.limit, query.offset],
+    );
+    res.json({
+      total: n(countRows[0]?.total),
+      items: rows.map((r) => ({
+        id: Number(r.id),
+        admin_id: Number(r.admin_id),
+        admin_name: r.admin_name == null ? null : String(r.admin_name),
+        action: String(r.action),
+        target_type: r.target_type == null ? null : String(r.target_type),
+        target_id: r.target_id == null ? null : String(r.target_id),
+        summary: String(r.summary),
+        metadata:
+          r.metadata_json == null
+            ? null
+            : typeof r.metadata_json === 'string'
+              ? (JSON.parse(r.metadata_json) as unknown)
+              : (r.metadata_json as unknown),
+        created_at: new Date(r.created_at as Date).toISOString(),
+      })),
+    });
+  }),
+);
+
 function n(v: unknown): number {
   return Number(v ?? 0);
 }
