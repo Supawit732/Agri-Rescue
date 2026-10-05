@@ -127,6 +127,63 @@ adminConsoleRouter.get(
   }),
 );
 
+/** Org applications of every status (inbox only shows open ones), filterable + paginated. */
+adminConsoleRouter.get(
+  '/org-applications',
+  asyncHandler(async (req, res) => {
+    const query = z
+      .object({
+        status: z.enum(['all', 'pending', 'needs_more_info', 'approved', 'rejected']).default('all'),
+        q: z.string().trim().max(80).optional(),
+        limit: z.coerce.number().int().min(1).max(100).default(20),
+        offset: z.coerce.number().int().min(0).default(0),
+      })
+      .parse(req.query);
+
+    // Drafts are not submitted yet, so they never appear in the list.
+    const params: unknown[] = [];
+    // Legacy approved rows have no application_kind; the review list treats them as organizations too.
+    let where = `(bp.application_kind = 'organization' OR bp.application_kind IS NULL) AND bp.org_status IN ('pending', 'needs_more_info', 'approved', 'rejected')`;
+    if (query.status !== 'all') {
+      where += ' AND bp.org_status = ?';
+      params.push(query.status);
+    }
+    if (query.q !== undefined && query.q !== '') {
+      where += ' AND bp.org_name LIKE ?';
+      params.push(`%${query.q.replace(/[\\%_]/g, '\\$&')}%`);
+    }
+
+    const [countRows] = await pool.query<RowDataPacket[]>(
+      `SELECT COUNT(*) AS total FROM buyer_profiles bp WHERE ${where}`,
+      params,
+    );
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT u.id AS user_id, u.name, bp.org_name, bp.org_type, bp.org_status,
+              bp.org_reviewed_at, bp.created_at
+       FROM buyer_profiles bp
+       JOIN users u ON u.id = bp.user_id
+       WHERE ${where}
+       ORDER BY bp.created_at DESC, u.id DESC
+       LIMIT ? OFFSET ?`,
+      [...params, query.limit, query.offset],
+    );
+    res.json({
+      total: n(countRows[0]?.total),
+      items: rows.map((r) => ({
+        user_id: Number(r.user_id),
+        org_name: String(r.org_name ?? r.name),
+        org_type: r.org_type === null ? null : String(r.org_type),
+        org_status: String(r.org_status),
+        decided_at:
+          r.org_reviewed_at === null || r.org_reviewed_at === undefined
+            ? null
+            : new Date(r.org_reviewed_at as Date).toISOString(),
+        created_at: new Date(r.created_at as Date).toISOString(),
+      })),
+    });
+  }),
+);
+
 /** Admin market: all lots incl. hidden, optional search. */
 adminConsoleRouter.get(
   '/lots',

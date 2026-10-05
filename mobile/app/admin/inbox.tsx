@@ -39,6 +39,17 @@ export default function AdminInboxScreen(): React.ReactElement {
   return (
     <ScrollView contentContainerStyle={styles.body}>
       <SectionTitle>{t.admin.tabInbox}</SectionTitle>
+      <Pressable
+        accessibilityRole="link"
+        style={styles.card}
+        onPress={() => router.push("/admin/org-list" as never)}
+      >
+        <Feather name="list" size={16} color={C.leaf} />
+        <Text style={[styles.cardTitle, styles.cardText]} numberOfLines={2}>
+          {t.admin.orgListLink}
+        </Text>
+        <Feather name="chevron-right" size={16} color={C.mute} />
+      </Pressable>
       <DataState loading={loading} error={error} data={data} onRetry={reload}>
         {(payload) => {
           const filtered = payload.items.filter(

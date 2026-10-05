@@ -147,4 +147,124 @@ describe('admin console', () => {
     expect(found.can_sell).toBe(false);
     expect(found.can_buy).toBe(false);
   });
+
+  describe('org applications list', () => {
+    async function seedOrg(
+      orgName: string,
+      status: string,
+      opts: { kind?: string | null; reviewedAt?: string | null; createdAt?: string } = {},
+    ): Promise<number> {
+      const user = await registerUser(app, { role: 'buyer', buyer_type: 'shop' });
+      await pool.query(
+        `INSERT INTO buyer_profiles (user_id, buyer_type, application_kind, org_name, org_type, org_status, org_reviewed_at, created_at)
+         VALUES (?, 'shop', ?, ?, 'foundation', ?, ?, ?)
+         ON DUPLICATE KEY UPDATE application_kind = VALUES(application_kind), org_name = VALUES(org_name),
+           org_type = VALUES(org_type), org_status = VALUES(org_status),
+           org_reviewed_at = VALUES(org_reviewed_at), created_at = VALUES(created_at)`,
+        [
+          user.user.id,
+          opts.kind === undefined ? 'organization' : opts.kind,
+          orgName,
+          status,
+          opts.reviewedAt ?? null,
+          opts.createdAt ?? '2026-01-01 00:00:00',
+        ],
+      );
+      return user.user.id;
+    }
+
+    it('requires admin', async () => {
+      const farmer = await registerUser(app, { role: 'farmer' });
+      const res = await request(app).get('/api/admin/org-applications').set(bearer(farmer.token));
+      expect(res.status).toBe(403);
+    });
+
+    it('lists all non-draft org applications newest first and filters by status', async () => {
+      const admin = await createAdmin();
+      const oldest = await seedOrg('ListOrg เก่า', 'pending', { createdAt: '2026-01-01 00:00:00' });
+      const approved = await seedOrg('ListOrg อนุมัติ', 'approved', {
+        createdAt: '2026-02-01 00:00:00',
+        reviewedAt: '2026-02-03 04:05:06',
+      });
+      const rejected = await seedOrg('ListOrg ปฏิเสธ', 'rejected', { createdAt: '2026-03-01 00:00:00' });
+      await seedOrg('ListOrg ร่าง', 'draft');
+      await seedOrg('ListOrg รายบุคคล', 'approved', { kind: 'individual' });
+      const legacy = await seedOrg('ListOrg เดิม', 'approved', { kind: null, createdAt: '2025-12-01 00:00:00' });
+
+      const all = await request(app)
+        .get('/api/admin/org-applications')
+        .set(bearer(admin.token))
+        .query({ q: 'ListOrg' });
+      expect(all.status).toBe(200);
+      expect(all.body.total).toBe(4);
+      expect(all.body.items.map((i: { user_id: number }) => i.user_id)).toEqual([rejected, approved, oldest, legacy]);
+      const row = all.body.items.find((i: { user_id: number }) => i.user_id === approved);
+      expect(row).toMatchObject({ org_name: 'ListOrg อนุมัติ', org_type: 'foundation', org_status: 'approved' });
+      expect(row.decided_at).toBe('2026-02-03T04:05:06.000Z');
+
+      const onlyApproved = await request(app)
+        .get('/api/admin/org-applications')
+        .set(bearer(admin.token))
+        .query({ q: 'ListOrg', status: 'approved' });
+      expect(onlyApproved.body.items.map((i: { user_id: number }) => i.user_id)).toEqual([approved, legacy]);
+      expect(onlyApproved.body.total).toBe(2);
+
+      const bad = await request(app)
+        .get('/api/admin/org-applications')
+        .set(bearer(admin.token))
+        .query({ status: 'draft' });
+      expect(bad.status).toBe(400);
+    });
+
+    it('paginates with limit/offset and reports the full total', async () => {
+      const admin = await createAdmin();
+      for (let i = 0; i < 3; i += 1) {
+        await seedOrg(`PageOrg ${String(i)}`, 'approved', { createdAt: `2026-04-0${String(i + 1)} 00:00:00` });
+      }
+      const page1 = await request(app)
+        .get('/api/admin/org-applications')
+        .set(bearer(admin.token))
+        .query({ q: 'PageOrg', limit: 2, offset: 0 });
+      const page2 = await request(app)
+        .get('/api/admin/org-applications')
+        .set(bearer(admin.token))
+        .query({ q: 'PageOrg', limit: 2, offset: 2 });
+      expect(page1.body.total).toBe(3);
+      expect(page1.body.items.map((i: { org_name: string }) => i.org_name)).toEqual(['PageOrg 2', 'PageOrg 1']);
+      expect(page2.body.items.map((i: { org_name: string }) => i.org_name)).toEqual(['PageOrg 0']);
+    });
+
+    it('treats % and _ in the search as literals', async () => {
+      const admin = await createAdmin();
+      await seedOrg('Lit100%Org', 'approved');
+      await seedOrg('LitXYZOrg', 'approved');
+      const res = await request(app)
+        .get('/api/admin/org-applications')
+        .set(bearer(admin.token))
+        .query({ q: 't100%' });
+      expect(res.body.items.map((i: { org_name: string }) => i.org_name)).toEqual(['Lit100%Org']);
+      const wild = await request(app).get('/api/admin/org-applications').set(bearer(admin.token)).query({ q: 'Lit%Org' });
+      expect(wild.body.total).toBe(0);
+    });
+
+    it('detail endpoint returns a decided application and 404s for none/unknown', async () => {
+      const admin = await createAdmin();
+      const approved = await seedOrg('DetailOrg', 'approved', { reviewedAt: '2026-02-03 04:05:06' });
+      const ok = await request(app)
+        .get(`/api/donors/admin/org-applications/${String(approved)}`)
+        .set(bearer(admin.token));
+      expect(ok.status).toBe(200);
+      expect(ok.body.application).toMatchObject({ user_id: approved, org_status: 'approved' });
+      expect(ok.body.application.reviewed_at).toBe('2026-02-03T04:05:06.000Z');
+      expect(ok.body.application.review_logs).toEqual([]);
+
+      const missing = await request(app).get('/api/donors/admin/org-applications/999999').set(bearer(admin.token));
+      expect(missing.status).toBe(404);
+      const farmer = await registerUser(app, { role: 'farmer' });
+      const denied = await request(app)
+        .get(`/api/donors/admin/org-applications/${String(approved)}`)
+        .set(bearer(farmer.token));
+      expect(denied.status).toBe(403);
+    });
+  });
 });

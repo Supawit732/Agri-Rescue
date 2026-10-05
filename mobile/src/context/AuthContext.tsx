@@ -41,6 +41,8 @@ import type {
   SupportTicketStatus,
   AdminOverview,
   AdminInboxPayload,
+  AdminOrgListPayload,
+  AdminOrgStatusFilter,
   AdminLotRow,
   AdminUserRow,
   User,
@@ -227,6 +229,13 @@ interface Api {
   withdrawDonorApplication: (reason?: string) => Promise<AuthResponse>;
   switchDonorApplicationKind: (application_kind: 'individual' | 'organization') => Promise<AuthResponse>;
   listOrgApplications: () => Promise<OrgApplication[]>;
+  getOrgApplication: (userId: number) => Promise<OrgApplication>;
+  listAdminOrgApplications: (query?: {
+    status?: AdminOrgStatusFilter;
+    q?: string;
+    limit?: number;
+    offset?: number;
+  }) => Promise<AdminOrgListPayload>;
   approveOrg: (userId: number) => Promise<User>;
   rejectOrg: (userId: number, reason: string) => Promise<User>;
   requestMoreOrgInfo: (userId: number, reason: string, requested_fields?: string[]) => Promise<User>;
@@ -676,6 +685,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
       },
       listOrgApplications: () =>
         authed<{ applications: OrgApplication[] }>('GET', '/api/donors/admin/org-applications').then((r) => r.applications),
+      getOrgApplication: (userId) =>
+        authed<{ application: OrgApplication }>('GET', `/api/donors/admin/org-applications/${userId}`).then(
+          (r) => r.application,
+        ),
+      listAdminOrgApplications: (query = {}) => {
+        const params = new URLSearchParams();
+        if (query.status !== undefined) params.set('status', query.status);
+        if (query.q !== undefined && query.q !== '') params.set('q', query.q);
+        if (query.limit !== undefined) params.set('limit', String(query.limit));
+        if (query.offset !== undefined) params.set('offset', String(query.offset));
+        const qs = params.toString();
+        return authed<AdminOrgListPayload>('GET', `/api/admin/org-applications${qs === '' ? '' : `?${qs}`}`);
+      },
       approveOrg: (userId) =>
         authed<{ user: User }>('POST', `/api/donors/admin/org-applications/${userId}/approve`).then((r) => r.user),
       rejectOrg: (userId, reason) =>

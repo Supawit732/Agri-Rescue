@@ -1026,19 +1026,59 @@ donorsRouter.get(
   }),
 );
 
+const ORG_APPLICATION_COLUMNS = `SELECT u.id, u.name, u.phone,
+              bp.application_kind, bp.org_name, bp.org_type, bp.registered, bp.registration_number,
+              bp.registered_address, bp.contact_name, bp.contact_title, bp.contact_phone, bp.contact_email,
+              bp.org_lat, bp.org_lng, bp.beneficiary_count, bp.recipient_groups_json, bp.purpose_th,
+              bp.distribution_mode, bp.redistribute_place, bp.redistribute_frequency,
+              bp.org_status, bp.org_reject_reason, bp.requested_fields_json, bp.donor_terms_version,
+              bp.donor_terms_accepted_at, bp.org_reviewed_at, bp.created_at
+       `;
+
+async function buildOrgApplication(row: RowDataPacket) {
+  const docs = await loadDocs(Number(row.id));
+  const logs = await loadReviewLogs(Number(row.id));
+  const latestChecklist = logs.find((l) => l.action === 'checklist_saved')?.checklist ?? null;
+  return {
+    user_id: Number(row.id),
+    name: String(row.name),
+    phone: String(row.phone),
+    application_kind: row.application_kind === null ? null : String(row.application_kind),
+    org_name: row.org_name === null ? null : String(row.org_name),
+    org_type: row.org_type === null ? null : String(row.org_type),
+    contact_name: row.contact_name === null ? null : String(row.contact_name),
+    contact_title: row.contact_title === null ? null : String(row.contact_title),
+    contact_phone: row.contact_phone === null ? null : String(row.contact_phone),
+    contact_email: row.contact_email === null ? null : String(row.contact_email),
+    org_lat: row.org_lat === null ? null : Number(row.org_lat),
+    org_lng: row.org_lng === null ? null : Number(row.org_lng),
+    beneficiary_count: row.beneficiary_count === null ? null : Number(row.beneficiary_count),
+    distribution_mode: row.distribution_mode === null ? null : String(row.distribution_mode),
+    org_status: String(row.org_status),
+    org_reject_reason: row.org_reject_reason === null ? null : String(row.org_reject_reason),
+    requested_fields: parseJsonArray(row.requested_fields_json),
+    donor_terms_version: row.donor_terms_version === null ? null : String(row.donor_terms_version),
+    donor_terms_accepted_at:
+      row.donor_terms_accepted_at === null
+        ? null
+        : new Date(row.donor_terms_accepted_at as string).toISOString(),
+    reviewed_at: row.org_reviewed_at === null ? null : new Date(row.org_reviewed_at as string).toISOString(),
+    created_at: new Date(row.created_at as string).toISOString(),
+    sections: applicationSections(row),
+    documents: docs,
+    documents_by_category: groupDocsByCategory(docs),
+    checklist: latestChecklist,
+    review_logs: logs,
+  };
+}
+
 donorsRouter.get(
   '/admin/org-applications',
   requireAuth,
   requireCapability('admin'),
   asyncHandler(async (_req, res) => {
     const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT u.id, u.name, u.phone,
-              bp.application_kind, bp.org_name, bp.org_type, bp.registered, bp.registration_number,
-              bp.registered_address, bp.contact_name, bp.contact_title, bp.contact_phone, bp.contact_email,
-              bp.org_lat, bp.org_lng, bp.beneficiary_count, bp.recipient_groups_json, bp.purpose_th,
-              bp.distribution_mode, bp.redistribute_place, bp.redistribute_frequency,
-              bp.org_status, bp.org_reject_reason, bp.requested_fields_json, bp.donor_terms_version,
-              bp.donor_terms_accepted_at, bp.created_at
+      `${ORG_APPLICATION_COLUMNS}
        FROM buyer_profiles bp
        JOIN users u ON u.id = bp.user_id
        WHERE bp.org_status IN ('pending', 'needs_more_info')
@@ -1047,41 +1087,34 @@ donorsRouter.get(
     );
     const apps = [];
     for (const row of rows) {
-      const docs = await loadDocs(Number(row.id));
-      const logs = await loadReviewLogs(Number(row.id));
-      const latestChecklist = logs.find((l) => l.action === 'checklist_saved')?.checklist ?? null;
-      apps.push({
-        user_id: Number(row.id),
-        name: String(row.name),
-        phone: String(row.phone),
-        application_kind: row.application_kind === null ? null : String(row.application_kind),
-        org_name: row.org_name === null ? null : String(row.org_name),
-        org_type: row.org_type === null ? null : String(row.org_type),
-        contact_name: row.contact_name === null ? null : String(row.contact_name),
-        contact_title: row.contact_title === null ? null : String(row.contact_title),
-        contact_phone: row.contact_phone === null ? null : String(row.contact_phone),
-        contact_email: row.contact_email === null ? null : String(row.contact_email),
-        org_lat: row.org_lat === null ? null : Number(row.org_lat),
-        org_lng: row.org_lng === null ? null : Number(row.org_lng),
-        beneficiary_count: row.beneficiary_count === null ? null : Number(row.beneficiary_count),
-        distribution_mode: row.distribution_mode === null ? null : String(row.distribution_mode),
-        org_status: String(row.org_status),
-        org_reject_reason: row.org_reject_reason === null ? null : String(row.org_reject_reason),
-        requested_fields: parseJsonArray(row.requested_fields_json),
-        donor_terms_version: row.donor_terms_version === null ? null : String(row.donor_terms_version),
-        donor_terms_accepted_at:
-          row.donor_terms_accepted_at === null
-            ? null
-            : new Date(row.donor_terms_accepted_at as string).toISOString(),
-        created_at: new Date(row.created_at as string).toISOString(),
-        sections: applicationSections(row),
-        documents: docs,
-        documents_by_category: groupDocsByCategory(docs),
-        checklist: latestChecklist,
-        review_logs: logs,
-      });
+      apps.push(await buildOrgApplication(row));
     }
     res.json({ applications: apps, review_quick_reasons: ORG_REVIEW_QUICK_REASONS });
+  }),
+);
+
+/** One application of any status (incl. approved/rejected) for the read-only review screen. */
+donorsRouter.get(
+  '/admin/org-applications/:userId',
+  requireAuth,
+  requireCapability('admin'),
+  asyncHandler(async (req, res) => {
+    const userId = Number(req.params.userId);
+    if (!Number.isInteger(userId) || userId <= 0) {
+      throw new HttpError(400, 'VALIDATION', 'userId ไม่ถูกต้อง');
+    }
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `${ORG_APPLICATION_COLUMNS}
+       FROM buyer_profiles bp
+       JOIN users u ON u.id = bp.user_id
+       WHERE u.id = ? AND bp.org_status <> 'none'
+         AND (bp.application_kind = 'organization' OR bp.application_kind IS NULL)`,
+      [userId],
+    );
+    if (rows[0] === undefined) {
+      throw new HttpError(404, 'NOT_FOUND', 'ไม่พบคำขอองค์กร');
+    }
+    res.json({ application: await buildOrgApplication(rows[0]) });
   }),
 );
 
