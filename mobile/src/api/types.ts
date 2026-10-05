@@ -45,6 +45,7 @@ export interface User {
   donor_terms_version: string | null;
   donor_terms_accepted_at: string | null;
   org_type: string | null;
+  org_reviewed_at: string | null;
   donation_weekly_cap_kg: number | null;
   donation_remaining_kg: number | null;
   line_id: string | null;

@@ -568,6 +568,7 @@ export type Messages = {
     donorCardTitle: string;
     donorWeekUsage: string;
     donorUpgradeOrg: string;
+    donorOrgQuota: string;
     save: string;
     saved: string;
     saveFailed: string;
@@ -638,6 +639,20 @@ export type Messages = {
   };
   donorApply: {
     title: string;
+    approvedTitle: string;
+    approvedHint: string;
+    approvedKind: string;
+    approvedOrgName: string;
+    approvedOrgType: string;
+    approvedOn: string;
+    approvedTier: string;
+    approvedQuota: string;
+    approvedQuotaValue: string;
+    backToProfile: string;
+    upgradeToOrg: string;
+    rejectedTitle: string;
+    rejectedReason: string;
+    reapply: string;
     pleaseLogin: string;
     stepProgress: string;
     requestStatus: string;
@@ -1090,6 +1105,9 @@ export type Messages = {
     lot_bookedWithSlot: string;
     order_delivered: string;
     donor_review: string;
+    donor_review_approved: string;
+    donor_review_needs_more_info: string;
+    donor_review_rejected: string;
     donor_proof_due: string;
     support_reply: string;
   };

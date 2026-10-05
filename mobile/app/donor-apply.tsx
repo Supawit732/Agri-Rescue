@@ -19,6 +19,7 @@ import { Body, PrimaryButton, Screen, SecondaryButton, StackHeader } from '../sr
 import { useAuth } from '../src/context/AuthContext';
 import {
   labelApplicationKind,
+  labelDonorTier,
   labelOrgStatus,
   labelOrgType,
   labelRecipientGroups,
@@ -138,7 +139,7 @@ function StatusBanner({
 
 export default function DonorApplyScreen(): React.ReactElement {
   const { user, api, refreshUser } = useAuth();
-  const { t } = useI18n();
+  const { t, formatDate } = useI18n();
   const router = useRouter();
   const orgTypes = useMemo(() => orgTypeOptions(t), [t]);
   const recipientOpts = useMemo(() => recipientGroupOptions(t), [t]);
@@ -183,6 +184,8 @@ export default function DonorApplyScreen(): React.ReactElement {
   >([]);
   const [conflictExistingId, setConflictExistingId] = useState<number | null>(null);
   const [hydrated, setHydrated] = useState(false);
+  /** Approved individuals / rejected applicants opt in to the form (upgrade to org / re-apply). */
+  const [formOpened, setFormOpened] = useState(false);
   const [pendingFocus, setPendingFocus] = useState<string | null>(null);
   const inputRefs = useRef<Record<string, TextInput | null>>({});
   const bindInput = (name: string) => (el: TextInput | null): void => {
@@ -777,6 +780,76 @@ export default function DonorApplyScreen(): React.ReactElement {
     );
   }
 
+  const isApproved = user.org_status === 'approved';
+  const isOrgApproved = isApproved && user.application_kind !== 'individual';
+  if ((isOrgApproved || (isApproved && !formOpened))) {
+    return (
+      <Screen>
+        <StackHeader title={t.donorApply.title} onBack={() => router.replace('/profile')} />
+        <Body>
+          <View style={styles.statusBanner}>
+            <Text style={styles.statusTitle}>{t.donorApply.approvedTitle}</Text>
+            <Text style={styles.muted}>{t.donorApply.approvedHint}</Text>
+            <Text style={styles.summaryRow}>
+              {t.donorApply.approvedKind}: {labelApplicationKind(user.application_kind ?? 'organization', t)}
+            </Text>
+            {user.application_kind !== 'individual' ? (
+              <>
+                <Text style={styles.summaryRow}>
+                  {t.donorApply.approvedOrgName}: {user.org_name ?? t.common.dash}
+                </Text>
+                <Text style={styles.summaryRow}>
+                  {t.donorApply.approvedOrgType}: {labelOrgType(user.org_type, t)}
+                </Text>
+              </>
+            ) : null}
+            <Text style={styles.summaryRow}>
+              {t.donorApply.approvedOn}:{' '}
+              {user.org_reviewed_at !== null ? formatDate(user.org_reviewed_at) : t.common.dash}
+            </Text>
+            <Text style={styles.summaryRow}>
+              {t.donorApply.approvedTier}: {labelDonorTier(user.donor_tier, t)}
+            </Text>
+            <Text style={styles.summaryRow}>
+              {t.donorApply.approvedQuota}:{' '}
+              {user.donation_weekly_cap_kg !== null
+                ? formatTemplate(t.donorApply.approvedQuotaValue, { cap: user.donation_weekly_cap_kg })
+                : t.common.dash}
+            </Text>
+          </View>
+          <PrimaryButton label={t.donorApply.backToProfile} onPress={() => router.replace('/profile')} />
+          {!isOrgApproved ? (
+            <SecondaryButton
+              label={t.donorApply.upgradeToOrg}
+              onPress={() => {
+                setKind(null);
+                setFormOpened(true);
+              }}
+            />
+          ) : null}
+        </Body>
+      </Screen>
+    );
+  }
+
+  if (user.org_status === 'rejected' && !formOpened) {
+    return (
+      <Screen>
+        <StackHeader title={t.donorApply.title} onBack={() => router.replace('/profile')} />
+        <Body>
+          <View style={styles.statusBanner}>
+            <Text style={styles.statusTitle}>{t.donorApply.rejectedTitle}</Text>
+            <Text style={styles.muted}>
+              {formatTemplate(t.donorApply.rejectedReason, { reason: user.org_reject_reason ?? t.common.dash })}
+            </Text>
+          </View>
+          <PrimaryButton label={t.donorApply.reapply} onPress={() => setFormOpened(true)} />
+          <SecondaryButton label={t.donorApply.backToProfile} onPress={() => router.replace('/profile')} />
+        </Body>
+      </Screen>
+    );
+  }
+
   return (
     <Screen>
       <StackHeader title={t.donorApply.title} onBack={() => router.replace('/profile')} />
@@ -1255,6 +1328,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     gap: 8,
   },
+  summaryRow: { color: C.ink, fontSize: 14, marginTop: 4 },
   statusTitle: { color: C.ink, fontWeight: '700', fontSize: 15 },
   statusAdmin: { color: C.chili, lineHeight: 20 },
   statusActions: { gap: 8, marginTop: 4 },
