@@ -982,6 +982,7 @@ const th: Messages = {
     ticketTitle: 'เรื่อง #{id}',
     reportedBy: 'ผู้แจ้ง',
     viewPhoto: 'ดูรูป',
+    staffBadge: 'ทีมงาน',
     newTicket: 'แจ้งเรื่องใหม่',
     replyWithin: 'ทีมผู้ดูแลตอบกลับภายใน 1 วันทำการ',
     details: 'รายละเอียดปัญหา',

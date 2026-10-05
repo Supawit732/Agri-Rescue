@@ -982,6 +982,7 @@ const en: Messages = {
     ticketTitle: 'Ticket #{id}',
     reportedBy: 'Reported by',
     viewPhoto: 'View photo',
+    staffBadge: 'Staff',
     newTicket: 'New ticket',
     replyWithin: 'We reply within 1 business day',
     details: 'Problem details',

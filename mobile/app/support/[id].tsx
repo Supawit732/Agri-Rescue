@@ -167,39 +167,43 @@ export default function SupportTicketScreen(): React.ReactElement {
               ) : null}
             </View>
 
-            {(data?.messages ?? []).map((msg) => (
-              <View
-                key={msg.id}
-                style={[
-                  styles.bubble,
-                  msg.sender_role === 'admin' ? styles.bubbleAdmin : styles.bubbleUser,
-                ]}
-              >
-                <Text style={styles.bubbleRole}>
-                  {msg.sender_role === 'admin' ? t.support.adminInbox : ticket.user_name ?? ''}
-                </Text>
-                <Text style={styles.bubbleBody}>{msg.body}</Text>
-                {msg.attachments.length > 0 ? (
-                  <View style={styles.attachRow}>
-                    {msg.attachments.map((att) => (
-                      <Pressable
-                        key={att.id}
-                        accessibilityRole="button"
-                        accessibilityLabel={`${t.support.viewPhoto}: ${att.original_name ?? `#${att.id}`}`}
-                        onPress={() => setViewing(api.supportAttachmentSource(ticketId, att.id))}
-                      >
-                        <AuthImage
-                          source={api.supportAttachmentSource(ticketId, att.id)}
-                          style={styles.attachThumb}
-                          resizeMode="cover"
-                        />
-                      </Pressable>
-                    ))}
+            {(data?.messages ?? []).map((msg) => {
+              const isStaff = msg.sender_role === 'admin';
+              return (
+                <View key={msg.id} style={[styles.card, isStaff && styles.cardStaff]}>
+                  <View style={styles.headerRow}>
+                    <View style={styles.senderRow}>
+                      <Text style={styles.bubbleRole} numberOfLines={1}>
+                        {isStaff ? t.support.adminInbox : ticket.user_name ?? ''}
+                      </Text>
+                      {isStaff ? (
+                        <Badge text={t.support.staffBadge} fg={C.leafDeep} bg={C.okBg} />
+                      ) : null}
+                    </View>
+                    <Text style={styles.bubbleTime}>{formatDateTime(msg.created_at)}</Text>
                   </View>
-                ) : null}
-                <Text style={styles.bubbleTime}>{formatDateTime(msg.created_at)}</Text>
-              </View>
-            ))}
+                  <Text style={styles.bubbleBody}>{msg.body}</Text>
+                  {msg.attachments.length > 0 ? (
+                    <View style={styles.attachRow}>
+                      {msg.attachments.map((att) => (
+                        <Pressable
+                          key={att.id}
+                          accessibilityRole="button"
+                          accessibilityLabel={`${t.support.viewPhoto}: ${att.original_name ?? `#${att.id}`}`}
+                          onPress={() => setViewing(api.supportAttachmentSource(ticketId, att.id))}
+                        >
+                          <AuthImage
+                            source={api.supportAttachmentSource(ticketId, att.id)}
+                            style={styles.attachThumb}
+                            resizeMode="cover"
+                          />
+                        </Pressable>
+                      ))}
+                    </View>
+                  ) : null}
+                </View>
+              );
+            })}
 
             {ticket.status !== 'closed' || isAdmin ? (
               <View style={styles.card}>
@@ -281,31 +285,11 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 8, alignItems: 'center' },
   topic: { fontFamily: fonts.titleBold, fontSize: 16, fontWeight: '700', color: C.ink, flex: 1 },
   meta: { fontSize: 13, color: C.mute, fontFamily: fonts.body },
-  bubble: {
-    borderRadius: 16,
-    padding: 12,
-    gap: 6,
-    borderWidth: 1,
-  },
-  bubbleUser: {
-    backgroundColor: C.bg,
-    borderColor: C.line,
-    borderTopLeftRadius: 4,
-    alignSelf: 'flex-start',
-    maxWidth: '85%',
-    minWidth: '60%',
-  },
-  bubbleAdmin: {
-    backgroundColor: C.leafSoft,
-    borderColor: C.lineStrong,
-    borderTopRightRadius: 4,
-    alignSelf: 'flex-end',
-    maxWidth: '85%',
-    minWidth: '60%',
-  },
-  bubbleRole: { fontSize: 12, fontWeight: '600', color: C.leaf, fontFamily: fonts.bodySemi },
+  cardStaff: { borderLeftWidth: 4, borderLeftColor: C.leaf },
+  senderRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
+  bubbleRole: { flexShrink: 1, fontSize: 13, fontWeight: '600', color: C.leaf, fontFamily: fonts.bodySemi },
   bubbleBody: { fontSize: 14, lineHeight: 21, color: C.ink, fontFamily: fonts.body },
-  bubbleTime: { fontSize: 11, alignSelf: 'flex-end', color: C.mute, fontFamily: fonts.body },
+  bubbleTime: { fontSize: 11, color: C.mute, fontFamily: fonts.body },
   attachThumb: {
     width: 128,
     height: 128,
