@@ -1,6 +1,9 @@
 import {
   activeDonorTier,
   canBookDonationAudience,
+  DONOR_CONFIG,
+  donorTierRules,
+  upgradeOptions,
   evaluateDonationRequest,
   remainingWeeklyKg,
   shouldPromoteToTrusted,
@@ -14,6 +17,25 @@ describe('donorRules', () => {
     expect(weeklyCapKg('trusted_volunteer', null)).toBe(30);
     expect(weeklyCapKg('verified_org', 40)).toBe(20);
     expect(remainingWeeklyKg(10, 4)).toBe(6);
+  });
+
+  it('derives tier rules from DONOR_CONFIG', () => {
+    const [vol, trusted, org] = donorTierRules();
+    expect(vol?.weekly_cap_kg).toBe(DONOR_CONFIG.volunteerWeeklyKg);
+    expect(trusted?.weekly_cap_kg).toBe(DONOR_CONFIG.trustedVolunteerWeeklyKg);
+    expect(trusted?.proofs_required).toBe(DONOR_CONFIG.trustedPromotePasses);
+    expect(org?.kg_per_beneficiary).toBe(DONOR_CONFIG.verifiedOrgKgPerBeneficiary);
+    expect(org?.can_book_org_only_lots).toBe(true);
+    expect(vol?.can_book_org_only_lots).toBe(false);
+  });
+
+  it('lists remaining upgrade options per state', () => {
+    expect(upgradeOptions({ donor_tier: null, org_status: 'none' })).toEqual(['volunteer', 'verified_org']);
+    expect(upgradeOptions({ donor_tier: null, org_status: 'rejected' })).toEqual(['volunteer', 'verified_org']);
+    expect(upgradeOptions({ donor_tier: null, org_status: 'pending' })).toEqual([]);
+    expect(upgradeOptions({ donor_tier: 'volunteer', org_status: 'approved' })).toEqual(['verified_org']);
+    expect(upgradeOptions({ donor_tier: 'trusted_volunteer', org_status: 'approved' })).toEqual(['verified_org']);
+    expect(upgradeOptions({ donor_tier: 'verified_org', org_status: 'approved' })).toEqual([]);
   });
 
   it('gates donation audience by tier', () => {

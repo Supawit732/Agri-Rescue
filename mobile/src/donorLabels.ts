@@ -6,6 +6,8 @@ import type {
   RecipientGroup,
   User,
 } from './api/types';
+import type { ApiError } from './api/client';
+import { formatTemplate } from './i18n';
 import type { Messages } from './i18n/types';
 
 export type DistributionModeLabel = 'self_use' | 'redistribute';
@@ -105,4 +107,26 @@ export function recipientGroupOptions(t: Messages): { key: RecipientGroup; label
     key,
     label,
   }));
+}
+
+/** Localized over-cap message (with how to get more) from the server's structured details. */
+export function overCapMessage(err: ApiError, t: Messages): string | null {
+  const d = err.details;
+  if (d === undefined || d.reason !== 'over_cap') {
+    return null;
+  }
+  const num = (v: unknown): number => (typeof v === 'number' ? v : 0);
+  const base = formatTemplate(t.donorQuota.overCap, { remaining: num(d.remaining_kg), cap: num(d.cap_kg) });
+  const per = num(d.kg_per_beneficiary);
+  if (d.tier === 'volunteer') {
+    return `${base} ${formatTemplate(t.donorQuota.overCapVolunteer, {
+      per,
+      need: num(d.proofs_required),
+      trusted: num(d.trusted_weekly_cap_kg),
+    })}`;
+  }
+  if (d.tier === 'trusted_volunteer') {
+    return `${base} ${formatTemplate(t.donorQuota.overCapUpgrade, { per })}`;
+  }
+  return base;
 }

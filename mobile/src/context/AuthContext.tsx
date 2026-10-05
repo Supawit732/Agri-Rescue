@@ -17,6 +17,7 @@ import type {
   DitSuggestion,
   DitSyncJob,
   DonationAudience,
+  DonorQuota,
   DonorTermsMeta,
   EstimateResponse,
   Grade,
@@ -225,6 +226,7 @@ interface Api {
   simulateOrderPayment: (id: number) => Promise<Payment>;
   becomeVolunteer: () => Promise<AuthResponse>;
   getDonorTerms: () => Promise<DonorTermsMeta>;
+  getDonorQuota: () => Promise<DonorQuota>;
   getMyDonorApplication: () => Promise<MyDonorApplication>;
   saveDonorDraft: (input: Record<string, unknown>) => Promise<AuthResponse>;
   applyOrg: (input: Record<string, unknown>) => Promise<AuthResponse>;
@@ -668,6 +670,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
         return { token: token ?? '', user: res.user };
       },
       getDonorTerms: () => apiRequest<DonorTermsMeta>({ method: 'GET', path: '/api/donors/terms' }),
+      getDonorQuota: () => authed<DonorQuota>('GET', '/api/donors/quota'),
       getMyDonorApplication: () => authed<MyDonorApplication>('GET', '/api/donors/org-applications/mine'),
       saveDonorDraft: async (input) => {
         const res = await authed<{ user: User }>('POST', '/api/donors/org-applications/draft', input);

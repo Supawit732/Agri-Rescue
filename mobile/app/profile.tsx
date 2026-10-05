@@ -11,6 +11,7 @@ import { Body, PrimaryButton, Screen, StackHeader } from '../src/components/ui';
 import type { Shop } from '../src/api/types';
 import { useAuth } from '../src/context/AuthContext';
 import { COVER_ASPECT, useShopCover } from '../src/hooks/useShopCover';
+import { ApplyCompare, QuotaSummary, useDonorQuota } from '../src/components/DonorQuota';
 import { donorStatusLabel } from '../src/donorLabels';
 import { formatTemplate, useI18n } from '../src/i18n';
 import { formatPhone, isValidEmail, normalizeEmail } from '../src/lib/phoneEmail';
@@ -34,6 +35,7 @@ export default function ProfileScreen(): React.ReactElement {
   );
   const [shop, setShop] = useState<Shop | null>(null);
   const shopCover = useShopCover(setShop);
+  const quota = useDonorQuota();
   const userId = user?.id ?? null;
   const canSell = user?.can_sell === true;
   const loadShop = useCallback(async (): Promise<void> => {
@@ -421,8 +423,8 @@ export default function ProfileScreen(): React.ReactElement {
           />
         </View>
 
-        <Pressable style={styles.card} onPress={() => router.push('/donor-apply')}>
-          <View style={styles.linkRow}>
+        <View style={styles.card}>
+          <Pressable style={styles.linkRow} onPress={() => router.push('/donor-apply')}>
             <View style={styles.donorIcon}>
               <Feather name="gift" size={22} color={C.soonFg} />
             </View>
@@ -430,23 +432,27 @@ export default function ProfileScreen(): React.ReactElement {
               <Text style={styles.rowTitle}>
                 {t.profile.donorCardTitle} · {donorStatusLabel(user, t)}
               </Text>
-              <Text style={styles.muted}>
-                {isApprovedOrg
-                  ? formatTemplate(t.profile.donorOrgQuota, {
-                      cap: user.donation_weekly_cap_kg != null ? String(user.donation_weekly_cap_kg) : '—',
-                    })
-                  : formatTemplate(t.profile.donorWeekUsage, {
-                      used: user.donation_remaining_kg != null && user.donation_weekly_cap_kg != null
-                        ? String(user.donation_weekly_cap_kg - user.donation_remaining_kg)
-                        : '0',
-                      cap: user.donation_weekly_cap_kg != null ? String(user.donation_weekly_cap_kg) : '—',
-                    })}
-              </Text>
-              {isApprovedOrg ? null : <Text style={styles.link}>{t.profile.donorUpgradeOrg}</Text>}
             </View>
             <Feather name="chevron-right" size={18} color={C.mute} />
-          </View>
-        </Pressable>
+          </Pressable>
+          {quota !== null ? (
+            <>
+              <QuotaSummary quota={quota} />
+              <ApplyCompare quota={quota} onApply={() => router.push('/donor-apply')} />
+            </>
+          ) : user.donation_weekly_cap_kg != null ? (
+            <Text style={styles.muted}>
+              {isApprovedOrg
+                ? formatTemplate(t.profile.donorOrgQuota, { cap: user.donation_weekly_cap_kg })
+                : formatTemplate(t.profile.donorWeekUsage, {
+                    used: user.donation_remaining_kg != null
+                      ? String(user.donation_weekly_cap_kg - user.donation_remaining_kg)
+                      : '0',
+                    cap: user.donation_weekly_cap_kg,
+                  })}
+            </Text>
+          ) : null}
+        </View>
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>{t.common.language}</Text>

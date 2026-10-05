@@ -17,6 +17,7 @@ import { useAuth } from '../../../src/context/AuthContext';
 import { useApiData } from '../../../src/hooks/useApiData';
 import { formatCountdown, hoursLeftFrom, useNow } from '../../../src/hooks/useNow';
 import { formatTemplate, useI18n } from '../../../src/i18n';
+import { overCapMessage } from '../../../src/donorLabels';
 import { remainingOf } from '../../../src/lot/helpers';
 import { C } from '../../../src/theme';
 
@@ -97,7 +98,7 @@ export default function LotConfirmScreen(): React.ReactElement {
     } catch (err) {
       setBanner(
         err instanceof ApiError
-          ? translateError(err.code, err.message)
+          ? (overCapMessage(err, t) ?? translateError(err.code, err.message))
           : t.confirmBooking.failed,
       );
     } finally {

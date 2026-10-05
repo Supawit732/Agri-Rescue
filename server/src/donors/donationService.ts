@@ -6,6 +6,7 @@ import {
   proofDueAt,
   shouldPromoteToTrusted,
   shouldSuspend,
+  upgradeOptions,
   weekStartBangkok,
   type DonationAudience,
   type DonorTier,
@@ -40,7 +41,7 @@ export async function loadDonorProfile(connection: PoolConnection, userId: numbe
   return rows[0] ?? null;
 }
 
-export async function usedDonationKgThisWeek(connection: PoolConnection, userId: number, now = new Date()): Promise<number> {
+export async function usedDonationKgThisWeek(connection: Pick<PoolConnection, 'query'>, userId: number, now = new Date()): Promise<number> {
   const start = weekStartBangkok(now);
   const [rows] = await connection.query<RowDataPacket[]>(
     `SELECT COALESCE(SUM(h.weight_kg), 0) AS used_kg
@@ -75,7 +76,27 @@ export function assertMayRequestDonation(input: {
     beneficiary_count: input.profile.beneficiary_count,
   });
   if (!verdict.ok) {
-    throw new HttpError(403, 'FORBIDDEN', verdict.message);
+    throw new HttpError(
+      403,
+      'FORBIDDEN',
+      verdict.message,
+      undefined,
+      verdict.reason === 'over_cap'
+        ? {
+            reason: 'over_cap',
+            tier: verdict.tier,
+            cap_kg: verdict.capKg,
+            remaining_kg: verdict.remainingKg,
+            upgrade_options: upgradeOptions({
+              donor_tier: input.profile.donor_tier,
+              org_status: input.profile.org_status,
+            }),
+            kg_per_beneficiary: DONOR_CONFIG.verifiedOrgKgPerBeneficiary,
+            trusted_weekly_cap_kg: DONOR_CONFIG.trustedVolunteerWeeklyKg,
+            proofs_required: DONOR_CONFIG.trustedPromotePasses,
+          }
+        : { reason: verdict.reason },
+    );
   }
   const tier = verdict.tier;
   const needsPlace =
