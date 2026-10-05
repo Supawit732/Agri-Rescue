@@ -182,6 +182,34 @@ describe('donors 6.1b', () => {
     expect(overCap.body.error.message).toContain('เพดาน');
   });
 
+  it('approving an org upgrades tier, quota and charity flag atomically and links the notification to the profile', async () => {
+    const buyer = await registerUser(app, { role: 'buyer', buyer_type: 'shop' });
+    await applyOrg(buyer.token);
+    const admin = await loginStaff(app, 'coordinator', 'แอดมินตรวจเอกสาร');
+
+    const approve = await request(app)
+      .post(`/api/donors/admin/org-applications/${buyer.user.id}/approve`)
+      .set(bearer(admin.token))
+      .send({});
+    expect(approve.status).toBe(200);
+    expect(approve.body.user.org_status).toBe('approved');
+    expect(approve.body.user.donor_tier).toBe('verified_org');
+    expect(approve.body.user.charity_approved).toBe(true);
+    expect(approve.body.user.donation_weekly_cap_kg).toBe(20); // 40 beneficiaries x 0.5 kg
+    expect(typeof approve.body.user.org_reviewed_at).toBe('string');
+
+    const [rows] = await pool.query<RowDataPacket[]>(
+      'SELECT org_status, donor_tier, charity_approved FROM buyer_profiles WHERE user_id = ?',
+      [buyer.user.id],
+    );
+    expect(rows[0]).toMatchObject({ org_status: 'approved', donor_tier: 'verified_org', charity_approved: 1 });
+
+    const notifs = await request(app).get('/api/notifications').set(bearer(buyer.token));
+    const review = notifs.body.notifications.find((n: { type: string }) => n.type === 'donor_review');
+    expect(review.params.status).toBe('approved');
+    expect(review.link).toBe('/profile');
+  });
+
   it('needs_more_info then resubmit returns to pending; reject without reason is 400', async () => {
     const buyer = await registerUser(app, { role: 'buyer', buyer_type: 'shop' });
     await applyOrg(buyer.token);

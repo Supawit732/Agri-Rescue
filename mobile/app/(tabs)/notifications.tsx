@@ -30,6 +30,14 @@ function paramsOf(n: AppNotification): Record<string, string | number> {
 }
 
 
+/** donor_review rows created before the link fix point at /donor-apply even when approved. */
+function notificationTarget(n: AppNotification): string | null {
+  if (n.type === 'donor_review' && n.params.status === 'approved') {
+    return '/profile';
+  }
+  return n.link !== null && n.link.startsWith('/') ? n.link : null;
+}
+
 function isToday(iso: string): boolean {
   const d = new Date(iso);
   const now = new Date();
@@ -66,7 +74,7 @@ export default function NotificationsTab(): React.ReactElement {
 
   const openNotification = async (n: AppNotification): Promise<void> => {
     if (user === null) return;
-    const target = n.link !== null && n.link.startsWith('/') ? n.link : null;
+    const target = notificationTarget(n);
     if (n.read_at === null) {
       try {
         const res = await api.markNotificationRead(n.id);
@@ -108,7 +116,15 @@ export default function NotificationsTab(): React.ReactElement {
   const titleAndBody = (n: AppNotification): { title: string; body: string } => {
     const titleKey = n.title_key as keyof typeof t.notif;
     // title_key stored as notif.shop_new_lot — catalog uses t.notif.shop_new_lot
-    const key = n.title_key.startsWith('notif.') ? n.title_key.slice('notif.'.length) : n.title_key;
+    const baseKey = n.title_key.startsWith('notif.') ? n.title_key.slice('notif.'.length) : n.title_key;
+    const statusKey =
+      baseKey === 'donor_review' && typeof n.params.status === 'string'
+        ? `donor_review_${n.params.status}`
+        : null;
+    const key =
+      statusKey !== null && (t.notif as Record<string, string | undefined>)[statusKey] !== undefined
+        ? statusKey
+        : baseKey;
     const startIso =
       typeof n.params.pickup_slot_start === 'string' ? n.params.pickup_slot_start : null;
     const endIso = typeof n.params.pickup_slot_end === 'string' ? n.params.pickup_slot_end : null;

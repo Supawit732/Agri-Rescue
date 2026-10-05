@@ -1147,7 +1147,7 @@ donorsRouter.post(
       connection.release();
     }
     try {
-      await notifyUser(userId, 'donor_review', 'notif.donor_review', { status: 'approved' }, '/donor-apply');
+      await notifyUser(userId, 'donor_review', 'notif.donor_review', { status: 'approved' }, '/profile');
     } catch {
       // ignore
     }

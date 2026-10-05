@@ -131,6 +131,7 @@ interface UserRow extends RowDataPacket {
   donor_terms_version: string | null;
   donor_terms_accepted_at: string | Date | null;
   org_type: string | null;
+  org_reviewed_at?: string | Date | null;
   created_at?: string | Date;
   avatar?: string | null;
   password_hash?: string;
@@ -164,6 +165,7 @@ export interface PublicUser {
   donor_terms_version: string | null;
   donor_terms_accepted_at: string | null;
   org_type: string | null;
+  org_reviewed_at: string | null;
   donation_weekly_cap_kg: number | null;
   donation_remaining_kg: number | null;
   line_id: string | null;
@@ -232,6 +234,10 @@ export function toPublicUser(row: UserRow): PublicUser {
     donor_terms_accepted_at:
       termsAt === null || termsAt === undefined ? null : new Date(termsAt as string).toISOString(),
     org_type: row.org_type ?? null,
+    org_reviewed_at:
+      row.org_reviewed_at === null || row.org_reviewed_at === undefined
+        ? null
+        : new Date(row.org_reviewed_at as string).toISOString(),
     donation_weekly_cap_kg: capKg,
     donation_remaining_kg: capKg,
     line_id: row.line_id,
@@ -257,7 +263,7 @@ const USER_SELECT = `SELECT u.id, u.name, u.phone, u.email, u.role, u.can_sell, 
                             bp.org_status, bp.org_reject_reason, bp.org_name,
                             bp.application_kind, bp.draft_step, bp.contact_email, bp.purpose_th,
                             bp.recipient_groups_json, bp.requested_fields_json,
-                            bp.donor_terms_version, bp.donor_terms_accepted_at, bp.org_type
+                            bp.donor_terms_version, bp.donor_terms_accepted_at, bp.org_type, bp.org_reviewed_at
                      FROM users u
                      LEFT JOIN buyer_profiles bp ON bp.user_id = u.id`;
 
@@ -391,7 +397,7 @@ authRouter.post(
               bp.org_status, bp.org_reject_reason, bp.org_name,
               bp.application_kind, bp.draft_step, bp.contact_email, bp.purpose_th,
               bp.recipient_groups_json, bp.requested_fields_json,
-              bp.donor_terms_version, bp.donor_terms_accepted_at, bp.org_type
+              bp.donor_terms_version, bp.donor_terms_accepted_at, bp.org_type, bp.org_reviewed_at
        FROM users u
        LEFT JOIN buyer_profiles bp ON bp.user_id = u.id
        WHERE u.phone = ? OR u.phone = ? OR u.email = ?`,

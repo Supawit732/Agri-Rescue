@@ -65,6 +65,8 @@ export default function ProfileScreen(): React.ReactElement {
     );
   }
 
+  const isApprovedOrg = user.org_status === 'approved' && user.donor_tier === 'verified_org';
+
   const enableSell = async (): Promise<void> => {
     setBusy(true);
     setError(null);
@@ -429,14 +431,18 @@ export default function ProfileScreen(): React.ReactElement {
                 {t.profile.donorCardTitle} · {donorStatusLabel(user, t)}
               </Text>
               <Text style={styles.muted}>
-                {formatTemplate(t.profile.donorWeekUsage, {
-                  used: user.donation_remaining_kg != null && user.donation_weekly_cap_kg != null
-                    ? String(user.donation_weekly_cap_kg - user.donation_remaining_kg)
-                    : '0',
-                  cap: user.donation_weekly_cap_kg != null ? String(user.donation_weekly_cap_kg) : '—',
-                })}
+                {isApprovedOrg
+                  ? formatTemplate(t.profile.donorOrgQuota, {
+                      cap: user.donation_weekly_cap_kg != null ? String(user.donation_weekly_cap_kg) : '—',
+                    })
+                  : formatTemplate(t.profile.donorWeekUsage, {
+                      used: user.donation_remaining_kg != null && user.donation_weekly_cap_kg != null
+                        ? String(user.donation_weekly_cap_kg - user.donation_remaining_kg)
+                        : '0',
+                      cap: user.donation_weekly_cap_kg != null ? String(user.donation_weekly_cap_kg) : '—',
+                    })}
               </Text>
-              <Text style={styles.link}>{t.profile.donorUpgradeOrg}</Text>
+              {isApprovedOrg ? null : <Text style={styles.link}>{t.profile.donorUpgradeOrg}</Text>}
             </View>
             <Feather name="chevron-right" size={18} color={C.mute} />
           </View>

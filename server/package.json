@@ -13,6 +13,7 @@
     "seed:reset": "tsx src/db/resetLots.ts",
     "backfill:location-labels": "tsx scripts/backfillLocationLabels.ts",
     "backfill:audit": "tsx scripts/backfillAuditLog.ts",
+    "fix:approved-org-tier": "tsx scripts/fixApprovedOrgTier.ts",
     "backfill:seed-photos": "tsx scripts/backfillSeedPhotos.ts",
     "check:en-api": "tsx scripts/checkEnSystemApi.ts",
     "ai:smoke": "tsx scripts/aiSmoke.ts",
