@@ -8,6 +8,7 @@ import { DONOR_CONFIG, ORG_REVIEW_QUICK_REASONS } from '../domain/donorRules';
 import { DONOR_TERMS_TITLE, DONOR_TERMS_VERSION } from '../domain/donorTerms';
 import { unlockDonorSuspension, recordProofResult } from '../donors/donationService';
 import { asyncHandler } from '../http/asyncHandler';
+import { contentDisposition } from '../http/contentDisposition';
 import { HttpError } from '../http/errors';
 import { requireAuth, requireCapability } from '../middleware/auth';
 import { loadPublicUser } from './auth';
@@ -1264,7 +1265,7 @@ donorsRouter.get(
     }
     const buffer = await readPrivateUpload(String(doc.stored_name));
     res.setHeader('Content-Type', String(doc.mime));
-    res.setHeader('Content-Disposition', `inline; filename="${String(doc.original_name).replace(/"/g, '')}"`);
+    res.setHeader('Content-Disposition', contentDisposition(doc.original_name as string | null));
     res.send(buffer);
   }),
 );

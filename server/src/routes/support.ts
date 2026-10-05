@@ -3,6 +3,7 @@ import type { ResultSetHeader, RowDataPacket } from 'mysql2';
 import { z } from 'zod';
 import { pool } from '../db/pool';
 import { asyncHandler } from '../http/asyncHandler';
+import { contentDisposition } from '../http/contentDisposition';
 import { HttpError } from '../http/errors';
 import { requireAuth, requireCapability } from '../middleware/auth';
 import { supportCreateRateLimit } from '../middleware/supportRateLimit';
@@ -504,7 +505,7 @@ supportRouter.get(
     }
     const buffer = await readPrivateUpload(String(att.stored_name));
     res.setHeader('Content-Type', String(att.mime));
-    res.setHeader('Content-Disposition', `inline; filename="${String(att.original_name ?? 'file')}"`);
+    res.setHeader('Content-Disposition', contentDisposition(att.original_name as string | null));
     res.send(buffer);
   }),
 );

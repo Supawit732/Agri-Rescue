@@ -554,7 +554,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  addPhoto: { flexDirection: 'row', gap: 6, minHeight: 84, paddingHorizontal: 16 },
+  addPhoto: { flexDirection: 'row', gap: 6, minHeight: 44, paddingHorizontal: 12 },
   disabled: { opacity: 0.5 },
   photoChip: {
     flexDirection: 'row',

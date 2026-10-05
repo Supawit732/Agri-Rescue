@@ -13,10 +13,7 @@ interface Bucket {
 const buckets = new Map<string, Bucket>();
 
 function clientIp(req: Request): string {
-  const forwarded = req.header('x-forwarded-for');
-  if (forwarded !== undefined && forwarded.trim() !== '') {
-    return forwarded.split(',')[0]?.trim() || req.ip || 'unknown';
-  }
+  // req.ip honours the app's `trust proxy` setting; never read X-Forwarded-For directly (spoofable).
   return req.ip || req.socket.remoteAddress || 'unknown';
 }
 

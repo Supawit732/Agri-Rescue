@@ -127,6 +127,39 @@ describe('support tickets', () => {
     expect(guestFile.status).toBe(401);
   });
 
+  it('serves an attachment with a Thai filename (RFC 5987 Content-Disposition)', async () => {
+    const alice = await registerUser(app, { role: 'buyer', name: 'Alice' });
+    const created = await request(app)
+      .post('/api/support/tickets')
+      .set(bearer(alice.token))
+      .send({
+        topic: 'other',
+        details: 'รูปสินค้า',
+        reply_via: 'app',
+        attachments: [
+          {
+            filename: 'proof.png',
+            mime: 'image/png',
+            base64: tinyPng,
+            original_name: 'รูปสินค้า.jpg',
+          },
+        ],
+      });
+    expect(created.status).toBe(201);
+    const detail = await request(app)
+      .get(`/api/support/tickets/${created.body.ticket.id}`)
+      .set(bearer(alice.token));
+    const attachmentId = detail.body.messages[0].attachments[0].id;
+
+    const res = await request(app)
+      .get(`/api/support/tickets/${created.body.ticket.id}/attachments/${attachmentId}`)
+      .set(bearer(alice.token));
+    expect(res.status).toBe(200);
+    const cd = String(res.headers['content-disposition']);
+    expect(cd).toContain(`filename*=UTF-8''${encodeURIComponent('รูปสินค้า.jpg')}`);
+    expect(cd).toMatch(/^inline; filename="[\x20-\x7e]+"/);
+  });
+
   it('admin reply notifies user and can change status', async () => {
     const buyer = await registerUser(app, { role: 'buyer', buyer_type: 'shop' });
     const buyerOrderId = await bookOrder(buyer.token);
