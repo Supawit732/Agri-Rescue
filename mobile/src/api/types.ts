@@ -677,6 +677,8 @@ export type AppNotification = {
 export type SupportTopic =
   | 'order_pickup'
   | 'item_mismatch'
+  | 'weight_mismatch'
+  | 'payment'
   | 'account_login'
   | 'donation'
   | 'other';

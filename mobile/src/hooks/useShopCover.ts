@@ -1,10 +1,9 @@
 import { useCallback, useState } from 'react';
-import { Alert, Platform } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../context/AuthContext';
 import { useI18n } from '../i18n';
 import { confirmAlert } from '../lib/confirm';
 import { resizeToBase64 } from '../lib/media';
+import { pickImages } from '../lib/pickImages';
 import type { Shop } from '../api/types';
 
 /** Banner is ~3:1; 1200px wide stays well under the 1MB server limit at jpeg 0.82. */
@@ -39,44 +38,33 @@ export function useShopCover(onChanged: (shop: Shop) => void): {
     [onChanged, t],
   );
 
-  const uploadFrom = useCallback(
-    (launcher: typeof ImagePicker.launchCameraAsync): Promise<void> =>
-      run(async () => {
-        const permission =
-          launcher === ImagePicker.launchCameraAsync
-            ? await ImagePicker.requestCameraPermissionsAsync()
-            : await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (!permission.granted) {
-          setError(t.profile.photoDenied);
-          return null;
-        }
-        const picked = await launcher({
-          mediaTypes: ['images'],
-          allowsEditing: true,
-          aspect: COVER_ASPECT,
-          quality: 0.9,
-        });
-        const asset = picked.canceled ? undefined : picked.assets[0];
-        if (asset === undefined) return null;
+  const change = useCallback((): void => {
+    void (async () => {
+      // Opens the file picker directly on web, the camera/library chooser on native.
+      const picked = await pickImages({
+        labels: {
+          title: t.shop.coverChange,
+          takePhoto: t.sell.takePhoto,
+          library: t.sell.photoLibrary,
+          cancel: t.common.cancel,
+        },
+        allowsEditing: true,
+        aspect: COVER_ASPECT,
+        quality: 0.9,
+      });
+      if (picked.status === 'denied') {
+        setError(t.profile.photoDenied);
+        return;
+      }
+      const asset = picked.status === 'picked' ? picked.assets[0] : undefined;
+      if (asset === undefined) return;
+      await run(async () => {
         const prepared = await resizeToBase64(asset.uri, asset.width, asset.height, COVER_MAX_EDGE);
         await api.ensureMyShop();
         return api.uploadShopCover({ base64: prepared.base64, mime: prepared.mime });
-      }),
-    [api, run, t],
-  );
-
-  const change = useCallback((): void => {
-    // react-native-web's Alert.alert is a no-op, so go straight to the file picker there.
-    if (Platform.OS === 'web') {
-      void uploadFrom(ImagePicker.launchImageLibraryAsync);
-      return;
-    }
-    Alert.alert(t.shop.coverChange, undefined, [
-      { text: t.sell.takePhoto, onPress: () => void uploadFrom(ImagePicker.launchCameraAsync) },
-      { text: t.sell.photoLibrary, onPress: () => void uploadFrom(ImagePicker.launchImageLibraryAsync) },
-      { text: t.common.cancel, style: 'cancel' },
-    ]);
-  }, [t, uploadFrom]);
+      });
+    })();
+  }, [api, run, t]);
 
   const remove = useCallback((): void => {
     void confirmAlert({

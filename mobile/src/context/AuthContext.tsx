@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { API_BASE_URL } from '../api/config';
 import { AI_OR_UPLOAD_TIMEOUT_MS, apiRequest, setUnauthorizedHandler } from '../api/client';
 import { clearAppMode, clearToken, loadAppMode, loadToken, saveAppMode, saveToken } from '../api/storage';
 import type {
@@ -187,6 +188,11 @@ interface Api {
   }) => Promise<{ tickets: SupportTicket[]; unread_count: number }>;
   createSupportTicket: (input: SupportCreateInput) => Promise<{ ticket: SupportTicket }>;
   getSupportTicket: (id: number) => Promise<SupportTicketDetail>;
+  /** Image source (url + bearer header) for a private support attachment. */
+  supportAttachmentSource: (
+    ticketId: number,
+    attachmentId: number,
+  ) => { uri: string; headers: Record<string, string> };
   replySupportTicket: (
     id: number,
     body: string,
@@ -581,6 +587,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
         authed<{ ticket: SupportTicket }>('POST', '/api/support/tickets', input, AI_OR_UPLOAD_TIMEOUT_MS),
       getSupportTicket: (id) =>
         authed<SupportTicketDetail>('GET', `/api/support/tickets/${id}`),
+      supportAttachmentSource: (ticketId, attachmentId) => ({
+        uri: `${API_BASE_URL}/api/support/tickets/${ticketId}/attachments/${attachmentId}`,
+        headers: (token !== null ? { Authorization: `Bearer ${token}` } : {}) as Record<string, string>,
+      }),
       replySupportTicket: (id, body, attachments) =>
         authed<{ message: SupportMessage }>(
           'POST',

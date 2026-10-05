@@ -11,7 +11,20 @@ import { readPrivateUpload, savePrivateUpload } from '../storage/privateUploads'
 
 export const supportRouter = Router();
 
-const topicSchema = z.enum(['order_pickup', 'item_mismatch', 'account_login', 'donation', 'other']);
+const topicSchema = z.enum([
+  'order_pickup',
+  'item_mismatch',
+  'weight_mismatch',
+  'payment',
+  'account_login',
+  'donation',
+  'other',
+]);
+type SupportTopic = z.infer<typeof topicSchema>;
+
+/** Order-related topics must name the order; account/login tickets never carry one. */
+const ORDER_REQUIRED_TOPICS: readonly SupportTopic[] = ['order_pickup', 'item_mismatch', 'weight_mismatch'];
+const ORDER_HIDDEN_TOPICS: readonly SupportTopic[] = ['account_login'];
 const statusSchema = z.enum(['open', 'in_progress', 'closed']);
 const replyViaSchema = z.enum(['app', 'phone']);
 const attachmentSchema = z.object({
@@ -27,6 +40,10 @@ function ticketTopicLabel(topic: string): string {
       return 'คำสั่งซื้อ / รับของ';
     case 'item_mismatch':
       return 'ของไม่ตรงตามรูป';
+    case 'weight_mismatch':
+      return 'น้ำหนักไม่ตรง';
+    case 'payment':
+      return 'การชำระเงิน';
     case 'account_login':
       return 'บัญชี / เข้าสู่ระบบ';
     case 'donation':
@@ -171,6 +188,14 @@ supportRouter.post(
       .parse(req.body);
 
     const userId = req.auth?.id ?? 0;
+    if (ORDER_HIDDEN_TOPICS.includes(body.topic)) {
+      body.order_id = null;
+    }
+    if (ORDER_REQUIRED_TOPICS.includes(body.topic) && body.order_id == null) {
+      throw new HttpError(400, 'VALIDATION', 'กรุณาเลือกคำสั่งซื้อที่เกี่ยวข้อง', {
+        order_id: 'กรุณาเลือกคำสั่งซื้อที่เกี่ยวข้อง',
+      });
+    }
     if (body.order_id != null) {
       const [orders] = await pool.query<RowDataPacket[]>(
         `SELECT id FROM orders WHERE id = ? AND (buyer_id = ? OR EXISTS (
