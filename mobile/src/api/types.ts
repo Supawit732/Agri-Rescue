@@ -105,6 +105,7 @@ export interface OrgChecklist {
 }
 
 export interface OrgApplication {
+  reviewed_at?: string | null;
   user_id: number;
   name: string;
   phone: string;
@@ -573,6 +574,22 @@ export interface AdminInboxItem {
   updated_at: string;
   link: string;
   badge?: string | null;
+}
+
+export type AdminOrgStatusFilter = 'all' | 'pending' | 'needs_more_info' | 'approved' | 'rejected';
+
+export interface AdminOrgListItem {
+  user_id: number;
+  org_name: string;
+  org_type: string | null;
+  org_status: string;
+  decided_at: string | null;
+  created_at: string;
+}
+
+export interface AdminOrgListPayload {
+  total: number;
+  items: AdminOrgListItem[];
 }
 
 export interface AdminInboxPayload {

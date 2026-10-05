@@ -10,13 +10,13 @@ import { C } from '../../src/theme';
 export default function AdminOrgsScreen(): React.ReactElement {
   const { t } = useI18n();
   const router = useRouter();
-  const params = useLocalSearchParams<{ user?: string }>();
+  const params = useLocalSearchParams<{ user?: string; from?: string }>();
   const parsed = params.user !== undefined ? Number(params.user) : NaN;
   const [orgName, setOrgName] = useState<string | null>(null);
   const userId = Number.isFinite(parsed) ? parsed : undefined;
   return (
     <Screen fullWidth>
-      <StackHeader title={orgName ?? t.admin.queueOrg} onBack={() => router.navigate('/admin/inbox' as never)} />
+      <StackHeader title={orgName ?? t.admin.queueOrg} onBack={() => router.navigate((params.from === 'list' ? '/admin/org-list' : '/admin/inbox') as never)} />
       <OrgApplicationsPanel userId={userId} onOrgName={setOrgName} />
     </Screen>
   );

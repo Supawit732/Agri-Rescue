@@ -183,7 +183,12 @@ export function OrgApplicationsPanel({
   const [checklists, setChecklists] = useState<Record<number, OrgChecklist>>({});
   const [error, setError] = useState<string | null>(null);
 
-  const { data, loading, error: loadError, reload } = useApiData(() => api.listOrgApplications(), [api, refreshKey]);
+  // With a userId (opened from inbox or the full list) load that one application of any status;
+  // otherwise the open-queue list.
+  const { data, loading, error: loadError, reload } = useApiData(
+    async () => (userId === undefined ? api.listOrgApplications() : [await api.getOrgApplication(userId)]),
+    [api, refreshKey, userId],
+  );
   const bump = useCallback(() => setRefreshKey((v) => v + 1), []);
 
   useEffect(() => {
@@ -305,6 +310,8 @@ export function OrgApplicationsPanel({
                   docs_not_expired: false,
                 };
               const byCat = entry.documents_by_category ?? {};
+              // Approved / rejected applications are view-only: the server only accepts decisions on open ones.
+              const readOnly = entry.org_status !== 'pending' && entry.org_status !== 'needs_more_info';
               return (
                 <Card key={entry.user_id}>
                   <Text style={adminPanelStyles.name}>{entry.org_name ?? entry.contact_name ?? entry.name}</Text>
@@ -318,6 +325,14 @@ export function OrgApplicationsPanel({
                   <Text style={adminPanelStyles.meta}>
                     {formatTemplate(t.admin.applicant, { name: entry.name, phone: entry.phone })}
                   </Text>
+                  {readOnly ? (
+                    <Text style={adminPanelStyles.meta}>
+                      {entry.reviewed_at != null
+                        ? `${formatTemplate(t.admin.orgDecidedAt, { date: formatDateTime(entry.reviewed_at) })} · `
+                        : ''}
+                      {t.admin.orgDecidedReadOnly}
+                    </Text>
+                  ) : null}
 
                   <Text style={adminPanelStyles.section}>{t.admin.sectionOrgIndividual}</Text>
                   {entry.sections?.organization ? (
@@ -391,6 +406,7 @@ export function OrgApplicationsPanel({
                       key={key}
                       accessibilityRole="checkbox"
                       accessibilityState={{ checked: checklist[key] }}
+                      disabled={readOnly}
                       onPress={() => toggleCheck(entry.user_id, key)}
                       style={adminPanelStyles.checkRow}
                     >
@@ -400,13 +416,15 @@ export function OrgApplicationsPanel({
                       <Text style={adminPanelStyles.checkLabel}>{label}</Text>
                     </Pressable>
                   ))}
-                  <View style={adminPanelStyles.slotWide}>
-                    <SecondaryButton
-                      label={t.admin.saveChecklist}
-                      onPress={() => void saveChecklist(entry.user_id)}
-                      disabled={actingId !== null}
-                    />
-                  </View>
+                  {readOnly ? null : (
+                    <View style={adminPanelStyles.slotWide}>
+                      <SecondaryButton
+                        label={t.admin.saveChecklist}
+                        onPress={() => void saveChecklist(entry.user_id)}
+                        disabled={actingId !== null}
+                      />
+                    </View>
+                  )}
 
                   {(entry.review_logs ?? []).length > 0 ? (
                     <>
@@ -420,7 +438,7 @@ export function OrgApplicationsPanel({
                     </>
                   ) : null}
 
-                  {actionMode?.userId === entry.user_id ? (
+                  {readOnly ? null : actionMode?.userId === entry.user_id ? (
                     <>
                       <Field
                         label={actionMode.kind === 'reject' ? t.admin.reasonReject : t.admin.reasonMoreInfo}
