@@ -982,6 +982,8 @@ export type Messages = {
     removePhoto: string;
     photoCount: string;
     photoInvalidType: string;
+    ticketTitle: string;
+    reportedBy: string;
     viewPhoto: string;
     newTicket: string;
     replyWithin: string;

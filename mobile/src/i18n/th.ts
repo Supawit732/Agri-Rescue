@@ -979,6 +979,8 @@ const th: Messages = {
     removePhoto: 'ลบรูป',
     photoCount: '{count} / {max} รูป',
     photoInvalidType: 'แนบได้เฉพาะรูป JPEG, PNG หรือ WebP',
+    ticketTitle: 'เรื่อง #{id}',
+    reportedBy: 'ผู้แจ้ง',
     viewPhoto: 'ดูรูป',
     newTicket: 'แจ้งเรื่องใหม่',
     replyWithin: 'ทีมผู้ดูแลตอบกลับภายใน 1 วันทำการ',

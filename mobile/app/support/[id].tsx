@@ -2,7 +2,9 @@ import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
+  Linking,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -46,6 +48,9 @@ export default function SupportTicketScreen(): React.ReactElement {
 
   const isAdmin = user?.is_admin === true;
   const ticket = data?.ticket;
+  const headerTitle = Number.isFinite(ticketId)
+    ? formatTemplate(t.support.ticketTitle, { id: String(ticketId) })
+    : t.support.title;
 
   const sendReply = async (): Promise<void> => {
     if (reply.trim().length === 0) {
@@ -107,7 +112,7 @@ export default function SupportTicketScreen(): React.ReactElement {
 
   return (
     <Screen>
-      <StackHeader title={t.support.title} onBack={leave} />
+      <StackHeader title={headerTitle} onBack={leave} />
       <ScrollView ref={scrollRef} contentContainerStyle={styles.body}>
         {loading || ticket === undefined ? (
           <Text style={styles.muted}>{t.common.loading}</Text>
@@ -141,8 +146,24 @@ export default function SupportTicketScreen(): React.ReactElement {
                 </Text>
               ) : null}
               <Text style={styles.meta}>{formatDateTime(ticket.created_at)}</Text>
-              {ticket.user_name != null && isAdmin ? (
-                <Text style={styles.meta}>{ticket.user_name}</Text>
+              {isAdmin && (ticket.user_name != null || ticket.user_phone != null) ? (
+                <Text style={styles.meta}>
+                  {t.support.reportedBy}: {ticket.user_name ?? ''}
+                  {ticket.user_phone != null ? (
+                    <>
+                      {ticket.user_name != null ? ' · ' : ''}
+                      <Text
+                        style={styles.phoneLink}
+                        accessibilityRole="link"
+                        onPress={() => {
+                          if (Platform.OS !== 'web') void Linking.openURL(`tel:${ticket.user_phone}`);
+                        }}
+                      >
+                        {ticket.user_phone}
+                      </Text>
+                    </>
+                  ) : null}
+                </Text>
               ) : null}
             </View>
 
@@ -158,7 +179,6 @@ export default function SupportTicketScreen(): React.ReactElement {
                   {msg.sender_role === 'admin' ? t.support.adminInbox : ticket.user_name ?? ''}
                 </Text>
                 <Text style={styles.bubbleBody}>{msg.body}</Text>
-                <Text style={styles.bubbleTime}>{formatDateTime(msg.created_at)}</Text>
                 {msg.attachments.length > 0 ? (
                   <View style={styles.attachRow}>
                     {msg.attachments.map((att) => (
@@ -177,6 +197,7 @@ export default function SupportTicketScreen(): React.ReactElement {
                     ))}
                   </View>
                 ) : null}
+                <Text style={styles.bubbleTime}>{formatDateTime(msg.created_at)}</Text>
               </View>
             ))}
 
@@ -271,22 +292,24 @@ const styles = StyleSheet.create({
     borderColor: C.line,
     borderTopLeftRadius: 4,
     alignSelf: 'flex-start',
-    maxWidth: '92%',
+    maxWidth: '85%',
+    minWidth: '60%',
   },
   bubbleAdmin: {
     backgroundColor: C.leafSoft,
     borderColor: C.lineStrong,
     borderTopRightRadius: 4,
     alignSelf: 'flex-end',
-    maxWidth: '92%',
+    maxWidth: '85%',
+    minWidth: '60%',
   },
   bubbleRole: { fontSize: 12, fontWeight: '600', color: C.leaf, fontFamily: fonts.bodySemi },
   bubbleBody: { fontSize: 14, lineHeight: 21, color: C.ink, fontFamily: fonts.body },
-  bubbleTime: { fontSize: 11, color: C.mute, fontFamily: fonts.body },
+  bubbleTime: { fontSize: 11, alignSelf: 'flex-end', color: C.mute, fontFamily: fonts.body },
   attachThumb: {
-    width: 88,
-    height: 88,
-    borderRadius: radius.control,
+    width: 128,
+    height: 128,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: C.line,
     backgroundColor: C.leafSoft,
@@ -299,7 +322,8 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   viewerImage: { width: '100%', height: '100%' },
-  attachRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  attachRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  phoneLink: { color: C.leafDeep, textDecorationLine: 'underline' },
   attachChip: {
     flexDirection: 'row',
     alignItems: 'center',
