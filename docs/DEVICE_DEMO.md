@@ -18,7 +18,7 @@ cp .env.example .env   # ถ้ายังไม่มี
 npm install
 npm run migrate
 npm run seed
-npm run seed:demo      # ประวัติ 14 วันสำหรับแดชบอร์ด (รันซ้ำได้)
+npm run seed:demo      # ประวัติ 14 วันสำหรับแดชบอร์ด + ใบสมัครองค์กร Demo Community Kitchen (0800000021) ที่รอ admin อนุมัติ (รันซ้ำได้ = รีเซ็ตเป็นรออนุมัติ)
 npm run dev
 ```
 
@@ -106,7 +106,8 @@ npx expo start
 
 ## เช็กลิสต์ก่อนขึ้นเวที
 
-- [ ] `npm run migrate` + `seed` + `seed:demo` แล้ว  
+- [ ] `npm run migrate` + `seed` + `seed:demo` แล้ว (รันซ้ำก่อนเดโมเพื่อให้มีใบสมัครองค์กรรออนุมัติสำหรับขั้นตอน admin)  
+- [ ] admin `0800000005` เห็น Demo Community Kitchen ใน Inbox / คำขอองค์กร สถานะรออนุมัติ  
 - [ ] API log แสดง `0.0.0.0`  
 - [ ] `EXPO_PUBLIC_API_URL` ชี้ IP Mac ปัจจุบัน (IP เปลี่ยนเมื่อสลับเครือข่าย)  
 - [ ] Login เกษตรกร `0800000001` / ผู้ซื้อ `0800000011` / admin `0800000005` ได้จากมือถือ  
