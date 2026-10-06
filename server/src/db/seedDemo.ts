@@ -3,15 +3,32 @@
  * Prerequisite: `npm run migrate` and `npm run seed` (creates farmers/crops/plots/open lots).
  * Marker: harvest_lots.photo_url = 'seed:demo' — re-running deletes prior demo-tagged rows first.
  */
+import bcrypt from 'bcryptjs';
+import { mkdir, writeFile } from 'fs/promises';
+import path from 'path';
 import type { ResultSetHeader, RowDataPacket } from 'mysql2';
 import type { PoolConnection } from 'mysql2/promise';
 import { pool } from './pool';
-import { CO2E_PER_KG, crops, farmers, buyers } from './seedData';
+import { CO2E_PER_KG, DEMO_PASSWORD, crops, farmers, buyers } from './seedData';
 import { seed } from './seed';
 import { round2 } from '../delivery/depot';
 import { listPickupSlots } from '../domain/pickupSlots';
+import { DONOR_TERMS_VERSION } from '../domain/donorTerms';
+import { PRIVATE_UPLOADS_DIR } from '../storage/privateUploads';
 
 const DEMO_MARKER = 'seed:demo';
+
+/** Charity account whose organization application is always reset to pending for the admin demo. */
+export const DEMO_PENDING_ORG = {
+  name: 'Demo Community Kitchen',
+  phone: '0800000021',
+  lat: 13.652,
+  lng: 100.625,
+} as const;
+
+// 1x1 transparent PNG: small placeholder the admin review screen can render.
+const PLACEHOLDER_PNG_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 
 function toMysqlDate(iso: string | null | undefined): string | null {
   if (iso == null) return null;
@@ -45,6 +62,83 @@ async function clearPreviousDemo(connection: PoolConnection): Promise<void> {
   await connection.query(`DELETE FROM harvest_lots WHERE id IN (${placeholders})`, lotIds);
 }
 
+/**
+ * Creates/reuses the demo charity and puts its application back into the state the formal
+ * donor-apply form (POST /api/donors/org-applications, organization kind) leaves it in: pending.
+ * Only touches rows belonging to this demo user.
+ */
+async function resetPendingOrgApplication(connection: PoolConnection): Promise<void> {
+  const [existing] = await connection.query<RowDataPacket[]>('SELECT id FROM users WHERE phone = ?', [
+    DEMO_PENDING_ORG.phone,
+  ]);
+  let userId: number;
+  if (existing[0] === undefined) {
+    const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
+    const [res] = await connection.query<ResultSetHeader>(
+      `INSERT INTO users (name, phone, password_hash, role, can_sell, can_buy, is_admin, line_id, lat, lng)
+       VALUES (?, ?, ?, 'buyer', 0, 1, 0, NULL, ?, ?)`,
+      [DEMO_PENDING_ORG.name, DEMO_PENDING_ORG.phone, passwordHash, DEMO_PENDING_ORG.lat, DEMO_PENDING_ORG.lng],
+    );
+    userId = res.insertId;
+  } else {
+    userId = Number(existing[0].id);
+  }
+
+  // Reset: drop prior review history, audit rows, notifications and documents of this user only.
+  await connection.query('DELETE FROM org_review_logs WHERE user_id = ?', [userId]);
+  await connection.query(`DELETE FROM admin_audit_log WHERE target_type = 'org' AND target_id = ?`, [
+    String(userId),
+  ]);
+  await connection.query(`DELETE FROM notifications WHERE user_id = ? AND type = 'donor_review'`, [userId]);
+  await connection.query('DELETE FROM org_application_docs WHERE user_id = ?', [userId]);
+  await connection.query('DELETE FROM buyer_profiles WHERE user_id = ?', [userId]);
+
+  await connection.query(
+    `INSERT INTO buyer_profiles (
+       user_id, buyer_type, charity_approved, donor_tier, beneficiary_count, distribution_mode,
+       org_name, org_type, registered, registration_number, registered_address,
+       contact_name, contact_title, contact_phone, contact_email, org_lat, org_lng,
+       recipient_groups_json, purpose_th, redistribute_place, redistribute_frequency,
+       application_kind, org_status, draft_step, donor_terms_version, donor_terms_accepted_at,
+       org_reject_reason, requested_fields_json, org_reviewed_at
+     ) VALUES (
+       ?, 'charity', 0, NULL, 60, 'redistribute',
+       ?, 'community_kitchen', 1, 'DEMO-0000021', '99 หมู่ 3 ต.บางนา อ.บางนา กรุงเทพฯ 10260',
+       'Demo Coordinator', 'ผู้ประสานงาน', ?, 'kitchen@demo.example', ?, ?,
+       ?, NULL, 'ครัวชุมชนบางนา ซอย 3', 'ทุกวันจันทร์และพฤหัสบดี',
+       'organization', 'pending', NULL, ?, UTC_TIMESTAMP(),
+       NULL, NULL, NULL
+     )`,
+    [
+      userId,
+      DEMO_PENDING_ORG.name,
+      DEMO_PENDING_ORG.phone,
+      DEMO_PENDING_ORG.lat,
+      DEMO_PENDING_ORG.lng,
+      JSON.stringify(['community', 'elderly']),
+      DONOR_TERMS_VERSION,
+    ],
+  );
+
+  // Deterministic file names so re-runs overwrite instead of piling up in private_uploads.
+  const buffer = Buffer.from(PLACEHOLDER_PNG_BASE64, 'base64');
+  const docs = [
+    { category: 'community_cert', original: 'demo-community-cert.png' },
+    { category: 'site_photo', original: 'demo-site-photo.png' },
+  ] as const;
+  for (const doc of docs) {
+    const storedName = `${userId}/seed-demo-${doc.category}.png`;
+    const fullPath = path.join(PRIVATE_UPLOADS_DIR, storedName);
+    await mkdir(path.dirname(fullPath), { recursive: true });
+    await writeFile(fullPath, buffer);
+    await connection.query(
+      `INSERT INTO org_application_docs (user_id, stored_name, original_name, mime, doc_category, size_bytes)
+       VALUES (?, ?, ?, 'image/png', ?, ?)`,
+      [userId, storedName, doc.original, doc.category, buffer.length],
+    );
+  }
+}
+
 function dayAgo(days: number, hourUtc = 8): Date {
   const d = new Date();
   d.setUTCHours(hourUtc, 0, 0, 0);
@@ -60,6 +154,7 @@ export async function seedDemo(options?: { skipBaseSeed?: boolean }): Promise<vo
   try {
     await connection.beginTransaction();
     await clearPreviousDemo(connection);
+    await resetPendingOrgApplication(connection);
 
     const farmerIds = new Map<string, number>();
     for (const farmer of farmers) {
