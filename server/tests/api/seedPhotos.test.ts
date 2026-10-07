@@ -3,7 +3,7 @@ import path from 'path';
 import request from 'supertest';
 import type { ResultSetHeader, RowDataPacket } from 'mysql2';
 import { pool } from '../../src/db/pool';
-import { crops, SEED_CROP_PHOTOS } from '../../src/db/seedData';
+import { crops, SEED_CROP_PHOTOS, SEED_PHOTO_VERSION } from '../../src/db/seedData';
 import { seed } from '../../src/db/seed';
 import { seedDemo } from '../../src/db/seedDemo';
 import { testApp } from '../helpers';
@@ -48,9 +48,9 @@ describe('seed crop photos', () => {
       expect(Object.keys(SEED_CROP_PHOTOS)).toContain(crop.key);
     }
     for (const url of Object.values(SEED_CROP_PHOTOS)) {
-      const file = path.basename(url ?? '');
+      const file = path.basename((url ?? '').split('?')[0]!);
       const full = path.join(SEED_PHOTOS_DIR, file);
-      expect(url).toBe(`/uploads/seed/${file}`);
+      expect(url).toBe(`/uploads/seed/${file}?v=${SEED_PHOTO_VERSION}`);
       expect(fs.statSync(full).size).toBeLessThan(150_000);
       expect(fs.readFileSync(full).subarray(0, 2).toString('hex')).toBe('ffd8');
       expect(credits).toContain(`\`${file}\``);
@@ -115,5 +115,42 @@ describe('seed crop photos', () => {
     const expected = SEED_CROP_PHOTOS[crop.key];
     expect(res.body.lot.photos[0]).toBe(expected);
     await request(app).get(res.body.lot.photos[0]).expect(200);
+  });
+
+  it('serves the versioned URL (query string ignored by the static mount) as a JPEG', async () => {
+    for (const url of Object.values(SEED_CROP_PHOTOS)) {
+      expect(url).toContain(`?v=${SEED_PHOTO_VERSION}`);
+      const res = await request(app).get(String(url)).expect(200);
+      expect(res.headers['content-type']).toMatch(/image\/jpeg/);
+    }
+  });
+
+  it('upgrades old unversioned seed URLs on seed, and leaves user uploads alone', async () => {
+    await seed();
+    const mangoNew = SEED_CROP_PHOTOS.mango!;
+    const mangoOld = mangoNew.split('?')[0]!;
+    const userUpload = '/uploads/lots/abc123.jpg';
+    const [mango] = await pool.query<RowDataPacket[]>(
+      `SELECT id FROM harvest_lots WHERE photo_url = ? LIMIT 1`,
+      [mangoNew],
+    );
+    const [other] = await pool.query<RowDataPacket[]>(
+      `SELECT id FROM harvest_lots WHERE photo_url <> ? ORDER BY id LIMIT 1`,
+      [mangoNew],
+    );
+    const mangoId = Number(mango[0]!.id);
+    const otherId = Number(other[0]!.id);
+    await pool.query('UPDATE harvest_lots SET photo_url = ? WHERE id = ?', [mangoOld, mangoId]);
+    await pool.query('UPDATE harvest_lots SET photo_url = ? WHERE id = ?', [userUpload, otherId]);
+
+    await seed();
+
+    const [after] = await pool.query<RowDataPacket[]>(
+      'SELECT id, photo_url FROM harvest_lots WHERE id IN (?, ?)',
+      [mangoId, otherId],
+    );
+    const byId = new Map(after.map((r) => [Number(r.id), String(r.photo_url)]));
+    expect(byId.get(mangoId)).toBe(mangoNew);
+    expect(byId.get(otherId)).toBe(userUpload);
   });
 });

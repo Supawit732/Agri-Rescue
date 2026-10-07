@@ -492,6 +492,13 @@ export const crops = [
 export type CropKey = (typeof crops)[number]['key'];
 
 /**
+ * Cache-busting version appended to every seed photo URL. Bump it whenever a file in
+ * server/assets/seed-photos/ is replaced under the same name, so clients holding the old
+ * image (served with a 7d max-age) fetch the new one. The static mount ignores the query.
+ */
+export const SEED_PHOTO_VERSION = 2;
+
+/**
  * Real crop photos for the crops seeded lots use (all of seed's lots and seed:demo's 14
  * crops), so a fresh demo shows produce instead of the crop-tinted placeholder. Source files
  * are committed at server/assets/seed-photos/ (unlike server/uploads/, which holds real user
@@ -501,20 +508,20 @@ export type CropKey = (typeof crops)[number]['key'];
  * crops without an entry keep the placeholder.
  */
 export const SEED_CROP_PHOTOS: Partial<Record<CropKey, string>> = {
-  mango: '/uploads/seed/mango.jpg',
-  banana: '/uploads/seed/banana.jpg',
-  tomato: '/uploads/seed/tomato.jpg',
-  'morning-glory': '/uploads/seed/morning-glory.jpg',
-  lime: '/uploads/seed/lime.jpg',
-  durian: '/uploads/seed/durian.jpg',
-  pomelo: '/uploads/seed/pomelo.jpg',
-  longan: '/uploads/seed/longan.jpg',
-  rambutan: '/uploads/seed/rambutan.jpg',
-  guava: '/uploads/seed/guava.jpg',
-  pineapple: '/uploads/seed/pineapple.jpg',
-  'custard-apple': '/uploads/seed/custard-apple.jpg',
-  'chinese-kale': '/uploads/seed/chinese-kale.jpg',
-  'napa-cabbage': '/uploads/seed/napa-cabbage.jpg',
+  mango: `/uploads/seed/mango.jpg?v=${SEED_PHOTO_VERSION}`,
+  banana: `/uploads/seed/banana.jpg?v=${SEED_PHOTO_VERSION}`,
+  tomato: `/uploads/seed/tomato.jpg?v=${SEED_PHOTO_VERSION}`,
+  'morning-glory': `/uploads/seed/morning-glory.jpg?v=${SEED_PHOTO_VERSION}`,
+  lime: `/uploads/seed/lime.jpg?v=${SEED_PHOTO_VERSION}`,
+  durian: `/uploads/seed/durian.jpg?v=${SEED_PHOTO_VERSION}`,
+  pomelo: `/uploads/seed/pomelo.jpg?v=${SEED_PHOTO_VERSION}`,
+  longan: `/uploads/seed/longan.jpg?v=${SEED_PHOTO_VERSION}`,
+  rambutan: `/uploads/seed/rambutan.jpg?v=${SEED_PHOTO_VERSION}`,
+  guava: `/uploads/seed/guava.jpg?v=${SEED_PHOTO_VERSION}`,
+  pineapple: `/uploads/seed/pineapple.jpg?v=${SEED_PHOTO_VERSION}`,
+  'custard-apple': `/uploads/seed/custard-apple.jpg?v=${SEED_PHOTO_VERSION}`,
+  'chinese-kale': `/uploads/seed/chinese-kale.jpg?v=${SEED_PHOTO_VERSION}`,
+  'napa-cabbage': `/uploads/seed/napa-cabbage.jpg?v=${SEED_PHOTO_VERSION}`,
 };
 
 export interface CropSeasonFactor {
