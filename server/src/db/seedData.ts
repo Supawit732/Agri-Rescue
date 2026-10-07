@@ -492,17 +492,29 @@ export const crops = [
 export type CropKey = (typeof crops)[number]['key'];
 
 /**
- * Sample thumbnails for the crops seeded lots use, so a fresh demo shows real photos
- * instead of the crop-tinted placeholder. Source files are committed at
- * server/assets/seed-photos/ (unlike server/uploads/, which holds real user uploads and
- * is gitignored) and served at this same /uploads/seed/... path by a dedicated static
- * mount in app.ts. Add an entry here + the matching file to give another crop a seed photo.
+ * Real crop photos for the crops seeded lots use (all of seed's lots and seed:demo's 14
+ * crops), so a fresh demo shows produce instead of the crop-tinted placeholder. Source files
+ * are committed at server/assets/seed-photos/ (unlike server/uploads/, which holds real user
+ * uploads and is gitignored) and served at this same /uploads/seed/... path by a dedicated
+ * static mount in app.ts. Author and licence of every file: server/assets/seed-photos/CREDITS.md.
+ * Add an entry here + the matching file + a CREDITS.md row to give another crop a seed photo;
+ * crops without an entry keep the placeholder.
  */
 export const SEED_CROP_PHOTOS: Partial<Record<CropKey, string>> = {
   mango: '/uploads/seed/mango.jpg',
   banana: '/uploads/seed/banana.jpg',
   tomato: '/uploads/seed/tomato.jpg',
   'morning-glory': '/uploads/seed/morning-glory.jpg',
+  lime: '/uploads/seed/lime.jpg',
+  durian: '/uploads/seed/durian.jpg',
+  pomelo: '/uploads/seed/pomelo.jpg',
+  longan: '/uploads/seed/longan.jpg',
+  rambutan: '/uploads/seed/rambutan.jpg',
+  guava: '/uploads/seed/guava.jpg',
+  pineapple: '/uploads/seed/pineapple.jpg',
+  'custard-apple': '/uploads/seed/custard-apple.jpg',
+  'chinese-kale': '/uploads/seed/chinese-kale.jpg',
+  'napa-cabbage': '/uploads/seed/napa-cabbage.jpg',
 };
 
 export interface CropSeasonFactor {

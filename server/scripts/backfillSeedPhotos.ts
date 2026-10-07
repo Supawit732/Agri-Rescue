@@ -4,7 +4,7 @@ import { crops, SEED_CROP_PHOTOS } from '../src/db/seedData';
 
 /**
  * Set harvest_lots.photo_url for existing lots of the crops in SEED_CROP_PHOTOS
- * (mango/banana/tomato/morning glory), without touching anything else: no other lot, no
+ * (see seedData.ts), without touching anything else: no other lot, no
  * photo_url that's already set, no user/plot/order/payment/pricing data. Safe to re-run —
  * only fills rows currently NULL. Use this on a deployment with real data you don't want
  * `npm run seed` or `npm run seed:reset` anywhere near.
