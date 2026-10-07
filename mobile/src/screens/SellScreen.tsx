@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Image,
@@ -13,6 +13,13 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withTiming,
+  type SharedValue,
+} from 'react-native-reanimated';
 import { confirmAlert } from '../lib/confirm';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -20,6 +27,7 @@ import { pickImages } from '../lib/pickImages';
 import { ApiError } from '../api/client';
 import { ripenessLabel } from '../constants';
 import { AiPhotoInput } from '../components/AiPhotoInput';
+import { ScreenHeader } from '../components/ScreenHeader';
 import { ChipGroup, FormField, useFieldScroll } from '../components/form';
 import {
   Badge,
@@ -37,6 +45,7 @@ import {
 import { LocationPicker, type LatLng } from '../components/LocationPicker';
 import { useAuth } from '../context/AuthContext';
 import { useApiData } from '../hooks/useApiData';
+import { useAutoHideFooter } from '../hooks/useAutoHideFooter';
 import { hoursLeftFrom, useNow } from '../hooks/useNow';
 import { formatTemplate, useI18n, type Messages } from '../i18n';
 import { mediaUri } from '../lib/media';
@@ -166,6 +175,73 @@ export default function SellScreen(): React.ReactElement {
     setTab('new');
   }, []);
 
+  const scrollY = useSharedValue(0);
+  const onTabChange = useCallback(
+    (key: string) => {
+      const next = key as 'new' | 'mine';
+      if (next === 'mine') {
+        if (formDirty) {
+          confirmAlert({
+            title: t.sell.unsavedTitle,
+            message: t.sell.unsavedSwitch,
+            confirmText: t.sell.switchTab,
+            cancelText: t.sell.stay,
+            destructive: true,
+            onConfirm: () => {
+              setEditingLot(null);
+              setFormDirty(false);
+              setTab('mine');
+            },
+          });
+          return;
+        }
+        setEditingLot(null);
+      }
+      setTab(next);
+    },
+    [formDirty, t],
+  );
+
+  // A fresh list/form starts at the top, so the header must be large again.
+  useEffect(() => {
+    scrollY.value = 0;
+  }, [tab, editingLot, scrollY]);
+
+  // The tab switcher lives in the shared header row, which the tab navigator renders above
+  // this screen; hand it the live state through the screen options.
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      header: () => (
+        <ScreenHeader
+          title={t.tabs.sell}
+          collapseOnScroll
+          scrollY={scrollY}
+          accessory={
+            <Segmented
+              compact
+              options={[
+                { key: 'new', label: editingLot !== null ? t.sell.editTab : t.sell.newTab },
+                { key: 'mine', label: t.sell.mineTab },
+              ]}
+              value={tab}
+              onChange={onTabChange}
+            />
+          }
+        />
+      ),
+    });
+  }, [navigation, t, tab, editingLot, onTabChange, scrollY]);
+
+  // Restore the plain header when the screen goes away (e.g. sign-out swaps in the login prompt).
+  const sellTitleRef = useRef(t.tabs.sell);
+  sellTitleRef.current = t.tabs.sell;
+  useEffect(
+    () => () => {
+      navigation.setOptions({ header: () => <ScreenHeader title={sellTitleRef.current} /> });
+    },
+    [navigation],
+  );
+
   useEffect(() => {
     const unsubscribe = navigation.addListener('beforeRemove', (event) => {
       if (!formDirty || tab !== 'new') {
@@ -189,35 +265,6 @@ export default function SellScreen(): React.ReactElement {
 
   return (
     <Screen skipTopSafeArea>
-      <Segmented
-        options={[
-          { key: 'new', label: editingLot !== null ? t.sell.editTab : t.sell.newTab },
-          { key: 'mine', label: t.sell.mineTab },
-        ]}
-        value={tab}
-        onChange={(key) => {
-          const next = key as 'new' | 'mine';
-          if (next === 'mine') {
-            if (formDirty) {
-              confirmAlert({
-                title: t.sell.unsavedTitle,
-                message: t.sell.unsavedSwitch,
-                confirmText: t.sell.switchTab,
-                cancelText: t.sell.stay,
-                destructive: true,
-                onConfirm: () => {
-                  setEditingLot(null);
-                  setFormDirty(false);
-                  setTab('mine');
-                },
-              });
-              return;
-            }
-            setEditingLot(null);
-          }
-          setTab(next);
-        }}
-      />
       {tab === 'new' ? (
         <NewLot
           api={api}
@@ -230,6 +277,7 @@ export default function SellScreen(): React.ReactElement {
             setFormDirty(false);
           }}
           onDirtyChange={setFormDirty}
+          scrollY={scrollY}
         />
       ) : (
         <MyLots api={api} refreshKey={refreshKey} onEdit={onEditLot} />
@@ -246,6 +294,7 @@ function NewLot({
   onPlotCreated,
   onCancelEdit,
   onDirtyChange,
+  scrollY,
 }: {
   api: ReturnType<typeof useAuth>['api'];
   refreshKey: number;
@@ -262,6 +311,7 @@ function NewLot({
   onPlotCreated: () => void;
   onCancelEdit: () => void;
   onDirtyChange: (dirty: boolean) => void;
+  scrollY: SharedValue<number>;
 }): React.ReactElement {
   const { t } = useI18n();
   const meta = useApiData(async () => {
@@ -297,6 +347,7 @@ function NewLot({
             onCreated={onCreated}
             onCancelEdit={onCancelEdit}
             onDirtyChange={onDirtyChange}
+            scrollY={scrollY}
           />
         )
       }
@@ -380,6 +431,7 @@ function NewLotForm({
   onCreated,
   onCancelEdit,
   onDirtyChange,
+  scrollY,
 }: {
   api: ReturnType<typeof useAuth>['api'];
   crops: Crop[];
@@ -398,6 +450,7 @@ function NewLotForm({
   }) => void;
   onCancelEdit: () => void;
   onDirtyChange: (dirty: boolean) => void;
+  scrollY: SharedValue<number>;
 }): React.ReactElement {
   const { t, locale, formatNumber, formatDate, cropName, translateError, translateFieldError } =
     useI18n();
@@ -994,13 +1047,35 @@ function NewLotForm({
         ? aiResult.note_en
         : aiResult.note_th;
 
+  const hasFieldError = Object.keys(fieldErrors).length > 0;
+  const footer = useAutoHideFooter(submitting || submitError !== null || hasFieldError);
+  const reduceMotion = useReducedMotion();
+  const footerSlide = useSharedValue(0);
+  useEffect(() => {
+    const target = footer.hidden ? footer.footerHeight : 0;
+    footerSlide.value = reduceMotion ? target : withTiming(target, { duration: 180 });
+  }, [footer.hidden, footer.footerHeight, reduceMotion, footerSlide]);
+  const footerAnim = useAnimatedStyle(() => ({ transform: [{ translateY: footerSlide.value }] }));
+  const handleBodyScroll = useCallback(
+    (event: Parameters<typeof footer.onScroll>[0]) => {
+      scrollY.value = Math.max(0, event.nativeEvent.contentOffset.y);
+      footer.onScroll(event);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [scrollY, footer.onScroll],
+  );
+
   return (
     <KeyboardAvoidingView
       style={styles.formWrap}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={insets.top}
     >
-      <Body scrollRef={scrollRef}>
+      <Body
+        scrollRef={scrollRef}
+        onScroll={handleBodyScroll}
+        paddingBottom={footer.hidden ? 24 : footer.footerHeight + 24}
+      >
         {isEditing ? (
           <View style={styles.editSummaryCard}>
             {mediaUri(editingLot.photo_url) !== null ? (
@@ -1678,7 +1753,10 @@ function NewLotForm({
       ) : null}
 
     </Body>
-    <View style={[styles.stickyFooter, { paddingBottom: isWide ? insets.bottom + 12 : 12 }]}>
+    <Animated.View
+      onLayout={(e) => footer.onFooterLayout(e.nativeEvent.layout.height)}
+      style={[styles.stickyFooter, { paddingBottom: isWide ? insets.bottom + 12 : 12 }, footerAnim]}
+    >
       {submitError !== null ? <Text style={styles.previewError}>{submitError}</Text> : null}
       {isEditing ? (
         <View style={styles.footerButtonRow}>
@@ -1686,6 +1764,7 @@ function NewLotForm({
             <PrimaryButton
               label={t.sell.saveEdit}
               onPress={handleSubmitPress}
+              onFocus={footer.reveal}
               loading={submitting}
               disabled={!(weightNum > 0) || ripeness === null || assessing}
             />
@@ -1699,11 +1778,12 @@ function NewLotForm({
           label={t.sell.publish}
           block
           onPress={handleSubmitPress}
+          onFocus={footer.reveal}
           loading={submitting}
           disabled={!(weightNum > 0) || ripeness === null || assessing}
         />
       )}
-    </View>
+    </Animated.View>
     </KeyboardAvoidingView>
   );
 }
@@ -1939,8 +2019,13 @@ function MyLots({
 }
 
 const styles = StyleSheet.create({
-  formWrap: { flex: 1 },
+  // Clips the footer while it is slid out below the form (it would otherwise paint over the tab bar on web).
+  formWrap: { flex: 1, overflow: 'hidden' },
   stickyFooter: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
     paddingHorizontal: 16,
     paddingTop: 10,
     borderTopWidth: 1,

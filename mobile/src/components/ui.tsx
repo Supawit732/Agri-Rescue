@@ -1,6 +1,8 @@
 import React from 'react';
 import {
   ActivityIndicator,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   Platform,
   Pressable,
   ScrollView,
@@ -258,24 +260,41 @@ export function Segmented({
   options,
   value,
   onChange,
+  compact,
 }: {
   options: { key: string; label: string }[];
   value: string;
   onChange: (key: string) => void;
+  /** Pill style (~36pt tall) for use inside a header row. */
+  compact?: boolean;
 }): React.ReactElement {
   return (
-    <View style={styles.segmented}>
+    <View style={compact === true ? styles.segmentedCompact : styles.segmented}>
       {options.map((option) => {
         const selected = option.key === value;
         return (
           <Pressable
             key={option.key}
             accessibilityRole="button"
+            accessibilityLabel={option.label}
+            hitSlop={compact === true ? { top: 6, bottom: 6 } : undefined}
             accessibilityState={{ selected }}
             onPress={() => onChange(option.key)}
-            style={[styles.segment, selected ? styles.segmentActive : null]}
+            style={[
+              compact === true ? styles.segmentCompact : styles.segment,
+              selected ? styles.segmentActive : null,
+            ]}
           >
-            <Text style={[styles.segmentText, selected ? styles.segmentTextActive : null]}>{option.label}</Text>
+            <Text
+              numberOfLines={1}
+              style={[
+                styles.segmentText,
+                compact === true ? styles.segmentTextCompact : null,
+                selected ? styles.segmentTextActive : null,
+              ]}
+            >
+              {option.label}
+            </Text>
           </Pressable>
         );
       })}
@@ -290,9 +309,12 @@ export function PrimaryButton({
   loading,
   tone,
   block,
+  onFocus,
 }: {
   label: string;
   onPress: () => void;
+  /** Fired when the button receives keyboard/assistive focus. */
+  onFocus?: () => void;
   disabled?: boolean;
   loading?: boolean;
   tone?: 'leaf' | 'turmeric' | 'chili';
@@ -305,6 +327,7 @@ export function PrimaryButton({
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
+      onFocus={onFocus}
       disabled={isDisabled}
       style={[
         styles.button,
@@ -479,16 +502,23 @@ export function DataState<T>({
 export function Body({
   children,
   scrollRef,
+  onScroll,
+  paddingBottom,
 }: {
   children: React.ReactNode;
   scrollRef?: React.RefObject<ScrollView | null>;
+  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  /** Overrides the default bottom padding (e.g. to clear an overlaid sticky footer). */
+  paddingBottom?: number;
 }): React.ReactElement {
   return (
     <ScrollView
       ref={scrollRef}
       style={styles.bodyScroll}
-      contentContainerStyle={styles.body}
+      contentContainerStyle={[styles.body, paddingBottom !== undefined ? { paddingBottom } : null]}
       keyboardShouldPersistTaps="handled"
+      onScroll={onScroll}
+      scrollEventThrottle={16}
     >
       {children}
     </ScrollView>
@@ -609,7 +639,23 @@ const styles = StyleSheet.create({
     margin: 16,
     marginBottom: 4,
   },
+  segmentedCompact: {
+    flexDirection: 'row',
+    backgroundColor: C.leafSoft,
+    borderRadius: 18,
+    padding: 2,
+    height: 36,
+    flexShrink: 1,
+  },
   segment: { flex: 1, paddingVertical: 10, borderRadius: 9, alignItems: 'center' },
+  segmentCompact: {
+    flexShrink: 1,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  segmentTextCompact: { fontSize: 13 },
   segmentActive: { backgroundColor: C.white },
   segmentText: { color: C.mute, fontWeight: '600' },
   segmentTextActive: { color: C.leaf },
