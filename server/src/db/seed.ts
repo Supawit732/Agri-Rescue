@@ -112,12 +112,31 @@ export async function seed(): Promise<void> {
       });
     }
 
+    await upgradeSeedPhotoUrls(connection);
+
     await connection.commit();
   } catch (error) {
     await connection.rollback();
     throw error;
   } finally {
     connection.release();
+  }
+}
+
+/**
+ * Rewrites lots still pointing at an older (unversioned or lower-version) seed photo URL to the
+ * current versioned one. Matches only the exact /uploads/seed/<file> URLs from SEED_CROP_PHOTOS,
+ * so user uploads (/uploads/<other>) are never touched.
+ */
+export async function upgradeSeedPhotoUrls(connection: PoolConnection): Promise<void> {
+  for (const url of Object.values(SEED_CROP_PHOTOS)) {
+    if (url === undefined) continue;
+    const base = url.split('?')[0]!;
+    await connection.query(
+      `UPDATE harvest_lots SET photo_url = ?
+       WHERE (photo_url = ? OR photo_url LIKE ?) AND photo_url <> ?`,
+      [url, base, `${base}?v=%`, url],
+    );
   }
 }
 

@@ -1,7 +1,7 @@
 import type { RowDataPacket } from 'mysql2';
 import { pool } from './pool';
 import { crops, farmers, SEED_CROP_PHOTOS } from './seedData';
-import { upsertLot } from './seed';
+import { upgradeSeedPhotoUrls, upsertLot } from './seed';
 
 export async function resetDemoLots(now: Date = new Date()): Promise<number> {
   const connection = await pool.getConnection();
@@ -66,6 +66,8 @@ export async function resetDemoLots(now: Date = new Date()): Promise<number> {
       });
       inserted += 1;
     }
+
+    await upgradeSeedPhotoUrls(connection);
 
     await connection.commit();
     return inserted;
