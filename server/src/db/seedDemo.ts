@@ -1,7 +1,9 @@
 /**
  * Additive demo history for dashboards.
  * Prerequisite: `npm run migrate` and `npm run seed` (creates farmers/crops/plots/open lots).
- * Marker: harvest_lots.photo_url = 'seed:demo' — re-running deletes prior demo-tagged rows first.
+ * Marker: harvest_lots.seed_tag = 'seed:demo' — re-running deletes prior demo-tagged rows first.
+ * (Older runs tagged lots via photo_url = 'seed:demo'; those rows are still cleaned up.)
+ * photo_url itself holds the real crop photo from SEED_CROP_PHOTOS, like base-seed lots.
  */
 import bcrypt from 'bcryptjs';
 import { mkdir, writeFile } from 'fs/promises';
@@ -9,7 +11,7 @@ import path from 'path';
 import type { ResultSetHeader, RowDataPacket } from 'mysql2';
 import type { PoolConnection } from 'mysql2/promise';
 import { pool } from './pool';
-import { CO2E_PER_KG, DEMO_PASSWORD, crops, farmers, buyers } from './seedData';
+import { CO2E_PER_KG, DEMO_PASSWORD, SEED_CROP_PHOTOS, crops, farmers, buyers } from './seedData';
 import { seed } from './seed';
 import { round2 } from '../delivery/depot';
 import { listPickupSlots } from '../domain/pickupSlots';
@@ -17,6 +19,8 @@ import { DONOR_TERMS_VERSION } from '../domain/donorTerms';
 import { PRIVATE_UPLOADS_DIR } from '../storage/privateUploads';
 
 const DEMO_MARKER = 'seed:demo';
+/** Pre-seed_tag marker: demo lots used to carry this in photo_url. Only read, to clean up old runs. */
+const LEGACY_PHOTO_MARKER = 'seed:demo';
 
 /** Charity account whose organization application is always reset to pending for the admin demo. */
 export const DEMO_PENDING_ORG = {
@@ -38,8 +42,8 @@ function toMysqlDate(iso: string | null | undefined): string | null {
 
 async function clearPreviousDemo(connection: PoolConnection): Promise<void> {
   const [lots] = await connection.query<RowDataPacket[]>(
-    'SELECT id FROM harvest_lots WHERE photo_url = ?',
-    [DEMO_MARKER],
+    'SELECT id FROM harvest_lots WHERE seed_tag = ? OR photo_url = ?',
+    [DEMO_MARKER, LEGACY_PHOTO_MARKER],
   );
   const lotIds = lots.map((r) => Number(r.id));
   if (lotIds.length === 0) {
@@ -59,6 +63,7 @@ async function clearPreviousDemo(connection: PoolConnection): Promise<void> {
   }
   await connection.query(`DELETE FROM quality_assessments WHERE lot_id IN (${placeholders})`, lotIds);
   await connection.query(`DELETE FROM lot_delete_logs WHERE lot_id IN (${placeholders})`, lotIds);
+  await connection.query(`DELETE FROM lot_photos WHERE lot_id IN (${placeholders})`, lotIds);
   await connection.query(`DELETE FROM harvest_lots WHERE id IN (${placeholders})`, lotIds);
 }
 
@@ -224,16 +229,17 @@ export async function seedDemo(options?: { skipBaseSeed?: boolean }): Promise<vo
 
       const [lotResult] = await connection.query<ResultSetHeader>(
         `INSERT INTO harvest_lots (
-           plot_id, crop_id, weight_kg, grade, ripeness, photo_url, allow_donation, donation_audience,
+           plot_id, crop_id, weight_kg, grade, ripeness, photo_url, seed_tag, allow_donation, donation_audience,
            start_price_per_kg, floor_price_per_kg, sale_mode, donation_opened,
            market_price_snapshot, market_price_is_estimate,
            predicted_shelf_hours, expires_at, status, created_at
-         ) VALUES (?, ?, ?, 'normal', ?, ?, ?, 'verified_org_only', ?, ?, ?, ?, ?, 1, 48, ?, 'delivered', ?)`,
+         ) VALUES (?, ?, ?, 'normal', ?, ?, ?, ?, 'verified_org_only', ?, ?, ?, ?, ?, 1, 48, ?, 'delivered', ?)`,
         [
           plotId,
           cropId,
           weightKg,
           ripeness,
+          SEED_CROP_PHOTOS[crop.key] ?? null,
           DEMO_MARKER,
           isDonation ? 1 : 0,
           isDonation ? null : price,
@@ -272,7 +278,7 @@ export async function seedDemo(options?: { skipBaseSeed?: boolean }): Promise<vo
       dayIndex += 1;
     }
 
-    // Recent open lots with reserved + cancelled for status chart (still tagged seed:demo)
+    // Recent open lots with reserved + cancelled for status chart (still tagged seed:demo via seed_tag)
     const liveFarmer = farmers[0]!;
     const liveFarmerId = farmerIds.get(liveFarmer.phone)!;
     const livePlotId = plotByFarmer.get(liveFarmerId)!;
@@ -281,12 +287,12 @@ export async function seedDemo(options?: { skipBaseSeed?: boolean }): Promise<vo
 
     const [openLot] = await connection.query<ResultSetHeader>(
       `INSERT INTO harvest_lots (
-         plot_id, crop_id, weight_kg, grade, ripeness, photo_url, allow_donation, donation_audience,
+         plot_id, crop_id, weight_kg, grade, ripeness, photo_url, seed_tag, allow_donation, donation_audience,
          start_price_per_kg, floor_price_per_kg, sale_mode, donation_opened,
          market_price_snapshot, market_price_is_estimate,
          predicted_shelf_hours, expires_at, status, created_at
-       ) VALUES (?, ?, 50, 'normal', 2, ?, 0, 'verified_org_only', 28, 8.4, 'sell', 0, 40, 1, 72, ?, 'partially_reserved', UTC_TIMESTAMP())`,
-      [livePlotId, liveCropId, DEMO_MARKER, openExpires],
+       ) VALUES (?, ?, 50, 'normal', 2, ?, ?, 0, 'verified_org_only', 28, 8.4, 'sell', 0, 40, 1, 72, ?, 'partially_reserved', UTC_TIMESTAMP())`,
+      [livePlotId, liveCropId, SEED_CROP_PHOTOS[crops[0]!.key] ?? null, DEMO_MARKER, openExpires],
     );
     const openLotId = openLot.insertId;
     await connection.query(
@@ -335,12 +341,12 @@ export async function seedDemo(options?: { skipBaseSeed?: boolean }): Promise<vo
       const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
       const [lotResult] = await connection.query<ResultSetHeader>(
         `INSERT INTO harvest_lots (
-           plot_id, crop_id, weight_kg, grade, ripeness, photo_url, allow_donation, donation_audience,
+           plot_id, crop_id, weight_kg, grade, ripeness, photo_url, seed_tag, allow_donation, donation_audience,
            start_price_per_kg, floor_price_per_kg, sale_mode, donation_opened,
            market_price_snapshot, market_price_is_estimate,
            predicted_shelf_hours, expires_at, status, created_at
-         ) VALUES (?, ?, 40, 'normal', 2, ?, 0, 'verified_org_only', ?, ?, 'sell', 0, ?, 1, 72, ?, 'partially_reserved', UTC_TIMESTAMP())`,
-        [plotId, cropId, DEMO_MARKER, price, Math.round(price * 0.3 * 100) / 100, crop.marketPricePerKg, expires],
+         ) VALUES (?, ?, 40, 'normal', 2, ?, ?, 0, 'verified_org_only', ?, ?, 'sell', 0, ?, 1, 72, ?, 'partially_reserved', UTC_TIMESTAMP())`,
+        [plotId, cropId, SEED_CROP_PHOTOS[crop.key] ?? null, DEMO_MARKER, price, Math.round(price * 0.3 * 100) / 100, crop.marketPricePerKg, expires],
       );
       const lotId = lotResult.insertId;
       const slot = slotsForRoute[i];
@@ -372,7 +378,7 @@ async function main(): Promise<void> {
   try {
     await seedDemo();
     const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT COUNT(*) AS demo_lots FROM harvest_lots WHERE photo_url = ?`,
+      `SELECT COUNT(*) AS demo_lots FROM harvest_lots WHERE seed_tag = ?`,
       [DEMO_MARKER],
     );
     console.log('seed:demo ok');

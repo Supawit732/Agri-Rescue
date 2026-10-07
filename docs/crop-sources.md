@@ -225,3 +225,7 @@ Sources (checked 27 ก.ย. 2569):
 - [CheckRaka — ราคามะม่วง](https://checkraka.app/price/mango-today/) · [กล้วย](https://checkraka.app/price/banana-today/) · [มะนาว](https://checkraka.app/price/lime-today/) · [ภาพรวม](https://checkraka.app/price/)
 - [kasetprice.com — ทุเรียน](https://kasetprice.com/ราคา/ทุเรียน/วันนี้) · [มังคุด](https://kasetprice.com/ราคา/มังคุด/วันนี้) · [ส้มโอ](https://kasetprice.com/ราคา/ส้มโอ/วันนี้) · [ฝรั่ง](https://kasetprice.com/ราคา/ฝรั่ง/วันนี้) (ตลาดไท, สี่มุมเมือง, ศรีเมือง)
 - [ฐานเศรษฐกิจ — ราคาทุเรียนตลาดไท 8 เม.ย. 2569](https://www.thansettakij.com/general-news/656075)
+
+## Seed photos
+
+Real crop photographs used by `npm run seed` / `npm run seed:demo` live in `server/assets/seed-photos/`. Author, original Wikimedia Commons file page and licence (public domain / CC BY / CC BY-SA) for each file are listed in [`server/assets/seed-photos/CREDITS.md`](../server/assets/seed-photos/CREDITS.md). Keep that file in sync when adding or replacing a photo in `SEED_CROP_PHOTOS`.

@@ -186,7 +186,7 @@ JWT เก็บ `sub`, `role`, `can_sell`, `can_buy`, `is_admin` (อายุ 
 | รายการของฉัน / ตลาด | ซ่อนล็อตที่ `deleted_at IS NOT NULL` จาก `/lots/mine` และตลาด; impact ที่ส่งมอบแล้วคงไว้ |
 | Dashboard | `GET /api/dashboard` — admin เห็นทั้งระบบ; `can_sell` เห็นเฉพาะล็อตของตน; buyer-only ได้ 403 |
 | Seller confirm | `POST /api/orders/:id/seller-confirm` — OTP + น้ำหนัก; ออเดอร์ `reserved` → `delivered` โดยไม่ผ่าน batch (เดโมรับที่ฟาร์ม); ไม่มีคอลัมน์ `weight_flag` บน orders จึงใช้น้ำหนักเข้า `impact_logs` อย่างเดียว |
-| seed:demo | เติมประวัติ ~14 วัน (marker `photo_url = 'seed:demo'`); รันซ้ำแล้วลบแถว marker ก่อน; ต้อง `migrate`+`seed` ก่อน; ล็อตเปิดจาก seed ปกติยังอยู่สำหรับเดโมสด |
+| seed:demo | เติมประวัติ ~14 วัน (marker `harvest_lots.seed_tag = 'seed:demo'` ตั้งแต่ migration 038 — `photo_url` เก็บรูปพืชจริงจาก `SEED_CROP_PHOTOS`; แถวเก่าที่ใช้ `photo_url = 'seed:demo'` ยังถูกลบตอนรันซ้ำ); รันซ้ำแล้วลบแถว marker ก่อน; ต้อง `migrate`+`seed` ก่อน; ล็อตเปิดจาก seed ปกติยังอยู่สำหรับเดโมสด |
 | Listen | API ฟังที่ `0.0.0.0` เพื่อให้มือถือในเครือข่ายเดียวกันเรียกได้ |
 
 ## D024 — Phase 6.2 ตลาดสาธารณะ + รูปล็อต
